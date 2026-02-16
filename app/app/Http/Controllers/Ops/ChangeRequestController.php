@@ -575,6 +575,22 @@ final class ChangeRequestController extends Controller
             )
             ->selectSub(
                 DB::table('account_user as au')
+                    ->whereColumn('au.user_id', 'cr.requested_by')
+                    ->select('au.role')
+                    ->orderByRaw("
+                        case au.role
+                            when 'customer' then 1
+                            when 'sales' then 2
+                            when 'admin' then 3
+                            else 9
+                        end
+                    ")
+                    ->orderBy('au.account_id')
+                    ->limit(1),
+                'requested_by_role'
+            )
+            ->selectSub(
+                DB::table('account_user as au')
                     ->join('accounts as a', 'a.id', '=', 'au.account_id')
                     ->join('users as u', 'u.id', '=', 'au.user_id')
                     ->whereColumn('au.user_id', 'cr.approved_by')

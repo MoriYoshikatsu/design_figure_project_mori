@@ -33,7 +33,7 @@
                 <tr>
                     <th>メモ</th>
                     <td>
-                        <textarea name="memo" rows="6" style="width:100%;">{{ old('memo', $account->memo) }}</textarea>
+                        <textarea name="memo" rows="2" style="width:100%;">{{ old('memo', $account->memo) }}</textarea>
                     </td>
                 </tr>
             </tbody>

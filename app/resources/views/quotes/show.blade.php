@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>見積 #{{ $quote->id ?? '' }}</title>
+    <title>仕様書 #{{ $quote->id ?? '' }}</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding:16px; }
         table { border-collapse: collapse; width: 100%; }

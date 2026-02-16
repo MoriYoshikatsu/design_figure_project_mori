@@ -1,7 +1,7 @@
 @extends('admin.layout')
 
 @section('content')
-    <h1>見積（参照）</h1>
+    <h1>仕様書見積一覧</h1>
     <table>
         <thead>
             <tr>

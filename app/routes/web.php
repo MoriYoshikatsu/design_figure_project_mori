@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\AdminAuditLogController;
 use App\Http\Controllers\Ops\ConfiguratorSessionController;
 use App\Http\Controllers\Ops\ChangeRequestController as OpsChangeRequestController;
 use App\Http\Controllers\Ops\QuoteController;
+use App\Services\GuestAccountClaimService;
 use App\Services\SnapshotPdfService;
 
 Route::get('/', function () {
@@ -79,6 +80,12 @@ Route::post('/configurator/autosave', function (Request $request) {
 
 Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
     $userId = (int)auth()->id();
+    if ($userId > 0) {
+        $cookieSid = request()->cookie('config_session_id');
+        $cookieSessionId = is_numeric($cookieSid) ? (int)$cookieSid : null;
+        app(GuestAccountClaimService::class)->claimQuoteForUser((int)$id, $userId, $cookieSessionId);
+    }
+
     $accountUserName = DB::table('account_user as au2')
         ->join('users as u2', 'u2.id', '=', 'au2.user_id')
         ->whereColumn('au2.account_id', 'a.id')
@@ -164,6 +171,12 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
 
 Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, SnapshotPdfService $pdfService) {
     $userId = (int)auth()->id();
+    if ($userId > 0) {
+        $cookieSid = request()->cookie('config_session_id');
+        $cookieSessionId = is_numeric($cookieSid) ? (int)$cookieSid : null;
+        app(GuestAccountClaimService::class)->claimQuoteForUser((int)$id, $userId, $cookieSessionId);
+    }
+
     $accountUserName = DB::table('account_user as au2')
         ->join('users as u2', 'u2.id', '=', 'au2.user_id')
         ->whereColumn('au2.account_id', 'a.id')

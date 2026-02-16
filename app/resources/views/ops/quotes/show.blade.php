@@ -1,7 +1,7 @@
 @extends('admin.layout')
 
 @section('content')
-    <h1>見積 詳細</h1>
+    <h1>見積 #{{ $quote->id ?? '' }} 詳細</h1>
     <div class="actions" style="margin:8px 0;">
         <a href="{{ route('ops.quotes.edit', $quote->id) }}">コンフィギュレータで編集</a>
         <a href="{{ route('ops.quotes.index') }}">一覧へ戻る</a>

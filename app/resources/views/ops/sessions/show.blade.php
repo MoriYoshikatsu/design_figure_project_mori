@@ -1,7 +1,7 @@
 @extends('admin.layout')
 
 @section('content')
-    <h1>セッション 詳細</h1>
+    <h1>仕様書セッション #{{ $session->id ?? '' }} 詳細</h1>
     <div class="actions" style="margin:8px 0;">
         <a href="{{ route('ops.sessions.index') }}">一覧へ戻る</a>
     </div>

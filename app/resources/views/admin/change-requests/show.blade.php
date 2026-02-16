@@ -1,7 +1,7 @@
 @extends('admin.layout')
 
 @section('content')
-    <h1>リクエスト #{{ $req->id }} 詳細</h1>
+    <h1>リクエスト #{{ $req->id ?? '' }} 詳細</h1>
 
     @php
         $canApprove = $canApprove ?? true;
@@ -33,6 +33,14 @@
         if (!isset($baseSnapshotView['pricing']) || !is_array($baseSnapshotView['pricing'])) $baseSnapshotView['pricing'] = [];
         if (!isset($baseSnapshotView['totals']) || !is_array($baseSnapshotView['totals'])) $baseSnapshotView['totals'] = [];
         $baseMemo = trim((string)($baseSnapshotView['memo'] ?? ''));
+        $requestedByRole = trim((string)($req->requested_by_role ?? ''));
+        $requestedByLabel = trim((string)($req->requested_by_account_display_name ?? ''));
+        if ($requestedByLabel === '') {
+            $requestedByLabel = $req->requested_by ? ('ID: '.$req->requested_by) : '-';
+        }
+        if ($requestedByRole !== '') {
+            $requestedByLabel .= ' ('.strtoupper($requestedByRole).')';
+        }
     @endphp
 
     @if($canApprove && $req->status === 'PENDING')
@@ -60,7 +68,6 @@
                 <th>承認者</th>
                 <th>承認日時</th>
                 <th>作成者アカウント表示名</th>
-                <th>登録メールアドレス</th>
                 <th>担当者</th>
             </tr>
         </thead>
@@ -69,8 +76,7 @@
                 <td>{{ $req->status }}</td>
                 <td>{{ $req->approved_by_account_display_name ?? ($req->approved_by ? 'ID: '.$req->approved_by : '-') }}</td>
                 <td>{{ $req->approved_at }}</td>
-                <td>{{ $req->requested_by_account_display_name ?? '-' }}</td>
-                <td>{{ $req->requested_by_email ?? '-' }}</td>
+                <td>{{ $requestedByLabel }}</td>
                 <td>{{ $req->requested_by_assignee_name ?? '-' }}</td>
             </tr>
         </tbody>
@@ -104,8 +110,7 @@
                             {{-- <tr><th>小計</th><td>{{ $baseTotalsCmp['subtotal'] ?? '-' }}</td></tr>
                             <tr><th>税</th><td>{{ $baseTotalsCmp['tax'] ?? '-' }}</td></tr> --}}
                             <tr><th>合計</th><td>{{ $baseTotalsCmp['total'] ?? '-' }}</td></tr>
-                            <tr><th>作成者アカウント表示名</th><td>{{ $req->requested_by_account_display_name ?? '-' }}</td></tr>
-                            <tr><th>登録メールアドレス</th><td>{{ $req->requested_by_email ?? '-' }}</td></tr>
+                            <tr><th>作成者アカウント表示名</th><td>{{ $requestedByLabel }}</td></tr>
                             <tr><th>担当者</th><td>{{ $req->requested_by_assignee_name ?? '-' }}</td></tr>
                         </tbody>
                     </table>
@@ -122,8 +127,7 @@
                             {{-- <tr><th>小計</th><td>{{ $newTotalsCmp['subtotal'] ?? '-' }}</td></tr>
                             <tr><th>税</th><td>{{ $newTotalsCmp['tax'] ?? '-' }}</td></tr> --}}
                             <tr><th>合計</th><td>{{ $newTotalsCmp['total'] ?? '-' }}</td></tr>
-                            <tr><th>作成者アカウント表示名</th><td>{{ $req->requested_by_account_display_name ?? '-' }}</td></tr>
-                            <tr><th>登録メールアドレス</th><td>{{ $req->requested_by_email ?? '-' }}</td></tr>
+                            <tr><th>作成者アカウント表示名</th><td>{{ $requestedByLabel }}</td></tr>
                             <tr><th>担当者</th><td>{{ $req->requested_by_assignee_name ?? '-' }}</td></tr>
                         </tbody>
                     </table>
@@ -139,16 +143,14 @@
             'summaryItems' => [
                 ['label' => '対象', 'value' => $req->entity_type.' #'.$req->entity_id],
                 ['label' => 'ステータス', 'value' => $req->status],
+                ['label' => '版作成者', 'value' => $requestedByLabel],
                 ['label' => '担当者', 'value' => $req->requested_by_assignee_name ?? '-'],
             ],
             'showMemoCard' => true,
             'memoValue' => $baseMemo,
             'memoReadonly' => true,
             'memoLabel' => 'メモ',
-            'showCreatorColumns' => true,
-            'creatorAccountDisplayName' => $req->requested_by_account_display_name ?? '',
-            'creatorEmail' => $req->requested_by_email ?? '',
-            'creatorAssigneeName' => $req->requested_by_assignee_name ?? '',
+            'showCreatorColumns' => false,
             'svg' => $baseSvg,
             'snapshot' => $baseSnapshotView,
             'config' => $baseConfig,
@@ -169,6 +171,7 @@
             ['label' => 'ステータス', 'value' => $req->status],
             ['label' => '申請者', 'value' => $req->requested_by_account_display_name ?? ('ID: '.$req->requested_by)],
             ['label' => '承認者', 'value' => $req->approved_by_account_display_name ?? ($req->approved_by ? 'ID: '.$req->approved_by : '-')],
+            ['label' => '版作成者', 'value' => $requestedByLabel],
             ['label' => 'コメント', 'value' => $req->comment ?? '（なし）'],
             ['label' => '担当者', 'value' => $req->requested_by_assignee_name ?? '-'],
         ],
@@ -178,10 +181,7 @@
         'memoButtonLabel' => 'メモ保存',
         'memoReadonly' => true,
         'memoLabel' => 'メモ',
-        'showCreatorColumns' => true,
-        'creatorAccountDisplayName' => $req->requested_by_account_display_name ?? '',
-        'creatorEmail' => $req->requested_by_email ?? '',
-        'creatorAssigneeName' => $req->requested_by_assignee_name ?? '',
+        'showCreatorColumns' => false,
         'svg' => $svg,
         'snapshot' => $snapshotView,
         'config' => $config,
