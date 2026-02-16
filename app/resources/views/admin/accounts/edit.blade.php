@@ -43,7 +43,7 @@
             <a href="{{ route('admin.accounts.index') }}">一覧へ戻る</a>
         </div>
     </form>
-
+{{-- 
     <h2 style="margin-top:16px;">権限設定（account_user）</h2>
     <table>
         <thead>
@@ -79,5 +79,10 @@
                 </tr>
             @endforelse
         </tbody>
-    </table>
+    </table> --}}
+{{-- 
+    <h2 style="margin-top:20px;">権限設定ページ</h2>
+    <div class="actions"> --}}
+        <a href="{{ route('admin.accounts.permissions', $account->id) }}">このアカウントのルート権限設定ページへ</a>
+    {{-- </div> --}}
 @endsection

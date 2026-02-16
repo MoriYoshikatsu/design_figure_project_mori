@@ -25,7 +25,7 @@
                         <div>{{ $q->account_display_name ?? '' }}</div>
                         <div class="muted">ID: {{ $q->account_id }}</div>
                     </td>
-                    <td>{{ $q->customer_emails ?? '-' }}</td>
+                    <td>{{ $q->account_emails ?? '-' }}</td>
                     <td>{{ $q->assignee_name ?? '-' }}</td>
                     <td>{{ $q->status }}</td>
                     <td>{{ $q->currency }}</td>

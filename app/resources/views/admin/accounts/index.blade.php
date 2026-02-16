@@ -6,7 +6,7 @@
     <form method="GET" action="{{ route('admin.accounts.index') }}" style="margin:12px 0;">
         <div class="row">
             <div class="col">
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="アカウント名 / 社内呼称で検索">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="アカウント表示名 / ユーザー登録名で検索">
             </div>
             <div class="col" style="flex:0 0 auto;">
                 <button type="submit">検索</button>
@@ -20,8 +20,8 @@
                 <th>ID</th>
                 <th>アカウント表示名</th>
                 <th>ユーザー登録名</th>
-                <th>種別</th>
-                <th>権限設定</th>
+                <th>権限区分</th>
+                <th>許可route</th>
                 <th>担当者</th>
                 <th>メモ</th>
                 <th>作成日</th>
@@ -39,11 +39,11 @@
                     <td>{{ $a->id }}</td>
                     <td>{{ $display }}</td>
                     <td>{{ $fallbackUserName ?: '-' }}</td>
-                    <td>{{ $a->account_type }}</td>
                     <td>
-                        <div>{{ $a->role_summary ?? 'admin:0 / sales:0 / customer:0' }}</div>
-                        <div class="muted">{{ $a->member_summary ?? '-' }}</div>
+                        <div>{{ $a->role_list ?: '未設定' }}</div>
+                        {{-- <div class="muted">{{ $a->member_summary ?? '-' }}</div> --}}
                     </td>
+                    <td style="white-space:pre-line;">{{ $a->route_access_summary ?? '-' }}</td>
                     <td>{{ $a->assignee_name ?? '-' }}</td>
                     <td>{{ $a->memo ?? '-' }}</td>
                     <td>{{ $a->created_at }}</td>

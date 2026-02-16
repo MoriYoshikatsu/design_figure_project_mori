@@ -40,7 +40,7 @@ final class RealDataSeeder extends Seeder
             // 3) price_books / price_book_items
             // =========
             $priceBookIds = $this->seedPriceBooks(1);
-            $this->seedPriceBookItems($priceBookIds, $skuIdByCode, 22);
+            $this->seedPriceBookItems($priceBookIds, $skuIdByCode);
 
             // =========
             // 4) product_templates / product_template_versions
@@ -122,6 +122,7 @@ final class RealDataSeeder extends Seeder
                 $accountId = (int)DB::table('accounts')->insertGetId([
                     'account_type' => $def['account_type'],
                     'internal_name' => $def['account_name'],
+                    'sales_route_policy_mode' => 'strict_allowlist',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -270,37 +271,70 @@ final class RealDataSeeder extends Seeder
     // -------------------------
     // price_book_items
     // -------------------------
-    private function seedPriceBookItems(array $priceBookIds, array $skuIdByCode, int $approxN): void
+    private function seedPriceBookItems(array $priceBookIds, array $skuIdByCode): void
     {
-        // だいたい10件。price_book_idとsku_idを適当に組み合わせる
         $skuIds = array_values($skuIdByCode);
         if (count($skuIds) === 0) return;
 
+        $skuRows = DB::table('skus')
+            ->whereIn('id', $skuIds)
+            ->orderBy('id')
+            ->get(['id', 'sku_code', 'category']);
+        if ($skuRows->isEmpty()) return;
+
+        // 再シード時に重複しないよう、対象価格表の明細を入れ直す
+        DB::table('price_book_items')->whereIn('price_book_id', $priceBookIds)->delete();
+
+        $fixedBaseByCategory = [
+            'PROC' => 8500.0,
+            'SLEEVE' => 1300.0,
+            'CONNECTOR' => 2800.0,
+        ];
+
+        $perMmBaseByCategory = [
+            'FIBER' => 1.20,
+            'TUBE' => 0.75,
+        ];
+
         $rows = [];
-        for ($i = 0; $i < $approxN; $i++) {
-            $pbId = $priceBookIds[$i % count($priceBookIds)];
-            $skuId = $skuIds[$i % count($skuIds)];
+        foreach ($priceBookIds as $pbId) {
+            foreach ($skuRows as $idx => $sku) {
+                $category = strtoupper((string)$sku->category);
+                $codeHash = abs(crc32((string)$sku->sku_code));
+                $priceBump = (float)(($codeHash % 7) * 100); // 固定単価の軽いバリエーション
+                $perMmBump = (float)(($codeHash % 5) * 0.03); // mm単価の軽いバリエーション
 
-            $model = ['FIXED', 'PER_MM', 'FORMULA'][$i % 3];
+                if (in_array($category, ['FIBER', 'TUBE'], true)) {
+                    $rows[] = [
+                        'price_book_id' => (int)$pbId,
+                        'sku_id' => (int)$sku->id,
+                        'pricing_model' => 'PER_MM',
+                        'unit_price' => null,
+                        'price_per_mm' => ($perMmBaseByCategory[$category] ?? 1.0) + $perMmBump,
+                        'formula' => null,
+                        'min_qty' => 1,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                    continue;
+                }
 
-            $rows[] = [
-                'price_book_id' => $pbId,
-                'sku_id' => $skuId,
-                'pricing_model' => $model,
-                'unit_price' => ($model === 'FIXED') ? (1000 + $i * 50) : null,
-                'price_per_mm' => ($model === 'PER_MM') ? (0.8 + $i * 0.01) : null,
-                'formula' => ($model === 'FORMULA')
-                    ? json_encode(['type' => 'linear', 'base' => 500, 'k' => 1.2], JSON_UNESCAPED_UNICODE)
-                    : null,
-                'min_qty' => 1,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+                $rows[] = [
+                    'price_book_id' => (int)$pbId,
+                    'sku_id' => (int)$sku->id,
+                    'pricing_model' => 'FIXED',
+                    'unit_price' => ($fixedBaseByCategory[$category] ?? 1000.0) + $priceBump + ($idx * 10),
+                    'price_per_mm' => null,
+                    'formula' => null,
+                    'min_qty' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
         }
 
-        // 重複し得るので updateOrInsert（ただしユニーク制約は無いので本当はinsertでもOK）
-        foreach ($rows as $r) {
-            DB::table('price_book_items')->insert($r);
+        if (!empty($rows)) {
+            DB::table('price_book_items')->insert($rows);
         }
     }
 

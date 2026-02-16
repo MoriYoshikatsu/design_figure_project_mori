@@ -101,12 +101,18 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
         ->select('u2.name')
         ->limit(1);
 
+    $accountEmails = DB::table('account_user as au3')
+        ->join('users as u3', 'u3.id', '=', 'au3.user_id')
+        ->whereColumn('au3.account_id', 'q.account_id')
+        ->selectRaw("string_agg(distinct u3.email, ', ' order by u3.email)");
+
     $quote = DB::table('quotes as q')
         ->leftJoin('accounts as a', 'a.id', '=', 'q.account_id')
         ->leftJoin('configurator_sessions as cs', 'cs.id', '=', 'q.session_id')
         ->select('q.*')
         ->addSelect('a.internal_name as account_internal_name')
         ->selectSub($accountUserName, 'account_user_name')
+        ->selectSub($accountEmails, 'account_emails')
         ->addSelect('a.assignee_name as account_assignee_name')
         ->addSelect('cs.memo as session_memo')
         ->whereExists(function ($sq) use ($userId) {
@@ -135,18 +141,10 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
 
     $snapshot = json_decode($quote->snapshot ?? '', true);
     if (!is_array($snapshot)) $snapshot = [];
-    $nameSource = (string)($snapshot['account_display_name_source'] ?? 'internal_name');
-    if (!in_array($nameSource, ['internal_name', 'user_name'], true)) {
-        $nameSource = 'internal_name';
-    }
     $internalName = trim((string)($quote->account_internal_name ?? ''));
     $userName = trim((string)($quote->account_user_name ?? ''));
-    if ($nameSource === 'user_name') {
-        $quote->account_name = $userName !== '' ? $userName : ($internalName !== '' ? $internalName : '-');
-    } else {
-        $quote->account_name = $internalName !== '' ? $internalName : ($userName !== '' ? $userName : '-');
-    }
-    $quote->account_name_source = $nameSource;
+    $quote->account_name = $internalName !== '' ? $internalName : ($userName !== '' ? $userName : '-');
+    $quote->account_name_source = 'internal_name';
 
     $config = $snapshot['config'] ?? [];
     $derived = $snapshot['derived'] ?? [];
@@ -167,7 +165,7 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
         'svg' => $svg,
         'totals' => $totals,
     ]);
-})->middleware('auth')->name('quotes.show');
+})->middleware(['auth', 'account.route'])->name('quotes.show');
 
 Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, SnapshotPdfService $pdfService) {
     $userId = (int)auth()->id();
@@ -192,12 +190,18 @@ Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, Sn
         ->select('u2.name')
         ->limit(1);
 
+    $accountEmails = DB::table('account_user as au3')
+        ->join('users as u3', 'u3.id', '=', 'au3.user_id')
+        ->whereColumn('au3.account_id', 'q.account_id')
+        ->selectRaw("string_agg(distinct u3.email, ', ' order by u3.email)");
+
     $quote = DB::table('quotes as q')
         ->leftJoin('accounts as a', 'a.id', '=', 'q.account_id')
         ->leftJoin('configurator_sessions as cs', 'cs.id', '=', 'q.session_id')
         ->select('q.*')
         ->addSelect('a.internal_name as account_internal_name')
         ->selectSub($accountUserName, 'account_user_name')
+        ->selectSub($accountEmails, 'account_emails')
         ->addSelect('a.assignee_name as account_assignee_name')
         ->addSelect('cs.memo as session_memo')
         ->whereExists(function ($sq) use ($userId) {
@@ -218,18 +222,10 @@ Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, Sn
 
     $snapshot = json_decode($quote->snapshot ?? '', true);
     if (!is_array($snapshot)) $snapshot = [];
-    $nameSource = (string)($snapshot['account_display_name_source'] ?? 'internal_name');
-    if (!in_array($nameSource, ['internal_name', 'user_name'], true)) {
-        $nameSource = 'internal_name';
-    }
     $internalName = trim((string)($quote->account_internal_name ?? ''));
     $userName = trim((string)($quote->account_user_name ?? ''));
-    if ($nameSource === 'user_name') {
-        $quote->account_name = $userName !== '' ? $userName : ($internalName !== '' ? $internalName : '-');
-    } else {
-        $quote->account_name = $internalName !== '' ? $internalName : ($userName !== '' ? $userName : '-');
-    }
-    $quote->account_name_source = $nameSource;
+    $quote->account_name = $internalName !== '' ? $internalName : ($userName !== '' ? $userName : '-');
+    $quote->account_name_source = 'internal_name';
 
     $config = $snapshot['config'] ?? [];
     $derived = $snapshot['derived'] ?? [];
@@ -258,13 +254,18 @@ Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, Sn
         'svg' => $svg,
         'totals' => $totals,
     ], $filename);
-})->middleware('auth')->name('quotes.snapshot.pdf');
+})->middleware(['auth', 'account.route'])->name('quotes.snapshot.pdf');
 
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     Route::get('/accounts', [AdminAccountController::class, 'index'])->name('admin.accounts.index');
     Route::get('/accounts/{id}/edit', [AdminAccountController::class, 'edit'])->name('admin.accounts.edit');
+    Route::get('/accounts/{id}/permissions', [AdminAccountController::class, 'permissions'])->name('admin.accounts.permissions');
     Route::put('/accounts/{id}', [AdminAccountController::class, 'update'])->name('admin.accounts.update');
     Route::put('/accounts/{id}/members/{userId}/memo', [AdminAccountController::class, 'updateMemberMemo'])->name('admin.accounts.members.memo.update');
+    Route::put('/accounts/{id}/sales-route-policy', [AdminAccountController::class, 'updateSalesRoutePolicy'])->name('admin.accounts.sales-route-policy.update');
+    Route::post('/accounts/{id}/sales-route-permissions', [AdminAccountController::class, 'storeSalesRoutePermission'])->name('admin.accounts.sales-route-permissions.store');
+    Route::put('/accounts/{id}/sales-route-permissions/{permId}', [AdminAccountController::class, 'updateSalesRoutePermission'])->name('admin.accounts.sales-route-permissions.update');
+    Route::delete('/accounts/{id}/sales-route-permissions/{permId}', [AdminAccountController::class, 'destroySalesRoutePermission'])->name('admin.accounts.sales-route-permissions.destroy');
 
     Route::get('/skus', [AdminSkuController::class, 'index'])->name('admin.skus.index');
     Route::get('/skus/create', [AdminSkuController::class, 'create'])->name('admin.skus.create');
@@ -322,5 +323,6 @@ Route::middleware(['auth', 'role:admin,sales'])->prefix('ops')->group(function (
     Route::get('/quotes/{id}/edit', [QuoteController::class, 'edit'])->name('ops.quotes.edit');
     Route::get('/quotes/{id}/snapshot.pdf', [QuoteController::class, 'downloadSnapshotPdf'])->name('ops.quotes.snapshot.pdf');
     Route::put('/quotes/{id}/display-name-source', [QuoteController::class, 'updateDisplayNameSource'])->name('ops.quotes.display-name-source.update');
+    Route::put('/quotes/{id}/summary-fields', [QuoteController::class, 'updateSummaryFields'])->name('ops.quotes.summary-fields.update');
     Route::put('/quotes/{id}/memo', [QuoteController::class, 'updateMemo'])->name('ops.quotes.memo.update');
 });

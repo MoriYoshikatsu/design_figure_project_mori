@@ -23,11 +23,11 @@
             <tr>
                 <th>ID</th>
                 <th>ステータス</th>
+                <th>作成アカウント</th>
+                <th>メールアドレス</th>
+                <th>担当者</th>
                 <th>申請者</th>
                 <th>承認者</th>
-                <th>作成者アカウント表示名</th>
-                <th>登録メールアドレス</th>
-                <th>担当者</th>
                 <th>作成日</th>
                 <th></th>
             </tr>
@@ -37,11 +37,11 @@
                 <tr>
                     <td>{{ $r->id }}</td>
                     <td>{{ $r->status }}</td>
+                    <td>{{ $quote->account_display_name ?? '-' }}</td>
+                    <td>{{ $quote->account_emails ?? '-' }}</td>
+                    <td>{{ $r->requested_by_assignee_name ?? '-' }}</td>
                     <td>{{ $r->requested_by_account_display_name ?? ('ID: '.$r->requested_by) }}</td>
                     <td>{{ $r->approved_by_account_display_name ?? ($r->approved_by ? 'ID: '.$r->approved_by : '-') }}</td>
-                    <td>{{ $r->requested_by_account_display_name ?? '-' }}</td>
-                    <td>{{ $r->requested_by_email ?? '-' }}</td>
-                    <td>{{ $r->requested_by_assignee_name ?? '-' }}</td>
                     <td>{{ $r->created_at }}</td>
                     <td><a href="{{ route('ops.change-requests.show', $r->id) }}">詳細</a></td>
                 </tr>
@@ -56,14 +56,8 @@
     @include('partials.snapshot_bundle', [
         'panelTitle' => '見積スナップショット',
         'pdfUrl' => route('ops.quotes.snapshot.pdf', $quote->id),
-        'summaryItems' => [
-            ['label' => '見積ID', 'value' => $quote->id],
-            ['label' => 'ステータス', 'value' => $quote->status],
-            ['label' => 'アカウント表示名', 'value' => $quote->account_display_name ?? ''],
-            ['label' => '担当者', 'value' => $quote->assignee_name ?? '-'],
-            ['label' => '登録メールアドレス', 'value' => $quote->customer_emails ?? '-'],
-            ['label' => '承認リクエスト件数', 'value' => is_countable($requests) ? count($requests) : 0],
-        ],
+        'summaryItems' => is_array($summaryItems ?? null) ? $summaryItems : [],
+        'includeAutoSummary' => false,
         'showMemoCard' => true,
         'memoValue' => $quote->display_memo ?? $quote->memo ?? '',
         'memoUpdateUrl' => route('ops.quotes.memo.update', $quote->id),

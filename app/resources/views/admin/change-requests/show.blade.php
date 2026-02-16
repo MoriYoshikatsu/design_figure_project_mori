@@ -67,7 +67,7 @@
                 <th>ステータス</th>
                 <th>承認者</th>
                 <th>承認日時</th>
-                <th>作成者アカウント表示名</th>
+                <th>作成アカウント</th>
                 <th>担当者</th>
             </tr>
         </thead>
@@ -110,7 +110,7 @@
                             {{-- <tr><th>小計</th><td>{{ $baseTotalsCmp['subtotal'] ?? '-' }}</td></tr>
                             <tr><th>税</th><td>{{ $baseTotalsCmp['tax'] ?? '-' }}</td></tr> --}}
                             <tr><th>合計</th><td>{{ $baseTotalsCmp['total'] ?? '-' }}</td></tr>
-                            <tr><th>作成者アカウント表示名</th><td>{{ $requestedByLabel }}</td></tr>
+                            <tr><th>作成アカウント</th><td>{{ $requestedByLabel }}</td></tr>
                             <tr><th>担当者</th><td>{{ $req->requested_by_assignee_name ?? '-' }}</td></tr>
                         </tbody>
                     </table>
@@ -127,7 +127,7 @@
                             {{-- <tr><th>小計</th><td>{{ $newTotalsCmp['subtotal'] ?? '-' }}</td></tr>
                             <tr><th>税</th><td>{{ $newTotalsCmp['tax'] ?? '-' }}</td></tr> --}}
                             <tr><th>合計</th><td>{{ $newTotalsCmp['total'] ?? '-' }}</td></tr>
-                            <tr><th>作成者アカウント表示名</th><td>{{ $requestedByLabel }}</td></tr>
+                            <tr><th>作成アカウント</th><td>{{ $requestedByLabel }}</td></tr>
                             <tr><th>担当者</th><td>{{ $req->requested_by_assignee_name ?? '-' }}</td></tr>
                         </tbody>
                     </table>
@@ -143,7 +143,7 @@
             'summaryItems' => [
                 ['label' => '対象', 'value' => $req->entity_type.' #'.$req->entity_id],
                 ['label' => 'ステータス', 'value' => $req->status],
-                ['label' => '版作成者', 'value' => $requestedByLabel],
+                ['label' => '作成アカウント', 'value' => $requestedByLabel],
                 ['label' => '担当者', 'value' => $req->requested_by_assignee_name ?? '-'],
             ],
             'showMemoCard' => true,
@@ -169,11 +169,10 @@
         'summaryItems' => [
             ['label' => '対象', 'value' => $req->entity_type.' #'.$req->entity_id],
             ['label' => 'ステータス', 'value' => $req->status],
+            ['label' => '作成アカウント', 'value' => $requestedByLabel],
+            ['label' => '担当者', 'value' => $req->requested_by_assignee_name ?? '-'],
             ['label' => '申請者', 'value' => $req->requested_by_account_display_name ?? ('ID: '.$req->requested_by)],
             ['label' => '承認者', 'value' => $req->approved_by_account_display_name ?? ($req->approved_by ? 'ID: '.$req->approved_by : '-')],
-            ['label' => '版作成者', 'value' => $requestedByLabel],
-            ['label' => 'コメント', 'value' => $req->comment ?? '（なし）'],
-            ['label' => '担当者', 'value' => $req->requested_by_assignee_name ?? '-'],
         ],
         'showMemoCard' => true,
         'memoValue' => ($requestMemo !== '' ? $requestMemo : ($req->memo ?? '')),

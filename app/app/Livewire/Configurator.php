@@ -282,6 +282,7 @@ final class Configurator extends Component
                 $accountId = (int)DB::table('accounts')->insertGetId([
                     'account_type' => 'B2C',
                     'internal_name' => trim((string)$user->name) !== '' ? (string)$user->name : null,
+                    'sales_route_policy_mode' => 'strict_allowlist',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -312,6 +313,7 @@ final class Configurator extends Component
             'account_type' => 'B2C',
             'internal_name' => null,
             'memo' => 'GUEST_TEMP',
+            'sales_route_policy_mode' => 'strict_allowlist',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -573,8 +575,14 @@ final class Configurator extends Component
         if (!in_array($nameSource, ['internal_name', 'user_name'], true)) {
             $nameSource = 'internal_name';
         }
+        $summaryFields = $baseSnapshot['summary_card_fields'] ?? [];
+        if (!is_array($summaryFields)) {
+            $summaryFields = [];
+        }
         $snapshot['account_display_name_source'] = $nameSource;
+        $snapshot['summary_card_fields'] = $summaryFields;
         $baseSnapshot['account_display_name_source'] = $nameSource;
+        $baseSnapshot['summary_card_fields'] = $summaryFields;
         $baseSnapshot['memo'] = $this->normalizeMemo((string)($quoteRow?->memo ?? ''));
 
         DB::table('change_requests')->insert([

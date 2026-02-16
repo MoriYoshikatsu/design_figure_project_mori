@@ -12,14 +12,41 @@ final class QuoteController extends Controller
 {
     private const ACCOUNT_NAME_SOURCE_INTERNAL = 'internal_name';
     private const ACCOUNT_NAME_SOURCE_USER = 'user_name';
+    /** @var array<string, string> */
+    private const SUMMARY_FIELD_LABELS = [
+        'quote_id' => '見積ID',
+        'status' => 'ステータス',
+        'account_display_name' => 'アカウント表示名',
+        'assignee_name' => '担当者',
+        'customer_emails' => '登録メールアドレス',
+        'request_count' => '承認リクエスト件数',
+        'template_version_id' => 'ルールテンプレ',
+        'price_book_id' => '納品物価格表',
+        'subtotal' => '小計',
+        'tax' => '税',
+        'total' => '合計',
+    ];
+    /** @var array<int, string> */
+    private const SUMMARY_DEFAULT_FIELDS = [
+        'quote_id',
+        'status',
+        'account_display_name',
+        'assignee_name',
+        'customer_emails',
+        'request_count',
+        'template_version_id',
+        'price_book_id',
+        'subtotal',
+        'tax',
+        'total',
+    ];
 
     public function index()
     {
-        $customerEmails = DB::table('account_user as au')
+        $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'q.account_id')
-            ->where('au.role', 'customer')
-            ->selectRaw("string_agg(u.email, ', ')");
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
         $quotes = DB::table('quotes as q')
             ->join('accounts as a', 'a.id', '=', 'q.account_id')
@@ -46,7 +73,7 @@ final class QuoteController extends Controller
                 ) as account_display_name
             ")
             ->addSelect('a.internal_name as account_name', 'a.internal_name as account_internal_name', 'a.assignee_name')
-            ->selectSub($customerEmails, 'customer_emails')
+            ->selectSub($accountEmails, 'account_emails')
             ->orderBy('q.id', 'desc')
             ->limit(200)
             ->get();
@@ -56,11 +83,10 @@ final class QuoteController extends Controller
 
     public function show(int $id, SvgRenderer $renderer)
     {
-        $customerEmails = DB::table('account_user as au')
+        $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'q.account_id')
-            ->where('au.role', 'customer')
-            ->selectRaw("string_agg(u.email, ', ')");
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
         $accountUserName = DB::table('account_user as au2')
             ->join('users as u2', 'u2.id', '=', 'au2.user_id')
@@ -84,7 +110,7 @@ final class QuoteController extends Controller
             ->addSelect('a.internal_name as account_internal_name', 'a.assignee_name')
             ->selectSub($accountUserName, 'account_user_name')
             ->addSelect('cs.memo as session_memo')
-            ->selectSub($customerEmails, 'customer_emails')
+            ->selectSub($accountEmails, 'account_emails')
             ->where('q.id', $id)
             ->first();
         if (!$quote) abort(404);
@@ -96,8 +122,7 @@ final class QuoteController extends Controller
         $snapshot = $this->decodeJson($quote->snapshot) ?? [];
         $nameSource = $this->resolveAccountNameSource($snapshot);
         $quote->account_display_name_source = $nameSource;
-        $quote->account_display_name = $this->resolveAccountDisplayName(
-            $nameSource,
+        $quote->account_display_name = $this->resolveAccountDisplayNameInternalFirst(
             (string)($quote->account_internal_name ?? ''),
             (string)($quote->account_user_name ?? '')
         );
@@ -109,6 +134,11 @@ final class QuoteController extends Controller
 
         $svg = $renderer->render($config, $derived, $errors);
         $totals = $snapshot['totals'] ?? [];
+        $requestCount = (int)DB::table('change_requests')
+            ->where('entity_type', 'quote')
+            ->where('entity_id', $id)
+            ->count();
+        $summaryItems = $this->buildQuoteSummaryItems($quote, $snapshot, $requestCount);
 
         $requests = DB::table('change_requests')
             ->where('change_requests.entity_type', 'quote')
@@ -161,6 +191,7 @@ final class QuoteController extends Controller
                 'tax' => $totals['tax'] ?? null,
                 'total' => $totals['total'] ?? null,
             ],
+            'summaryItems' => $summaryItems,
             'svg' => $svg,
             'requests' => $requests,
         ]);
@@ -183,6 +214,8 @@ final class QuoteController extends Controller
         $quoteMemo = trim((string)($quote->memo ?? ''));
         $sessionMemo = trim((string)($quote->session_memo ?? ''));
         $initialMemo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
+        $summaryFieldOptions = self::SUMMARY_FIELD_LABELS;
+        $selectedSummaryFields = $this->resolveSummaryCardFields($snapshot);
 
         return view('ops.quotes.edit', [
             'quote' => $quote,
@@ -190,6 +223,8 @@ final class QuoteController extends Controller
             'templateVersionId' => $templateVersionId,
             'initialMemo' => $initialMemo,
             'displayNameSource' => $displayNameSource,
+            'summaryFieldOptions' => $summaryFieldOptions,
+            'selectedSummaryFields' => $selectedSummaryFields,
         ]);
     }
 
@@ -213,6 +248,30 @@ final class QuoteController extends Controller
         return redirect()
             ->route('ops.quotes.edit', $id)
             ->with('status', '概要カードの表示名設定を更新しました');
+    }
+
+    public function updateSummaryFields(Request $request, int $id)
+    {
+        $quote = DB::table('quotes')->where('id', $id)->first();
+        if (!$quote) abort(404);
+
+        $data = $request->validate([
+            'summary_fields' => 'array',
+            'summary_fields.*' => 'string',
+        ]);
+
+        $selected = $this->normalizeSummaryFields($data['summary_fields'] ?? []);
+        $snapshot = $this->decodeJson($quote->snapshot) ?? [];
+        $snapshot['summary_card_fields'] = $selected;
+
+        DB::table('quotes')->where('id', $id)->update([
+            'snapshot' => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('ops.quotes.edit', $id)
+            ->with('status', '概要カード表示項目を更新しました');
     }
 
     public function editRequest(int $id)
@@ -249,8 +308,12 @@ final class QuoteController extends Controller
 
         $baseSnapshot = $this->decodeJson($quote->snapshot) ?? [];
         $nameSource = $this->resolveAccountNameSource($baseSnapshot);
+        $summaryFields = $this->resolveSummaryCardFields($baseSnapshot);
         if (!array_key_exists('account_display_name_source', $baseSnapshot)) {
             $baseSnapshot['account_display_name_source'] = $nameSource;
+        }
+        if (!array_key_exists('summary_card_fields', $baseSnapshot)) {
+            $baseSnapshot['summary_card_fields'] = $summaryFields;
         }
         if (!array_key_exists('memo', $baseSnapshot)) {
             $baseSnapshot['memo'] = $quote->memo;
@@ -271,6 +334,9 @@ final class QuoteController extends Controller
         }
         if (!array_key_exists('account_display_name_source', $decoded)) {
             $decoded['account_display_name_source'] = $nameSource;
+        }
+        if (!array_key_exists('summary_card_fields', $decoded)) {
+            $decoded['summary_card_fields'] = $summaryFields;
         }
         if (!array_key_exists('memo', $decoded)) {
             $decoded['memo'] = $quote->memo;
@@ -322,11 +388,10 @@ final class QuoteController extends Controller
 
     public function downloadSnapshotPdf(int $id, SvgRenderer $renderer, SnapshotPdfService $pdfService)
     {
-        $customerEmails = DB::table('account_user as au')
+        $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'q.account_id')
-            ->where('au.role', 'customer')
-            ->selectRaw("string_agg(u.email, ', ')");
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
         $accountUserName = DB::table('account_user as au2')
             ->join('users as u2', 'u2.id', '=', 'au2.user_id')
@@ -350,7 +415,7 @@ final class QuoteController extends Controller
             ->addSelect('a.internal_name as account_internal_name', 'a.assignee_name')
             ->selectSub($accountUserName, 'account_user_name')
             ->addSelect('cs.memo as session_memo')
-            ->selectSub($customerEmails, 'customer_emails')
+            ->selectSub($accountEmails, 'account_emails')
             ->where('q.id', $id)
             ->first();
         if (!$quote) abort(404);
@@ -362,8 +427,7 @@ final class QuoteController extends Controller
         $snapshot = $this->decodeJson($quote->snapshot) ?? [];
         $nameSource = $this->resolveAccountNameSource($snapshot);
         $quote->account_display_name_source = $nameSource;
-        $quote->account_display_name = $this->resolveAccountDisplayName(
-            $nameSource,
+        $quote->account_display_name = $this->resolveAccountDisplayNameInternalFirst(
             (string)($quote->account_internal_name ?? ''),
             (string)($quote->account_user_name ?? '')
         );
@@ -376,6 +440,7 @@ final class QuoteController extends Controller
             ->where('entity_type', 'quote')
             ->where('entity_id', $id)
             ->count();
+        $summaryItems = $this->buildQuoteSummaryItems($quote, $snapshot, $requestCount);
 
         $svg = $renderer->render($config, $derived, $errors);
 
@@ -392,14 +457,8 @@ final class QuoteController extends Controller
         return $pdfService->downloadSnapshotBundleUi([
             'title' => '見積 スナップショット',
             'panelTitle' => '見積スナップショット',
-            'summaryItems' => [
-                ['label' => '見積ID', 'value' => $quote->id],
-                ['label' => 'ステータス', 'value' => $quote->status],
-                ['label' => 'アカウント表示名', 'value' => $quote->account_display_name ?? ''],
-                ['label' => '担当者', 'value' => $quote->assignee_name ?? '-'],
-                ['label' => '登録メールアドレス', 'value' => $quote->customer_emails ?? '-'],
-                ['label' => '承認リクエスト件数', 'value' => $requestCount],
-            ],
+            'summaryItems' => $summaryItems,
+            'includeAutoSummary' => false,
             'showMemoCard' => true,
             'memoValue' => $quote->display_memo ?? '',
             'memoLabel' => 'メモ',
@@ -444,5 +503,87 @@ final class QuoteController extends Controller
             return $userName;
         }
         return '-';
+    }
+
+    private function resolveAccountDisplayNameInternalFirst(string $internalName, string $userName): string
+    {
+        $internalName = trim($internalName);
+        $userName = trim($userName);
+
+        if ($internalName !== '') {
+            return $internalName;
+        }
+        if ($userName !== '') {
+            return $userName;
+        }
+
+        return '-';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function resolveSummaryCardFields(array $snapshot): array
+    {
+        $raw = $snapshot['summary_card_fields'] ?? [];
+        if (!is_array($raw)) {
+            return self::SUMMARY_DEFAULT_FIELDS;
+        }
+
+        return $this->normalizeSummaryFields($raw);
+    }
+
+    /**
+     * @param array<int, mixed> $raw
+     * @return array<int, string>
+     */
+    private function normalizeSummaryFields(array $raw): array
+    {
+        $allowed = array_keys(self::SUMMARY_FIELD_LABELS);
+        $selected = [];
+        foreach ($raw as $field) {
+            $field = (string)$field;
+            if (!in_array($field, $allowed, true)) {
+                continue;
+            }
+            if (!in_array($field, $selected, true)) {
+                $selected[] = $field;
+            }
+        }
+
+        return empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+    }
+
+    /**
+     * @return array<int, array{label:string,value:mixed}>
+     */
+    private function buildQuoteSummaryItems(object $quote, array $snapshot, int $requestCount): array
+    {
+        $fields = $this->resolveSummaryCardFields($snapshot);
+        $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
+
+        $valueMap = [
+            'quote_id' => $quote->id ?? '',
+            'status' => $quote->status ?? '',
+            'account_display_name' => $quote->account_display_name ?? '-',
+            'assignee_name' => $quote->assignee_name ?? '-',
+            'customer_emails' => $quote->account_emails ?? ($quote->customer_emails ?? '-'),
+            'request_count' => $requestCount,
+            'template_version_id' => $snapshot['template_version_id'] ?? '',
+            'price_book_id' => $snapshot['price_book_id'] ?? '',
+            'subtotal' => $totals['subtotal'] ?? '',
+            'tax' => $totals['tax'] ?? '',
+            'total' => $totals['total'] ?? '',
+        ];
+
+        $items = [];
+        foreach ($fields as $field) {
+            $items[] = [
+                'label' => self::SUMMARY_FIELD_LABELS[$field],
+                'value' => $valueMap[$field] ?? '',
+            ];
+        }
+
+        return $items;
     }
 }

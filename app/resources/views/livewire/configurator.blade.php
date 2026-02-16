@@ -40,9 +40,9 @@
                             <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                         @endforeach
                     </select>
-                    <label>長さ[mm]</label>
+                    <label>長さ(mm)</label>
                     <input type="number" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthMm" style="width:100%;">
-                    <label>希望許容誤差[mm]</label>
+                    <label>希望許容誤差(mm)</label>
                     <input type="number" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.toleranceMm" style="width:100%;">
                 </div>
             @endforeach
@@ -61,19 +61,19 @@
                         @endforeach
                     </select>
 
-                    <label>開始ファイバ番号</label>
+                    <label>チューブ左端位置のファイバ番号</label>
                     <input type="number" min="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startFiberIndex" style="width:100%;">
 
-                    <label>開始オフセット[mm]</label>
+                    <label>そのファイバ左端からの距離(mm)</label>
                     <input type="number" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startOffsetMm" style="width:100%;">
 
-                    <label>終了ファイバ番号</label>
+                    <label>チューブ右端位置のファイバ番号</label>
                     <input type="number" min="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endFiberIndex" style="width:100%;">
 
-                    <label>終了オフセット[mm]</label>
+                    <label>そのファイバ左端からの距離(mm)</label>
                     <input type="number" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endOffsetMm" style="width:100%;">
 
-                    <label>希望許容誤差[mm]</label>
+                    <label>希望許容誤差(mm)</label>
                     <input type="number" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.toleranceMm" style="width:100%;">
                 </div>
             @endforeach
@@ -82,15 +82,15 @@
 
             <h2 style="font-weight:700;">コネクタ</h2>
             <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                <label>必要数</label>
+                <label>必要な位置</label>
                 <select wire:model.live.debounce.300ms="config.connectors.mode" style="width:100%;">
                     <option value="none">なし</option>
-                    <option value="left">左端</option>
-                    <option value="right">右端</option>
-                    <option value="both">両端</option>
+                    <option value="left">全体の左端</option>
+                    <option value="right">全体の右端</option>
+                    <option value="both">全体の両端</option>
                 </select>
 
-                <label>左端</label>
+                <label>全体の左端</label>
                 <select wire:model.live.debounce.500ms="config.connectors.leftSkuCode" style="width:100%;">
                     <option value="">（未選択）</option>
                     @foreach(($skuOptions['connector'] ?? []) as $opt)
@@ -98,7 +98,7 @@
                     @endforeach
                 </select>
 
-                <label style="margin-top:8px; display:block;">右端</label>
+                <label style="margin-top:8px; display:block;">全体の右端</label>
                 <select wire:model.live.debounce.500ms="config.connectors.rightSkuCode" style="width:100%;">
                     <option value="">（未選択）</option>
                     @foreach(($skuOptions['connector'] ?? []) as $opt)
@@ -115,7 +115,7 @@
         </div>
 
         <div style="flex:1;">
-            <button wire:click="newSession" type="button">新規ファイバセッション作成</button>
+            <button wire:click="newSession" type="button">新規ファイバ作成（新規セッション）</button>
             @if($quoteEditId)
                 <button type="button" wire:click="requestQuoteEdit">
                     見積変更申請

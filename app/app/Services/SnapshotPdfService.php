@@ -182,7 +182,11 @@ final class SnapshotPdfService
             if ($name) return (string)$name;
         }
 
-        return $procSku;
+        if (is_string($procSku) && trim($procSku) !== '') {
+            return $procSku;
+        }
+
+        return 'unknown';
     }
 
     private function sanitizePart(string $value): string

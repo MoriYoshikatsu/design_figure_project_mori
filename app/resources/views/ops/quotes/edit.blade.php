@@ -31,6 +31,26 @@
                 </div>
             </div>
         </form>
+
+        <form method="POST" action="{{ route('ops.quotes.summary-fields.update', $quote->id) }}" style="margin-top:12px;">
+            @csrf
+            @method('PUT')
+            <div style="font-weight:600; margin-bottom:6px;">表示項目</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:6px 10px; margin-bottom:8px;">
+                @foreach(($summaryFieldOptions ?? []) as $key => $label)
+                    <label style="display:flex; align-items:center; gap:6px;">
+                        <input
+                            type="checkbox"
+                            name="summary_fields[]"
+                            value="{{ $key }}"
+                            @checked(in_array($key, $selectedSummaryFields ?? [], true))
+                        >
+                        <span>{{ $label }}</span>
+                    </label>
+                @endforeach
+            </div>
+            <button type="submit">表示項目を保存</button>
+        </form>
     </div>
 
     @livewire('configurator', [

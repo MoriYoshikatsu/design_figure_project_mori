@@ -28,10 +28,10 @@
         'summaryItems' => [
             ['label' => 'セッションID', 'value' => $session->id],
             ['label' => 'ステータス', 'value' => $session->status],
-            ['label' => 'アカウント表示名', 'value' => $session->account_display_name ?? ''],
+            ['label' => '作成アカウント', 'value' => $session->account_display_name ?? ''],
+            ['label' => 'メールアドレス', 'value' => $session->account_emails ?? '-'],
             ['label' => '担当者', 'value' => $session->assignee_name ?? '-'],
-            ['label' => '登録メールアドレス', 'value' => $session->customer_emails ?? '-'],
-            ['label' => '承認リクエスト件数', 'value' => is_countable($requests) ? count($requests) : 0],
+            ['label' => '承認リクエスト数', 'value' => is_countable($requests) ? count($requests) : 0],
         ],
         'showMemoCard' => true,
         'memoValue' => $session->memo ?? '',

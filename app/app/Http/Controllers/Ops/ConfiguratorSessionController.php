@@ -11,11 +11,10 @@ final class ConfiguratorSessionController extends Controller
 {
     public function index()
     {
-        $customerEmails = DB::table('account_user as au')
+        $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'cs.account_id')
-            ->where('au.role', 'customer')
-            ->selectRaw("string_agg(u.email, ', ')");
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
         $sessions = DB::table('configurator_sessions as cs')
             ->join('accounts as a', 'a.id', '=', 'cs.account_id')
@@ -42,7 +41,7 @@ final class ConfiguratorSessionController extends Controller
                 ) as account_display_name
             ")
             ->addSelect('a.internal_name as account_name', 'a.internal_name as account_internal_name', 'a.assignee_name')
-            ->selectSub($customerEmails, 'customer_emails')
+            ->selectSub($accountEmails, 'account_emails')
             ->orderBy('cs.id', 'desc')
             ->limit(200)
             ->get();
@@ -52,11 +51,10 @@ final class ConfiguratorSessionController extends Controller
 
     public function show(int $id, \App\Services\SvgRenderer $renderer)
     {
-        $customerEmails = DB::table('account_user as au')
+        $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'cs.account_id')
-            ->where('au.role', 'customer')
-            ->selectRaw("string_agg(u.email, ', ')");
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
         $session = DB::table('configurator_sessions as cs')
             ->join('accounts as a', 'a.id', '=', 'cs.account_id')
@@ -83,7 +81,7 @@ final class ConfiguratorSessionController extends Controller
                 ) as account_display_name
             ")
             ->addSelect('a.internal_name as account_name', 'a.internal_name as account_internal_name', 'a.assignee_name')
-            ->selectSub($customerEmails, 'customer_emails')
+            ->selectSub($accountEmails, 'account_emails')
             ->where('cs.id', $id)
             ->first();
         if (!$session) abort(404);
@@ -135,11 +133,10 @@ final class ConfiguratorSessionController extends Controller
 
     public function downloadSnapshotPdf(int $id, \App\Services\SvgRenderer $renderer, SnapshotPdfService $pdfService)
     {
-        $customerEmails = DB::table('account_user as au')
+        $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'cs.account_id')
-            ->where('au.role', 'customer')
-            ->selectRaw("string_agg(u.email, ', ')");
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
         $session = DB::table('configurator_sessions as cs')
             ->join('accounts as a', 'a.id', '=', 'cs.account_id')
@@ -166,7 +163,7 @@ final class ConfiguratorSessionController extends Controller
                 ) as account_display_name
             ")
             ->addSelect('a.internal_name as account_name', 'a.internal_name as account_internal_name', 'a.assignee_name')
-            ->selectSub($customerEmails, 'customer_emails')
+            ->selectSub($accountEmails, 'account_emails')
             ->where('cs.id', $id)
             ->first();
         if (!$session) abort(404);
@@ -219,7 +216,7 @@ final class ConfiguratorSessionController extends Controller
                 ['label' => 'ステータス', 'value' => $session->status],
                 ['label' => 'アカウント表示名', 'value' => $session->account_display_name ?? ''],
                 ['label' => '担当者', 'value' => $session->assignee_name ?? '-'],
-                ['label' => '登録メールアドレス', 'value' => $session->customer_emails ?? '-'],
+                ['label' => '登録メールアドレス', 'value' => $session->account_emails ?? '-'],
                 ['label' => '承認リクエスト件数', 'value' => $requestCount],
             ],
             'showMemoCard' => true,

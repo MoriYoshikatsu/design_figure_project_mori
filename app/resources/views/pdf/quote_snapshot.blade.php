@@ -68,6 +68,7 @@
             <tr><th>仕様書id</th><td>{{ $quote->id ?? '' }}</td></tr>
             <tr><th>作成日時</th><td>{{ $quote->created_at ?? '' }}</td></tr>
             <tr><th>ユーザー名</th><td>{{ $quote->account_name ?? '-' }}</td></tr>
+            <tr><th>登録メールアドレス</th><td>{{ $quote->account_emails ?? '-' }}</td></tr>
             <tr><th>担当者名</th><td>{{ $quote->account_assignee_name ?? '-' }}</td></tr>
         </tbody>
     </table>

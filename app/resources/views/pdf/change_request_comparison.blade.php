@@ -94,12 +94,12 @@
                     <td style="width:18%;">{{ $req->approved_at ?? '-' }}</td>
                 </tr>
                 <tr>
-                    <th>作成者アカウント表示名</th>
+                    <th>申請者</th>
                     <td>{{ $req->requested_by_account_display_name ?? '-' }}</td>
-                    <th>登録メールアドレス</th>
-                    <td>{{ $req->requested_by_email ?? '-' }}</td>
                     <th>担当者</th>
                     <td>{{ $req->requested_by_assignee_name ?? '-' }}</td>
+                    <th>コメント</th>
+                    <td>{{ $req->comment ?? '（なし）' }}</td>
                 </tr>
             </tbody>
         </table>
@@ -121,11 +121,10 @@
                 <tr><th>エラー件数</th><td>{{ count($baseErrors) }}</td><td>{{ count($errors) }}</td></tr>
                 <tr><th>BOM件数</th><td>{{ count($baseBom) }}</td><td>{{ count($newBom) }}</td></tr>
                 <tr><th>価格内訳件数</th><td>{{ count($basePricing) }}</td><td>{{ count($newPricing) }}</td></tr>
+                <tr><th>申請者</th><td>{{ $req->requested_by_account_display_name ?? '-' }}</td><td>{{ $req->requested_by_account_display_name ?? '-' }}</td></tr>
                 @if(($req->entity_type ?? '') === 'quote')
                     <tr><th>合計</th><td>{{ $baseTotals['total'] ?? '-' }}</td><td>{{ $newTotals['total'] ?? '-' }}</td></tr>
                 @endif
-                <tr><th>作成者アカウント表示名</th><td>{{ $req->requested_by_account_display_name ?? '-' }}</td><td>{{ $req->requested_by_account_display_name ?? '-' }}</td></tr>
-                <tr><th>登録メールアドレス</th><td>{{ $req->requested_by_email ?? '-' }}</td><td>{{ $req->requested_by_email ?? '-' }}</td></tr>
                 <tr><th>担当者</th><td>{{ $req->requested_by_assignee_name ?? '-' }}</td><td>{{ $req->requested_by_assignee_name ?? '-' }}</td></tr>
             </tbody>
         </table>
@@ -143,10 +142,7 @@
                 'summaryTableColumns' => 4,
                 'summaryTitle' => '初版概要',
                 'errorTableLabel' => '初版検証エラー',
-                'showCreatorColumns' => true,
-                'creatorAccountDisplayName' => $req->requested_by_account_display_name ?? '',
-                'creatorEmail' => $req->requested_by_email ?? '',
-                'creatorAssigneeName' => $req->requested_by_assignee_name ?? '',
+                'showCreatorColumns' => false,
                 'summaryItems' => $baseSummaryItems,
                 'svg' => $baseGraphicHtml ?? '',
             'snapshot' => $baseSnapshotView,
@@ -169,10 +165,7 @@
             'summaryTableColumns' => 4,
             'summaryTitle' => '申請内容概要',
             'errorTableLabel' => '申請内容検証エラー',
-            'showCreatorColumns' => true,
-            'creatorAccountDisplayName' => $req->requested_by_account_display_name ?? '',
-            'creatorEmail' => $req->requested_by_email ?? '',
-            'creatorAssigneeName' => $req->requested_by_assignee_name ?? '',
+            'showCreatorColumns' => false,
             'summaryItems' => $newSummaryItems,
             'svg' => $newGraphicHtml ?? '',
             'snapshot' => $snapshotView,

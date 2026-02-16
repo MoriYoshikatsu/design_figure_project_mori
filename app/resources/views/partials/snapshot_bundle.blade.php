@@ -460,8 +460,8 @@
                             <th>パス</th>
                             <th>メッセージ</th>
                             @if($showCreatorColumns)
-                                <th>作成者アカウント表示名</th>
-                                <th>登録メールアドレス</th>
+                                <th>作成アカウント</th>
+                                <th>メールアドレス</th>
                                 <th>担当者</th>
                             @endif
                         </tr>
@@ -514,11 +514,11 @@
                                 <th>単価(¥)</th>
                                 <th>小計(¥)</th>
                             @endif
-                            @if($showCreatorColumns)
+                            {{-- @if($showCreatorColumns)
                                 <th>作成者アカウント表示名</th>
                                 <th>登録メールアドレス</th>
                                 <th>担当者</th>
-                            @endif
+                            @endif --}}
                         </tr>
                     </thead>
                     <tbody>
@@ -545,11 +545,11 @@
                                     <td>{{ $r['unit_price'] ?? '' }}</td>
                                     <td>{{ $r['line_total'] ?? '' }}</td>
                                 @endif
-                                @if($showCreatorColumns)
+                                {{-- @if($showCreatorColumns)
                                     <td>{{ $creatorAccountDisplayText }}</td>
                                     <td>{{ $creatorEmailText }}</td>
                                     <td>{{ $creatorAssigneeText }}</td>
-                                @endif
+                                @endif --}}
                             </tr>
                         @endforeach
                     </tbody>

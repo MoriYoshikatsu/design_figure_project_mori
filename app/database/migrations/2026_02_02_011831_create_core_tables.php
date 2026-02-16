@@ -14,6 +14,7 @@ return new class extends Migration
             $table->string('internal_name')->nullable();
             $table->text('memo')->nullable();
             $table->string('assignee_name')->nullable();
+            $table->enum('sales_route_policy_mode', ['legacy_allow_all', 'strict_allowlist'])->default('strict_allowlist');
             $table->timestampsTz();
         });
 

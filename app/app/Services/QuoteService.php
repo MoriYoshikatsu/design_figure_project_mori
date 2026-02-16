@@ -83,6 +83,19 @@ final class QuoteService
                     'template_version_id' => (int)$session->template_version_id,
                     'price_book_id' => $pricingResult['price_book_id'] ?? null,
                     'account_display_name_source' => 'internal_name',
+                    'summary_card_fields' => [
+                        'quote_id',
+                        'status',
+                        'account_display_name',
+                        'assignee_name',
+                        'customer_emails',
+                        'request_count',
+                        'template_version_id',
+                        'price_book_id',
+                        'subtotal',
+                        'tax',
+                        'total',
+                    ],
                     'config' => $config,
                     'derived' => $derived,
                     'validation_errors' => $validationErrors,
@@ -146,6 +159,7 @@ final class QuoteService
         $accountId = (int)DB::table('accounts')->insertGetId([
             'account_type' => 'B2C',
             'internal_name' => trim($userName) !== '' ? $userName : null,
+            'sales_route_policy_mode' => 'strict_allowlist',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
