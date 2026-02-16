@@ -1,7 +1,7 @@
 @extends('admin.layout')
 
 @section('content')
-    <h1>アカウント編集 #{{ $account->id }}</h1>
+    <h1>アカウント #{{ $account->id }} 編集</h1>
 
     <form method="POST" action="{{ route('admin.accounts.update', $account->id) }}">
         @csrf
