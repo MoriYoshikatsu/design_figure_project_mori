@@ -24,6 +24,9 @@ final class SalesRoutePermissionService
             if ($this->isExcludedFromCatalog($uri)) {
                 continue;
             }
+            if (!Str::startsWith($uri, '/work/')) {
+                continue;
+            }
 
             $routeName = (string)($route->getName() ?? '');
             $suggested = $this->suggestPatternFromUri($uri);
@@ -78,83 +81,53 @@ final class SalesRoutePermissionService
             return false;
         }
 
-        $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
         $method = strtoupper($request->method());
         if (!in_array($method, self::ALLOWED_METHODS, true)) {
             return false;
         }
 
-        $accountId = $this->resolveAccountContextId($request);
-        if ($accountId === null) {
-            if (!$this->userHasSalesRole($userId)) {
-                return false;
-            }
-
-            // account 文脈が取れない画面でも、明示許可があれば通す。
-            if ($this->hasExplicitAllowForAnySalesAccount($userId, $method, $path)) {
-                return true;
-            }
-
-            return $this->isListRoute($request);
-        }
-
-        if (!$this->userHasSalesRoleInAccount($userId, $accountId)) {
+        if (!$this->userHasSalesRole($userId)) {
             return false;
         }
 
-        $requiresExplicitAllow = $this->isAccountPermissionsPagePath($path);
+        $originalPath = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
+        $workPath = $this->toWorkPathForPermission($originalPath);
 
-        $mode = (string)(DB::table('accounts')
-            ->where('id', $accountId)
-            ->value('sales_route_policy_mode') ?? 'strict_allowlist');
+        /** @var WorkPermissionService $service */
+        $service = app(WorkPermissionService::class);
+        $proxy = Request::create($workPath, $method);
+        $proxy->setUserResolver(static fn () => $request->user());
 
-        if ($mode === 'legacy_allow_all' && !$requiresExplicitAllow) {
-            return true;
-        }
-
-        // 権限設定ページだけは legacy でも明示許可が必要（初期Adminのみ）
-        return $this->hasExplicitAllowForAccount($accountId, $method, $path);
+        return $service->allowsRequest($proxy, $userId);
     }
 
     public function resolveAccountContextId(Request $request): ?int
     {
         $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
 
-        if (preg_match('#^/admin/accounts/(\d+)(?:/|$)#', $path, $m)) {
+        if (preg_match('#^/(?:work|admin)/accounts/(\d+)(?:/|$)#', $path, $m)) {
             return (int)$m[1];
         }
 
-        if (preg_match('#^/(?:ops/)?quotes/(\d+)(?:/|$)#', $path, $m)) {
+        if (preg_match('#^/(?:work/|ops/)?quotes/(\d+)(?:/|$)#', $path, $m)) {
             $accountId = (int)DB::table('quotes')
                 ->where('id', (int)$m[1])
                 ->value('account_id');
             return $accountId > 0 ? $accountId : null;
         }
 
-        if (preg_match('#^/ops/configurator-sessions/(\d+)(?:/|$)#', $path, $m)) {
+        if (preg_match('#^/(?:work/sessions|ops/configurator-sessions)/(\d+)(?:/|$)#', $path, $m)) {
             $accountId = (int)DB::table('configurator_sessions')
                 ->where('id', (int)$m[1])
                 ->value('account_id');
             return $accountId > 0 ? $accountId : null;
         }
 
-        if (preg_match('#^/(?:ops|admin)/change-requests/(\d+)(?:/|$)#', $path, $m)) {
+        if (preg_match('#^/(?:work|ops|admin)/change-requests/(\d+)(?:/|$)#', $path, $m)) {
             return $this->resolveAccountIdFromChangeRequest((int)$m[1]);
         }
 
         return null;
-    }
-
-    public function isListRoute(Request $request): bool
-    {
-        $routeName = (string)($request->route()?->getName() ?? '');
-        if ($routeName !== '' && preg_match('/(?:^|\.)(index|list)$/', $routeName)) {
-            return true;
-        }
-
-        // 名前がない場合は index/list 文字列を含むURIを補助的に許可
-        $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
-        return (bool)preg_match('#/(index|list)(?:/|$)#', $path);
     }
 
     public function normalizeMethod(string $method): string
@@ -186,7 +159,7 @@ final class SalesRoutePermissionService
             return $uri;
         }
 
-        // /admin/accounts/{id}/permissions -> /admin/accounts/*/permissions
+        // /work/accounts/{id}/permissions -> /work/accounts/*/permissions
         return preg_replace('#\{[^/]+\}#', '*', $uri) ?? $uri;
     }
 
@@ -301,56 +274,28 @@ final class SalesRoutePermissionService
         return null;
     }
 
-    private function isAccountPermissionsPagePath(string $path): bool
+    private function toWorkPathForPermission(string $path): string
     {
-        return (bool)preg_match('#^/admin/accounts/\d+/permissions$#', $path);
-    }
-
-    private function hasExplicitAllowForAccount(int $accountId, string $method, string $path): bool
-    {
-        if ($accountId <= 0) {
-            return false;
+        $path = $this->normalizePath($path);
+        if (str_starts_with($path, '/work/')) {
+            return $path;
         }
 
-        $patterns = DB::table('account_sales_route_permissions')
-            ->where('account_id', $accountId)
-            ->where('http_method', $method)
-            ->where('active', true)
-            ->orderBy('id')
-            ->pluck('uri_pattern');
-
-        foreach ($patterns as $pattern) {
-            if ($this->pathMatchesPattern((string)$pattern, $path)) {
-                return true;
+        if (preg_match('#^/quotes/(\d+)(/snapshot\.pdf)?$#', $path, $m)) {
+            $id = (int)$m[1];
+            if (!empty($m[2])) {
+                return '/work/quotes/' . $id . '/snapshot.pdf';
             }
+            return '/work/quotes/' . $id;
         }
 
-        return false;
-    }
-
-    private function hasExplicitAllowForAnySalesAccount(int $userId, string $method, string $path): bool
-    {
-        if ($userId <= 0) {
-            return false;
+        if (str_starts_with($path, '/admin/')) {
+            return '/work/' . ltrim(substr($path, strlen('/admin/')), '/');
+        }
+        if (str_starts_with($path, '/ops/')) {
+            return '/work/' . ltrim(substr($path, strlen('/ops/')), '/');
         }
 
-        $patterns = DB::table('account_sales_route_permissions as perm')
-            ->join('account_user as au', function ($join): void {
-                $join->on('au.account_id', '=', 'perm.account_id')
-                    ->where('au.role', '=', 'sales');
-            })
-            ->where('au.user_id', $userId)
-            ->where('perm.http_method', $method)
-            ->where('perm.active', true)
-            ->orderBy('perm.id')
-            ->pluck('perm.uri_pattern');
-
-        foreach ($patterns as $pattern) {
-            if ($this->pathMatchesPattern((string)$pattern, $path)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $path;
     }
 }

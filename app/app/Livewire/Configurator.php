@@ -6,6 +6,7 @@ use Livewire\Component;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Models\ConfiguratorSession;
+use App\Services\WorkChangeRequestService;
 use Illuminate\Support\Facades\Cookie;
 use Throwable;
 
@@ -282,7 +283,6 @@ final class Configurator extends Component
                 $accountId = (int)DB::table('accounts')->insertGetId([
                     'account_type' => 'B2C',
                     'internal_name' => trim((string)$user->name) !== '' ? (string)$user->name : null,
-                    'sales_route_policy_mode' => 'strict_allowlist',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -313,7 +313,6 @@ final class Configurator extends Component
             'account_type' => 'B2C',
             'internal_name' => null,
             'memo' => 'GUEST_TEMP',
-            'sales_route_policy_mode' => 'strict_allowlist',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -585,19 +584,19 @@ final class Configurator extends Component
         $baseSnapshot['summary_card_fields'] = $summaryFields;
         $baseSnapshot['memo'] = $this->normalizeMemo((string)($quoteRow?->memo ?? ''));
 
-        DB::table('change_requests')->insert([
-            'entity_type' => 'quote',
-            'entity_id' => $this->quoteEditId,
-            'proposed_json' => json_encode([
+        app(WorkChangeRequestService::class)->queueUpdate(
+            'quote',
+            (int)$this->quoteEditId,
+            [
+                'snapshot' => $baseSnapshot,
+                'memo' => $quoteRow?->memo,
+            ],
+            [
                 'snapshot' => $snapshot,
-                'base_snapshot' => $baseSnapshot,
-            ], JSON_UNESCAPED_UNICODE),
-            'status' => 'PENDING',
-            'requested_by' => (int)auth()->id(),
-            'comment' => 'Configuratorからの変更申請',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            ],
+            (int)auth()->id(),
+            'Configuratorからの変更申請'
+        );
 
         $this->saveStatus = '見積変更申請(TOKYO): ' . now()->format('H:i:s');
     }
@@ -1031,6 +1030,6 @@ final class Configurator extends Component
 
     public function render()
     {
-        return view('livewire.configurator')->layout('layouts.livewire');
+        return view('configurator')->layout('work.layout');
     }
 }

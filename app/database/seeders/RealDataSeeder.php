@@ -122,7 +122,6 @@ final class RealDataSeeder extends Seeder
                 $accountId = (int)DB::table('accounts')->insertGetId([
                     'account_type' => $def['account_type'],
                     'internal_name' => $def['account_name'],
-                    'sales_route_policy_mode' => 'strict_allowlist',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);

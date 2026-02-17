@@ -146,7 +146,7 @@ return [
     'redirects' => [
         'login' => '/',
         'register' => '/',
-        'logout' => '/',
+        'logout' => '/login',
         'password-confirmation' => '/',
         'email-verification' => '/',
     ],

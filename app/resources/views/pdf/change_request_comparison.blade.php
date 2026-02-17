@@ -131,7 +131,7 @@
     </div>
 
     <div class="section">
-        @include('partials.snapshot_bundle', [
+        @include('snapshot_bundle', [
             'panelTitle' => '初版SVGrenderer',
             'pdfUrl' => null,
             'includeAutoSummary' => true,
@@ -154,7 +154,7 @@
     </div>
 
     <div class="section">
-        @include('partials.snapshot_bundle', [
+        @include('snapshot_bundle', [
             'panelTitle' => '申請内容SVGrenderer',
             'pdfUrl' => null,
             'includeAutoSummary' => true,

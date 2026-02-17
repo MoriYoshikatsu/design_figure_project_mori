@@ -5,29 +5,29 @@ use App\Livewire\Configurator;
 use Illuminate\Http\Request;
 use App\Models\ConfiguratorSession;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\Admin\AdminSkuController;
-use App\Http\Controllers\Admin\AdminAccountController;
-use App\Http\Controllers\Admin\AdminPriceBookController;
-use App\Http\Controllers\Admin\AdminPriceBookItemController;
-use App\Http\Controllers\Admin\AdminTemplateController;
-use App\Http\Controllers\Admin\AdminTemplateVersionController;
-use App\Http\Controllers\Admin\AdminChangeRequestController;
-use App\Http\Controllers\Admin\AdminAuditLogController;
-use App\Http\Controllers\Ops\ConfiguratorSessionController;
-use App\Http\Controllers\Ops\ChangeRequestController as OpsChangeRequestController;
-use App\Http\Controllers\Ops\QuoteController;
+use App\Http\Controllers\SkuController;
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\PriceBookController;
+use App\Http\Controllers\PriceBookItemController;
+use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\TemplateVersionController;
+use App\Http\Controllers\ChangeRequestReviewController;
+use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\SessionController;
+use App\Http\Controllers\ChangeRequestController;
+use App\Http\Controllers\QuoteController;
 use App\Services\GuestAccountClaimService;
 use App\Services\SnapshotPdfService;
 
-Route::get('/', function () {
-    return view('landing');
-});
+// Route::get('/', function () {
+//     return view('landing');
+// });
 
 Route::middleware(['auth'])->group(function () {
     Route::view('/user/settings', 'auth.settings')->name('user.settings');
 });
 
-Route::get('/configurator', Configurator::class);
+Route::get('/configurator', Configurator::class)->name('configurator');
 
 Route::post('/configurator/autosave', function (Request $request) {
 
@@ -162,7 +162,7 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
         'total' => (float)($quote->total ?? 0),
     ];
     // dd($quote);
-    return view('quotes.show', [
+    return view('quote_show', [
         'quote' => $quote,
         'accountMembers' => $accountMembers,
         'snapshot' => $snapshot,
@@ -260,73 +260,96 @@ Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, Sn
     ], $filename);
 })->middleware(['auth', 'account.route'])->name('quotes.snapshot.pdf');
 
-Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
-    Route::get('/accounts', [AdminAccountController::class, 'index'])->name('admin.accounts.index');
-    Route::get('/accounts/{id}/edit', [AdminAccountController::class, 'edit'])->name('admin.accounts.edit');
-    Route::get('/accounts/{id}/permissions', [AdminAccountController::class, 'permissions'])->name('admin.accounts.permissions');
-    Route::put('/accounts/{id}', [AdminAccountController::class, 'update'])->name('admin.accounts.update');
-    Route::put('/accounts/{id}/members/{userId}/memo', [AdminAccountController::class, 'updateMemberMemo'])->name('admin.accounts.members.memo.update');
-    Route::put('/accounts/{id}/sales-route-policy', [AdminAccountController::class, 'updateSalesRoutePolicy'])->name('admin.accounts.sales-route-policy.update');
-    Route::post('/accounts/{id}/sales-route-permissions', [AdminAccountController::class, 'storeSalesRoutePermission'])->name('admin.accounts.sales-route-permissions.store');
-    Route::put('/accounts/{id}/sales-route-permissions/{permId}', [AdminAccountController::class, 'updateSalesRoutePermission'])->name('admin.accounts.sales-route-permissions.update');
-    Route::delete('/accounts/{id}/sales-route-permissions/{permId}', [AdminAccountController::class, 'destroySalesRoutePermission'])->name('admin.accounts.sales-route-permissions.destroy');
+Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group(function () {
+    Route::get('/accounts', [AccountController::class, 'index'])->name('accounts.index');
+    Route::post('/accounts/edit-request/create', [AccountController::class, 'store'])->name('accounts.edit-request.create');
+    Route::get('/accounts/{id}/edit', [AccountController::class, 'edit'])->name('accounts.edit');
+    Route::get('/accounts/{id}/permissions', [AccountController::class, 'permissions'])->name('accounts.permissions');
+    Route::put('/accounts/{id}', [AccountController::class, 'update'])->name('accounts.update');
+    Route::post('/accounts/{id}/edit-request/update', [AccountController::class, 'update'])->name('accounts.edit-request.update');
+    Route::post('/accounts/{id}/edit-request/delete', [AccountController::class, 'destroy'])->name('accounts.edit-request.delete');
+    Route::put('/accounts/{id}/members/{userId}/memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.update');
+    Route::post('/accounts/{id}/members/{userId}/edit-request/update-memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.edit-request.update');
+    Route::post('/accounts/{id}/sales-route-permissions', [AccountController::class, 'storeSalesRoutePermission'])->name('accounts.sales-route-permissions.store');
+    Route::post('/accounts/{id}/sales-route-permissions/edit-request/create', [AccountController::class, 'storeSalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.create');
+    Route::put('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'updateSalesRoutePermission'])->name('accounts.sales-route-permissions.update');
+    Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/update', [AccountController::class, 'updateSalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.update');
+    Route::delete('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.destroy');
+    Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/delete', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.delete');
 
-    Route::get('/skus', [AdminSkuController::class, 'index'])->name('admin.skus.index');
-    Route::get('/skus/create', [AdminSkuController::class, 'create'])->name('admin.skus.create');
-    Route::post('/skus', [AdminSkuController::class, 'store'])->name('admin.skus.store');
-    Route::get('/skus/{id}/edit', [AdminSkuController::class, 'edit'])->name('admin.skus.edit');
-    Route::put('/skus/{id}', [AdminSkuController::class, 'update'])->name('admin.skus.update');
+    Route::get('/skus', [SkuController::class, 'index'])->name('skus.index');
+    Route::get('/skus/create', [SkuController::class, 'create'])->name('skus.create');
+    Route::post('/skus', [SkuController::class, 'store'])->name('skus.store');
+    Route::post('/skus/edit-request/create', [SkuController::class, 'store'])->name('skus.edit-request.create');
+    Route::get('/skus/{id}/edit', [SkuController::class, 'edit'])->name('skus.edit');
+    Route::put('/skus/{id}', [SkuController::class, 'update'])->name('skus.update');
+    Route::post('/skus/{id}/edit-request/update', [SkuController::class, 'update'])->name('skus.edit-request.update');
+    Route::delete('/skus/{id}', [SkuController::class, 'destroy'])->name('skus.destroy');
+    Route::post('/skus/{id}/edit-request/delete', [SkuController::class, 'destroy'])->name('skus.edit-request.delete');
 
-    Route::get('/price-books', [AdminPriceBookController::class, 'index'])->name('admin.price-books.index');
-    Route::get('/price-books/create', [AdminPriceBookController::class, 'create'])->name('admin.price-books.create');
-    Route::post('/price-books', [AdminPriceBookController::class, 'store'])->name('admin.price-books.store');
-    Route::get('/price-books/{id}/edit', [AdminPriceBookController::class, 'edit'])->name('admin.price-books.edit');
-    Route::put('/price-books/{id}', [AdminPriceBookController::class, 'update'])->name('admin.price-books.update');
+    Route::get('/price-books', [PriceBookController::class, 'index'])->name('price-books.index');
+    Route::get('/price-books/create', [PriceBookController::class, 'create'])->name('price-books.create');
+    Route::post('/price-books', [PriceBookController::class, 'store'])->name('price-books.store');
+    Route::post('/price-books/edit-request/create', [PriceBookController::class, 'store'])->name('price-books.edit-request.create');
+    Route::get('/price-books/{id}/edit', [PriceBookController::class, 'edit'])->name('price-books.edit');
+    Route::put('/price-books/{id}', [PriceBookController::class, 'update'])->name('price-books.update');
+    Route::post('/price-books/{id}/edit-request/update', [PriceBookController::class, 'update'])->name('price-books.edit-request.update');
+    Route::delete('/price-books/{id}', [PriceBookController::class, 'destroy'])->name('price-books.destroy');
+    Route::post('/price-books/{id}/edit-request/delete', [PriceBookController::class, 'destroy'])->name('price-books.edit-request.delete');
 
-    Route::post('/price-books/{id}/items', [AdminPriceBookItemController::class, 'store'])->name('admin.price-books.items.store');
-    Route::get('/price-books/{id}/items/{item}/edit', [AdminPriceBookItemController::class, 'edit'])->name('admin.price-books.items.edit');
-    Route::put('/price-books/{id}/items/{item}', [AdminPriceBookItemController::class, 'update'])->name('admin.price-books.items.update');
-    Route::delete('/price-books/{id}/items/{item}', [AdminPriceBookItemController::class, 'destroy'])->name('admin.price-books.items.destroy');
+    Route::post('/price-books/{id}/items', [PriceBookItemController::class, 'store'])->name('price-books.items.store');
+    Route::post('/price-books/{id}/items/edit-request/create', [PriceBookItemController::class, 'store'])->name('price-books.items.edit-request.create');
+    Route::get('/price-books/{id}/items/{item}/edit', [PriceBookItemController::class, 'edit'])->name('price-books.items.edit');
+    Route::put('/price-books/{id}/items/{item}', [PriceBookItemController::class, 'update'])->name('price-books.items.update');
+    Route::post('/price-books/{id}/items/{item}/edit-request/update', [PriceBookItemController::class, 'update'])->name('price-books.items.edit-request.update');
+    Route::delete('/price-books/{id}/items/{item}', [PriceBookItemController::class, 'destroy'])->name('price-books.items.destroy');
+    Route::post('/price-books/{id}/items/{item}/edit-request/delete', [PriceBookItemController::class, 'destroy'])->name('price-books.items.edit-request.delete');
 
-    Route::get('/templates', [AdminTemplateController::class, 'index'])->name('admin.templates.index');
-    Route::get('/templates/create', [AdminTemplateController::class, 'create'])->name('admin.templates.create');
-    Route::post('/templates', [AdminTemplateController::class, 'store'])->name('admin.templates.store');
-    Route::get('/templates/{id}/edit', [AdminTemplateController::class, 'edit'])->name('admin.templates.edit');
-    Route::put('/templates/{id}', [AdminTemplateController::class, 'update'])->name('admin.templates.update');
+    Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
+    Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');
+    Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
+    Route::post('/templates/edit-request/create', [TemplateController::class, 'store'])->name('templates.edit-request.create');
+    Route::get('/templates/{id}/edit', [TemplateController::class, 'edit'])->name('templates.edit');
+    Route::put('/templates/{id}', [TemplateController::class, 'update'])->name('templates.update');
+    Route::post('/templates/{id}/edit-request/update', [TemplateController::class, 'update'])->name('templates.edit-request.update');
+    Route::delete('/templates/{id}', [TemplateController::class, 'destroy'])->name('templates.destroy');
+    Route::post('/templates/{id}/edit-request/delete', [TemplateController::class, 'destroy'])->name('templates.edit-request.delete');
 
-    Route::post('/templates/{id}/versions', [AdminTemplateVersionController::class, 'store'])->name('admin.templates.versions.store');
-    Route::get('/templates/{id}/versions/{version}/edit', [AdminTemplateVersionController::class, 'edit'])->name('admin.templates.versions.edit');
-    Route::put('/templates/{id}/versions/{version}', [AdminTemplateVersionController::class, 'update'])->name('admin.templates.versions.update');
+    Route::post('/templates/{id}/versions', [TemplateVersionController::class, 'store'])->name('templates.versions.store');
+    Route::post('/templates/{id}/versions/edit-request/create', [TemplateVersionController::class, 'store'])->name('templates.versions.edit-request.create');
+    Route::get('/templates/{id}/versions/{version}/edit', [TemplateVersionController::class, 'edit'])->name('templates.versions.edit');
+    Route::put('/templates/{id}/versions/{version}', [TemplateVersionController::class, 'update'])->name('templates.versions.update');
+    Route::post('/templates/{id}/versions/{version}/edit-request/update', [TemplateVersionController::class, 'update'])->name('templates.versions.edit-request.update');
+    Route::delete('/templates/{id}/versions/{version}', [TemplateVersionController::class, 'destroy'])->name('templates.versions.destroy');
+    Route::post('/templates/{id}/versions/{version}/edit-request/delete', [TemplateVersionController::class, 'destroy'])->name('templates.versions.edit-request.delete');
 
-    Route::get('/change-requests', [AdminChangeRequestController::class, 'index'])->name('admin.change-requests.index');
-    Route::get('/change-requests/{id}', [AdminChangeRequestController::class, 'show'])->name('admin.change-requests.show');
-    Route::get('/change-requests/{id}/snapshot.pdf', [AdminChangeRequestController::class, 'downloadSnapshotPdf'])->name('admin.change-requests.snapshot.pdf');
-    Route::get('/change-requests/{id}/snapshot-base.pdf', [AdminChangeRequestController::class, 'downloadBaseSnapshotPdf'])->name('admin.change-requests.snapshot-base.pdf');
-    Route::get('/change-requests/{id}/snapshot-compare.pdf', [AdminChangeRequestController::class, 'downloadComparisonPdf'])->name('admin.change-requests.snapshot-compare.pdf');
-    Route::put('/change-requests/{id}/memo', [AdminChangeRequestController::class, 'updateMemo'])->name('admin.change-requests.memo.update');
-    Route::post('/change-requests/{id}/approve', [AdminChangeRequestController::class, 'approve'])->name('admin.change-requests.approve');
-    Route::post('/change-requests/{id}/reject', [AdminChangeRequestController::class, 'reject'])->name('admin.change-requests.reject');
+    Route::get('/sessions', [SessionController::class, 'index'])->name('sessions.index');
+    Route::get('/sessions/{id}', [SessionController::class, 'show'])->name('sessions.show');
+    Route::get('/sessions/{id}/snapshot.pdf', [SessionController::class, 'downloadSnapshotPdf'])->name('sessions.snapshot.pdf');
 
-    Route::get('/audit-logs', [AdminAuditLogController::class, 'index'])->name('admin.audit-logs.index');
-});
+    Route::get('/quotes', [QuoteController::class, 'index'])->name('quotes.index');
+    Route::get('/quotes/{id}', [QuoteController::class, 'show'])->name('quotes.show');
+    Route::get('/quotes/{id}/edit', [QuoteController::class, 'edit'])->name('quotes.edit');
+    Route::get('/quotes/{id}/edit-request', [QuoteController::class, 'editRequest'])->name('quotes.edit-request');
+    Route::post('/quotes/{id}/edit-request/store', [QuoteController::class, 'storeEditRequest'])->name('quotes.edit-request.store');
+    Route::post('/quotes/{id}/edit-request/update', [QuoteController::class, 'storeEditRequest'])->name('quotes.edit-request.update');
+    Route::get('/quotes/{id}/snapshot.pdf', [QuoteController::class, 'downloadSnapshotPdf'])->name('quotes.snapshot.pdf');
+    Route::put('/quotes/{id}/display-name-source', [QuoteController::class, 'updateDisplayNameSource'])->name('quotes.display-name-source.update');
+    Route::post('/quotes/{id}/display-name-source/edit-request/update', [QuoteController::class, 'updateDisplayNameSource'])->name('quotes.display-name-source.edit-request.update');
+    Route::put('/quotes/{id}/summary-fields', [QuoteController::class, 'updateSummaryFields'])->name('quotes.summary-fields.update');
+    Route::post('/quotes/{id}/summary-fields/edit-request/update', [QuoteController::class, 'updateSummaryFields'])->name('quotes.summary-fields.edit-request.update');
+    Route::put('/quotes/{id}/memo', [QuoteController::class, 'updateMemo'])->name('quotes.memo.update');
+    Route::post('/quotes/{id}/memo/edit-request/update', [QuoteController::class, 'updateMemo'])->name('quotes.memo.edit-request.update');
 
-Route::middleware(['auth', 'role:admin,sales'])->prefix('ops')->group(function () {
-    Route::get('/configurator-sessions', [ConfiguratorSessionController::class, 'index'])->name('ops.sessions.index');
-    Route::get('/configurator-sessions/{id}', [ConfiguratorSessionController::class, 'show'])->name('ops.sessions.show');
-    Route::get('/configurator-sessions/{id}/snapshot.pdf', [ConfiguratorSessionController::class, 'downloadSnapshotPdf'])->name('ops.sessions.snapshot.pdf');
-    Route::put('/configurator-sessions/{id}/memo', [ConfiguratorSessionController::class, 'updateMemo'])->name('ops.sessions.memo.update');
+    Route::get('/change-requests', [ChangeRequestReviewController::class, 'index'])->name('change-requests.index');
+    Route::get('/change-requests/{id}', [ChangeRequestController::class, 'show'])->name('change-requests.show');
+    Route::get('/change-requests/{id}/snapshot.pdf', [ChangeRequestController::class, 'downloadSnapshotPdf'])->name('change-requests.snapshot.pdf');
+    Route::get('/change-requests/{id}/snapshot-base.pdf', [ChangeRequestController::class, 'downloadBaseSnapshotPdf'])->name('change-requests.snapshot-base.pdf');
+    Route::get('/change-requests/{id}/snapshot-compare.pdf', [ChangeRequestController::class, 'downloadComparisonPdf'])->name('change-requests.snapshot-compare.pdf');
+    Route::put('/change-requests/{id}/memo', [ChangeRequestController::class, 'updateMemo'])->name('change-requests.memo.update');
+    Route::post('/change-requests/{id}/approve', [ChangeRequestReviewController::class, 'approve'])->name('change-requests.approve');
+    Route::post('/change-requests/{id}/reject', [ChangeRequestReviewController::class, 'reject'])->name('change-requests.reject');
 
-    Route::get('/change-requests/{id}', [OpsChangeRequestController::class, 'show'])->name('ops.change-requests.show');
-    Route::get('/change-requests/{id}/snapshot.pdf', [OpsChangeRequestController::class, 'downloadSnapshotPdf'])->name('ops.change-requests.snapshot.pdf');
-    Route::get('/change-requests/{id}/snapshot-base.pdf', [OpsChangeRequestController::class, 'downloadBaseSnapshotPdf'])->name('ops.change-requests.snapshot-base.pdf');
-    Route::get('/change-requests/{id}/snapshot-compare.pdf', [OpsChangeRequestController::class, 'downloadComparisonPdf'])->name('ops.change-requests.snapshot-compare.pdf');
-    Route::put('/change-requests/{id}/memo', [OpsChangeRequestController::class, 'updateMemo'])->name('ops.change-requests.memo.update');
-
-    Route::get('/quotes', [QuoteController::class, 'index'])->name('ops.quotes.index');
-    Route::get('/quotes/{id}', [QuoteController::class, 'show'])->name('ops.quotes.show');
-    Route::get('/quotes/{id}/edit', [QuoteController::class, 'edit'])->name('ops.quotes.edit');
-    Route::get('/quotes/{id}/snapshot.pdf', [QuoteController::class, 'downloadSnapshotPdf'])->name('ops.quotes.snapshot.pdf');
-    Route::put('/quotes/{id}/display-name-source', [QuoteController::class, 'updateDisplayNameSource'])->name('ops.quotes.display-name-source.update');
-    Route::put('/quotes/{id}/summary-fields', [QuoteController::class, 'updateSummaryFields'])->name('ops.quotes.summary-fields.update');
-    Route::put('/quotes/{id}/memo', [QuoteController::class, 'updateMemo'])->name('ops.quotes.memo.update');
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+    Route::get('/audit-logs/{id}', [AuditLogController::class, 'show'])->name('audit-logs.show');
 });

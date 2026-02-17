@@ -48,7 +48,7 @@
 
     <h1>{{ $title ?? 'スナップショット' }}</h1>
 
-    @include('partials.snapshot_bundle', [
+    @include('snapshot_bundle', [
         'panelTitle' => $panelTitle ?? 'スナップショット',
         'pdfUrl' => null,
         'summaryItems' => is_array($summaryItems ?? null) ? $summaryItems : [],

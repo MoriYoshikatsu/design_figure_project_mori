@@ -73,7 +73,7 @@
         </tbody>
     </table>
 
-    @include('partials.snapshot_bundle', [
+    @include('snapshot_bundle', [
         'panelTitle' => 'スナップショット',
         'pdfUrl' => null,
         'includeAutoSummary' => false,

@@ -45,7 +45,6 @@ class CreateNewUser implements CreatesNewUsers
                 $accountId = (int)DB::table('accounts')->insertGetId([
                     'account_type' => 'B2C',
                     'internal_name' => $input['name'],
-                    'sales_route_policy_mode' => 'strict_allowlist',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);

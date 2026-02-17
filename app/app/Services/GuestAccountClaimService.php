@@ -134,7 +134,6 @@ final class GuestAccountClaimService
         $accountId = (int)DB::table('accounts')->insertGetId([
             'account_type' => 'B2C',
             'internal_name' => trim($userName) !== '' ? $userName : null,
-            'sales_route_policy_mode' => 'strict_allowlist',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
