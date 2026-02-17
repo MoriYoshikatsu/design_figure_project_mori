@@ -13,15 +13,24 @@ final class AdminSkuController extends Controller
 
     public function index(Request $request)
     {
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
         $q = trim((string)$request->input('q', ''));
         $category = (string)$request->input('category', '');
         $active = (string)$request->input('active', '');
+        $hasMemo = (string)$request->input('has_memo', '');
+        $createdFrom = (string)$request->input('created_from', '');
+        $createdTo = (string)$request->input('created_to', '');
+        $updatedFrom = (string)$request->input('updated_from', '');
+        $updatedTo = (string)$request->input('updated_to', '');
 
         $query = DB::table('skus');
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
-                $sub->where('sku_code', 'ilike', "%{$q}%")
+                $sub->whereRaw('cast(id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('sku_code', 'ilike', "%{$q}%")
                     ->orWhere('name', 'ilike', "%{$q}%")
+                    ->orWhere('category', 'ilike', "%{$q}%")
                     ->orWhere('memo', 'ilike', "%{$q}%");
             });
         }
@@ -33,13 +42,45 @@ final class AdminSkuController extends Controller
         } elseif ($active === '0') {
             $query->where('active', false);
         }
+        if ($hasMemo === 'with') {
+            $query->whereNotNull('memo')->where('memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('memo')->orWhere('memo', '');
+            });
+        }
+        if ($createdFrom !== '' && $isDate($createdFrom)) {
+            $query->whereDate('created_at', '>=', $createdFrom);
+        }
+        if ($createdTo !== '' && $isDate($createdTo)) {
+            $query->whereDate('created_at', '<=', $createdTo);
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $query->whereDate('updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $query->whereDate('updated_at', '<=', $updatedTo);
+        }
 
         $skus = $query->orderBy('id', 'desc')->limit(200)->get();
 
         return view('admin.skus.index', [
             'skus' => $skus,
             'categories' => self::CATEGORIES,
-            'filters' => ['q' => $q, 'category' => $category, 'active' => $active],
+            'filters' => [
+                'q' => $q,
+                'category' => $category,
+                'active' => $active,
+                'has_memo' => $hasMemo,
+                'created_from' => $createdFrom,
+                'created_to' => $createdTo,
+                'updated_from' => $updatedFrom,
+                'updated_to' => $updatedTo,
+            ],
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
         ]);
     }
 

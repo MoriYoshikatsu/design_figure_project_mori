@@ -5,19 +5,203 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Services\DslEngine;
 use App\Services\SnapshotPdfService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 final class AdminChangeRequestController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $requests = $this->baseRequestQuery()
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
+        $q = trim((string)$request->input('q', ''));
+        $status = (string)$request->input('status', '');
+        $entityType = (string)$request->input('entity_type', '');
+        $requestedBy = (string)$request->input('requested_by', '');
+        $approvedBy = (string)$request->input('approved_by', '');
+        $requestedRole = (string)$request->input('requested_role', '');
+        $approvalState = (string)$request->input('approval_state', '');
+        $hasComment = (string)$request->input('has_comment', '');
+        $hasMemo = (string)$request->input('has_memo', '');
+        $createdFrom = (string)$request->input('created_from', '');
+        $createdTo = (string)$request->input('created_to', '');
+        $approvedFrom = (string)$request->input('approved_from', '');
+        $approvedTo = (string)$request->input('approved_to', '');
+
+        $query = $this->baseRequestQuery();
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->whereRaw('cast(cr.id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('cr.entity_type', 'ilike', "%{$q}%")
+                    ->orWhereRaw('cast(cr.entity_id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('cr.status', 'ilike', "%{$q}%")
+                    ->orWhere('cr.comment', 'ilike', "%{$q}%")
+                    ->orWhere('cr.memo', 'ilike', "%{$q}%")
+                    ->orWhereRaw('cast(cr.requested_by as text) ilike ?', ["%{$q}%"])
+                    ->orWhereRaw('cast(cr.approved_by as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('requester.email', 'ilike', "%{$q}%")
+                    ->orWhere('approver.email', 'ilike', "%{$q}%")
+                    ->orWhereExists(function ($sq) use ($q) {
+                        $sq->selectRaw('1')
+                            ->from('account_user as au')
+                            ->join('users as u', 'u.id', '=', 'au.user_id')
+                            ->leftJoin('accounts as a', 'a.id', '=', 'au.account_id')
+                            ->whereColumn('au.user_id', 'cr.requested_by')
+                            ->where(function ($userSub) use ($q) {
+                                $userSub->where('u.name', 'ilike', "%{$q}%")
+                                    ->orWhere('u.email', 'ilike', "%{$q}%")
+                                    ->orWhere('a.internal_name', 'ilike', "%{$q}%")
+                                    ->orWhere('a.assignee_name', 'ilike', "%{$q}%");
+                            });
+                    })
+                    ->orWhereExists(function ($sq) use ($q) {
+                        $sq->selectRaw('1')
+                            ->from('account_user as au')
+                            ->join('users as u', 'u.id', '=', 'au.user_id')
+                            ->leftJoin('accounts as a', 'a.id', '=', 'au.account_id')
+                            ->whereColumn('au.user_id', 'cr.approved_by')
+                            ->where(function ($userSub) use ($q) {
+                                $userSub->where('u.name', 'ilike', "%{$q}%")
+                                    ->orWhere('u.email', 'ilike', "%{$q}%")
+                                    ->orWhere('a.internal_name', 'ilike', "%{$q}%")
+                                    ->orWhere('a.assignee_name', 'ilike', "%{$q}%");
+                            });
+                    });
+            });
+        }
+        if ($status !== '') {
+            $query->where('cr.status', $status);
+        }
+        if ($entityType !== '') {
+            $query->where('cr.entity_type', $entityType);
+        }
+        if ($requestedBy !== '' && is_numeric($requestedBy)) {
+            $query->where('cr.requested_by', (int)$requestedBy);
+        }
+        if ($approvedBy !== '' && is_numeric($approvedBy)) {
+            $query->where('cr.approved_by', (int)$approvedBy);
+        }
+        if ($requestedRole !== '') {
+            $query->whereExists(function ($sq) use ($requestedRole) {
+                $sq->selectRaw('1')
+                    ->from('account_user as au')
+                    ->whereColumn('au.user_id', 'cr.requested_by')
+                    ->where('au.role', $requestedRole);
+            });
+        }
+        if ($approvalState === 'approved') {
+            $query->whereNotNull('cr.approved_by');
+        } elseif ($approvalState === 'unapproved') {
+            $query->whereNull('cr.approved_by');
+        }
+        if ($hasComment === 'with') {
+            $query->whereNotNull('cr.comment')->where('cr.comment', '<>', '');
+        } elseif ($hasComment === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('cr.comment')->orWhere('cr.comment', '');
+            });
+        }
+        if ($hasMemo === 'with') {
+            $query->whereNotNull('cr.memo')->where('cr.memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('cr.memo')->orWhere('cr.memo', '');
+            });
+        }
+        if ($createdFrom !== '' && $isDate($createdFrom)) {
+            $query->whereDate('cr.created_at', '>=', $createdFrom);
+        }
+        if ($createdTo !== '' && $isDate($createdTo)) {
+            $query->whereDate('cr.created_at', '<=', $createdTo);
+        }
+        if ($approvedFrom !== '' && $isDate($approvedFrom)) {
+            $query->whereDate('cr.approved_at', '>=', $approvedFrom);
+        }
+        if ($approvedTo !== '' && $isDate($approvedTo)) {
+            $query->whereDate('cr.approved_at', '<=', $approvedTo);
+        }
+
+        $requests = $query
             ->orderByRaw("cr.status = 'PENDING' desc")
             ->orderBy('cr.id', 'desc')
             ->limit(300)
             ->get();
 
-        return view('admin.change-requests.index', ['requests' => $requests]);
+        $statusOptions = DB::table('change_requests')
+            ->select('status')
+            ->whereNotNull('status')
+            ->distinct()
+            ->pluck('status')
+            ->all();
+        $statusPriority = [
+            'PENDING' => 1,
+            'APPROVED' => 2,
+            'REJECTED' => 3,
+        ];
+        usort($statusOptions, function ($a, $b) use ($statusPriority) {
+            $pa = $statusPriority[$a] ?? 9;
+            $pb = $statusPriority[$b] ?? 9;
+            if ($pa === $pb) {
+                return strcmp((string)$a, (string)$b);
+            }
+            return $pa <=> $pb;
+        });
+
+        $entityTypeOptions = DB::table('change_requests')
+            ->select('entity_type')
+            ->whereNotNull('entity_type')
+            ->distinct()
+            ->orderBy('entity_type')
+            ->pluck('entity_type')
+            ->all();
+
+        $requestedByOptions = DB::table('change_requests')
+            ->select('requested_by')
+            ->whereNotNull('requested_by')
+            ->distinct()
+            ->orderBy('requested_by')
+            ->pluck('requested_by')
+            ->all();
+
+        $approvedByOptions = DB::table('change_requests')
+            ->select('approved_by')
+            ->whereNotNull('approved_by')
+            ->distinct()
+            ->orderBy('approved_by')
+            ->pluck('approved_by')
+            ->all();
+
+        return view('admin.change-requests.index', [
+            'requests' => $requests,
+            'filters' => [
+                'q' => $q,
+                'status' => $status,
+                'entity_type' => $entityType,
+                'requested_by' => $requestedBy,
+                'approved_by' => $approvedBy,
+                'requested_role' => $requestedRole,
+                'approval_state' => $approvalState,
+                'has_comment' => $hasComment,
+                'has_memo' => $hasMemo,
+                'created_from' => $createdFrom,
+                'created_to' => $createdTo,
+                'approved_from' => $approvedFrom,
+                'approved_to' => $approvedTo,
+            ],
+            'statusOptions' => $statusOptions,
+            'entityTypeOptions' => $entityTypeOptions,
+            'requestedByOptions' => $requestedByOptions,
+            'approvedByOptions' => $approvedByOptions,
+            'requestedRoleOptions' => ['customer', 'sales', 'admin'],
+            'approvalStateOptions' => [
+                'approved' => '承認済み',
+                'unapproved' => '未承認',
+            ],
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
+        ]);
     }
 
     public function show(int $id, \App\Services\SvgRenderer $renderer)

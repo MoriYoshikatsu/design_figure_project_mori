@@ -9,14 +9,28 @@ use Illuminate\Support\Facades\DB;
 
 final class ConfiguratorSessionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
+        $q = trim((string)$request->input('q', ''));
+        $status = (string)$request->input('status', '');
+        $templateVersionId = (string)$request->input('template_version_id', '');
+        $accountId = (string)$request->input('account_id', '');
+        $accountType = (string)$request->input('account_type', '');
+        $assignee = trim((string)$request->input('assignee_name', ''));
+        $hasMemo = (string)$request->input('has_memo', '');
+        $createdFrom = (string)$request->input('created_from', '');
+        $createdTo = (string)$request->input('created_to', '');
+        $updatedFrom = (string)$request->input('updated_from', '');
+        $updatedTo = (string)$request->input('updated_to', '');
+
         $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'cs.account_id')
             ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
-        $sessions = DB::table('configurator_sessions as cs')
+        $query = DB::table('configurator_sessions as cs')
             ->join('accounts as a', 'a.id', '=', 'cs.account_id')
             ->select('cs.*')
             ->selectRaw("
@@ -41,12 +55,113 @@ final class ConfiguratorSessionController extends Controller
                 ) as account_display_name
             ")
             ->addSelect('a.internal_name as account_name', 'a.internal_name as account_internal_name', 'a.assignee_name')
-            ->selectSub($accountEmails, 'account_emails')
-            ->orderBy('cs.id', 'desc')
-            ->limit(200)
-            ->get();
+            ->selectSub($accountEmails, 'account_emails');
 
-        return view('ops.sessions.index', ['sessions' => $sessions]);
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->whereRaw('cast(cs.id as text) ilike ?', ["%{$q}%"])
+                    ->orWhereRaw('cast(cs.account_id as text) ilike ?', ["%{$q}%"])
+                    ->orWhereRaw('cast(cs.template_version_id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('cs.status', 'ilike', "%{$q}%")
+                    ->orWhere('cs.memo', 'ilike', "%{$q}%")
+                    ->orWhere('a.internal_name', 'ilike', "%{$q}%")
+                    ->orWhere('a.assignee_name', 'ilike', "%{$q}%")
+                    ->orWhereExists(function ($sq) use ($q) {
+                        $sq->selectRaw('1')
+                            ->from('account_user as au')
+                            ->join('users as u', 'u.id', '=', 'au.user_id')
+                            ->whereColumn('au.account_id', 'cs.account_id')
+                            ->where(function ($userSub) use ($q) {
+                                $userSub->where('u.name', 'ilike', "%{$q}%")
+                                    ->orWhere('u.email', 'ilike', "%{$q}%");
+                            });
+                    });
+            });
+        }
+        if ($status !== '') {
+            $query->where('cs.status', $status);
+        }
+        if ($templateVersionId !== '' && is_numeric($templateVersionId)) {
+            $query->where('cs.template_version_id', (int)$templateVersionId);
+        }
+        if ($accountId !== '' && is_numeric($accountId)) {
+            $query->where('cs.account_id', (int)$accountId);
+        }
+        if ($accountType !== '') {
+            $query->where('a.account_type', $accountType);
+        }
+        if ($assignee !== '') {
+            $query->where('a.assignee_name', 'ilike', "%{$assignee}%");
+        }
+        if ($hasMemo === 'with') {
+            $query->whereNotNull('cs.memo')->where('cs.memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('cs.memo')->orWhere('cs.memo', '');
+            });
+        }
+        if ($createdFrom !== '' && $isDate($createdFrom)) {
+            $query->whereDate('cs.created_at', '>=', $createdFrom);
+        }
+        if ($createdTo !== '' && $isDate($createdTo)) {
+            $query->whereDate('cs.created_at', '<=', $createdTo);
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $query->whereDate('cs.updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $query->whereDate('cs.updated_at', '<=', $updatedTo);
+        }
+
+        $sessions = $query->orderBy('cs.id', 'desc')->limit(200)->get();
+
+        $statusOptions = DB::table('configurator_sessions')
+            ->select('status')
+            ->whereNotNull('status')
+            ->distinct()
+            ->orderBy('status')
+            ->pluck('status')
+            ->all();
+
+        $templateVersionOptions = DB::table('configurator_sessions')
+            ->select('template_version_id')
+            ->whereNotNull('template_version_id')
+            ->distinct()
+            ->orderBy('template_version_id', 'desc')
+            ->pluck('template_version_id')
+            ->all();
+
+        $accountTypeOptions = DB::table('accounts')
+            ->select('account_type')
+            ->whereNotNull('account_type')
+            ->distinct()
+            ->orderBy('account_type')
+            ->pluck('account_type')
+            ->all();
+
+        return view('ops.sessions.index', [
+            'sessions' => $sessions,
+            'filters' => [
+                'q' => $q,
+                'status' => $status,
+                'template_version_id' => $templateVersionId,
+                'account_id' => $accountId,
+                'account_type' => $accountType,
+                'assignee_name' => $assignee,
+                'has_memo' => $hasMemo,
+                'created_from' => $createdFrom,
+                'created_to' => $createdTo,
+                'updated_from' => $updatedFrom,
+                'updated_to' => $updatedTo,
+            ],
+            'statusOptions' => $statusOptions,
+            'templateVersionOptions' => $templateVersionOptions,
+            'accountTypeOptions' => $accountTypeOptions,
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
+        ]);
     }
 
     public function show(int $id, \App\Services\SvgRenderer $renderer)

@@ -18,7 +18,18 @@ final class AdminAccountController extends Controller
 
     public function index(Request $request)
     {
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
         $q = trim((string)$request->input('q', ''));
+        $accountType = (string)$request->input('account_type', '');
+        $role = (string)$request->input('role', '');
+        $policyModeFilter = (string)$request->input('policy_mode', '');
+        $hasAssignee = (string)$request->input('has_assignee', '');
+        $hasMemo = (string)$request->input('has_memo', '');
+        $createdFrom = (string)$request->input('created_from', '');
+        $createdTo = (string)$request->input('created_to', '');
+        $updatedFrom = (string)$request->input('updated_from', '');
+        $updatedTo = (string)$request->input('updated_to', '');
 
         $roleList = DB::table('account_user as au')
             ->selectRaw("string_agg(distinct au.role, ' / ' order by au.role)")
@@ -60,17 +71,62 @@ final class AdminAccountController extends Controller
             ->selectSub($fallbackUserName, 'fallback_user_name');
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
-                $sub->where('a.internal_name', 'ilike', "%{$q}%")
+                $sub->whereRaw('cast(a.id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('a.internal_name', 'ilike', "%{$q}%")
                     ->orWhere('a.assignee_name', 'ilike', "%{$q}%")
+                    ->orWhere('a.account_type', 'ilike', "%{$q}%")
                     ->orWhere('a.memo', 'ilike', "%{$q}%")
                     ->orWhereExists(function ($sq) use ($q) {
                         $sq->selectRaw('1')
                             ->from('account_user as au')
                             ->join('users as u', 'u.id', '=', 'au.user_id')
                             ->whereColumn('au.account_id', 'a.id')
-                            ->where('u.name', 'ilike', "%{$q}%");
+                            ->where(function ($userSub) use ($q) {
+                                $userSub->where('u.name', 'ilike', "%{$q}%")
+                                    ->orWhere('u.email', 'ilike', "%{$q}%");
+                            });
                     });
             });
+        }
+        if ($accountType !== '') {
+            $query->where('a.account_type', $accountType);
+        }
+        if ($role !== '') {
+            $query->whereExists(function ($sq) use ($role) {
+                $sq->selectRaw('1')
+                    ->from('account_user as au')
+                    ->whereColumn('au.account_id', 'a.id')
+                    ->where('au.role', $role);
+            });
+        }
+        if ($policyModeFilter !== '') {
+            $query->where('a.sales_route_policy_mode', $policyModeFilter);
+        }
+        if ($hasAssignee === 'with') {
+            $query->whereNotNull('a.assignee_name')->where('a.assignee_name', '<>', '');
+        } elseif ($hasAssignee === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('a.assignee_name')->orWhere('a.assignee_name', '');
+            });
+        }
+        if ($hasMemo === 'with') {
+            $query->whereNotNull('a.memo')->where('a.memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('a.memo')->orWhere('a.memo', '');
+            });
+        }
+        if ($createdFrom !== '' && $isDate($createdFrom)) {
+            $query->whereDate('a.created_at', '>=', $createdFrom);
+        }
+        if ($createdTo !== '' && $isDate($createdTo)) {
+            $query->whereDate('a.created_at', '<=', $createdTo);
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $query->whereDate('a.updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $query->whereDate('a.updated_at', '<=', $updatedTo);
         }
 
         $accounts = $query->orderBy('a.id', 'desc')->limit(200)->get();
@@ -96,9 +152,9 @@ final class AdminAccountController extends Controller
         $routeCatalog = $this->salesRoutePermissionService->routeCatalog();
         foreach ($accounts as $account) {
             $aid = (int)$account->id;
-            $policyMode = (string)($account->sales_route_policy_mode ?? 'legacy_allow_all');
+            $accountPolicyMode = (string)($account->sales_route_policy_mode ?? 'legacy_allow_all');
             $previews = $permissionMap[$aid] ?? [];
-            if ($policyMode === 'legacy_allow_all') {
+            if ($accountPolicyMode === 'legacy_allow_all') {
                 $account->route_access_summary = 'Sales: 全ルート許可（管理・運用画面の全操作）';
             } else {
                 $account->route_access_summary = $this->buildRouteAccessSummary($previews, $routeCatalog);
@@ -107,7 +163,28 @@ final class AdminAccountController extends Controller
 
         return view('admin.accounts.index', [
             'accounts' => $accounts,
-            'filters' => ['q' => $q],
+            'filters' => [
+                'q' => $q,
+                'account_type' => $accountType,
+                'role' => $role,
+                'policy_mode' => $policyModeFilter,
+                'has_assignee' => $hasAssignee,
+                'has_memo' => $hasMemo,
+                'created_from' => $createdFrom,
+                'created_to' => $createdTo,
+                'updated_from' => $updatedFrom,
+                'updated_to' => $updatedTo,
+            ],
+            'accountTypeOptions' => ['B2B', 'B2C'],
+            'roleOptions' => ['admin', 'sales', 'customer'],
+            'policyModeOptions' => [
+                'legacy_allow_all' => 'legacy_allow_all（全ルート許可）',
+                'strict_allowlist' => 'strict_allowlist（許可リストのみ）',
+            ],
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
         ]);
     }
 

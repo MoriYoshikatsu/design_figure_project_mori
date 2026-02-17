@@ -5,6 +5,10 @@
     <form method="GET" action="{{ route('admin.audit-logs.index') }}" style="margin:12px 0;">
         <div class="row">
             <div class="col">
+                <label>フリーワード</label>
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / 実行者 / アクション / 対象 / メール / 担当者">
+            </div>
+            <div class="col">
                 <label>実行ユーザーID</label>
                 <select name="actor_user_id">
                     <option value="">すべて</option>
@@ -32,6 +36,10 @@
                 </select>
             </div>
             <div class="col">
+                <label>対象ID</label>
+                <input type="text" name="entity_id" value="{{ $filters['entity_id'] ?? '' }}" placeholder="数値で指定">
+            </div>
+            <div class="col">
                 <label>作成月</label>
                 <select name="month">
                     <option value="">すべて</option>
@@ -41,10 +49,34 @@
                 </select>
             </div>
         </div>
-        <div style="margin-top:8px;">
+        <div class="row" style="margin-top:8px;">
+            <div class="col">
+                <label>メモ</label>
+                <select name="has_memo">
+                    <option value="">すべて</option>
+                    @foreach($presenceOptions as $key => $label)
+                        <option value="{{ $key }}" @if(($filters['has_memo'] ?? '') === $key) selected @endif>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col">
+                <label>作成日（開始）</label>
+                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
+            </div>
+            <div class="col">
+                <label>作成日（終了）</label>
+                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
+            </div>
+        </div>
+        <div class="actions" style="margin-top:8px;">
             <button type="submit">絞り込み</button>
+            <a href="{{ route('admin.audit-logs.index') }}">クリア</a>
         </div>
     </form>
+
+    <div class="muted" style="margin:8px 0;">
+        表示件数: {{ count($logs) }}件（最大300件）
+    </div>
     <table>
         <thead>
             <tr>

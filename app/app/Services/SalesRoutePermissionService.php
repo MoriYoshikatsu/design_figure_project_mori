@@ -78,16 +78,30 @@ final class SalesRoutePermissionService
             return false;
         }
 
+        $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
+        $method = strtoupper($request->method());
+        if (!in_array($method, self::ALLOWED_METHODS, true)) {
+            return false;
+        }
+
         $accountId = $this->resolveAccountContextId($request);
         if ($accountId === null) {
-            return $this->isListRoute($request) && $this->userHasSalesRole($userId);
+            if (!$this->userHasSalesRole($userId)) {
+                return false;
+            }
+
+            // account 文脈が取れない画面でも、明示許可があれば通す。
+            if ($this->hasExplicitAllowForAnySalesAccount($userId, $method, $path)) {
+                return true;
+            }
+
+            return $this->isListRoute($request);
         }
 
         if (!$this->userHasSalesRoleInAccount($userId, $accountId)) {
             return false;
         }
 
-        $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
         $requiresExplicitAllow = $this->isAccountPermissionsPagePath($path);
 
         $mode = (string)(DB::table('accounts')
@@ -98,35 +112,8 @@ final class SalesRoutePermissionService
             return true;
         }
 
-        $method = strtoupper($request->method());
-        if (!in_array($method, self::ALLOWED_METHODS, true)) {
-            return false;
-        }
-
-        $patterns = DB::table('account_sales_route_permissions')
-            ->where('account_id', $accountId)
-            ->where('http_method', $method)
-            ->where('active', true)
-            ->orderBy('id')
-            ->pluck('uri_pattern');
-
         // 権限設定ページだけは legacy でも明示許可が必要（初期Adminのみ）
-        if ($requiresExplicitAllow) {
-            foreach ($patterns as $pattern) {
-                if ($this->pathMatchesPattern((string)$pattern, $path)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        foreach ($patterns as $pattern) {
-            if ($this->pathMatchesPattern((string)$pattern, $path)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->hasExplicitAllowForAccount($accountId, $method, $path);
     }
 
     public function resolveAccountContextId(Request $request): ?int
@@ -317,5 +304,53 @@ final class SalesRoutePermissionService
     private function isAccountPermissionsPagePath(string $path): bool
     {
         return (bool)preg_match('#^/admin/accounts/\d+/permissions$#', $path);
+    }
+
+    private function hasExplicitAllowForAccount(int $accountId, string $method, string $path): bool
+    {
+        if ($accountId <= 0) {
+            return false;
+        }
+
+        $patterns = DB::table('account_sales_route_permissions')
+            ->where('account_id', $accountId)
+            ->where('http_method', $method)
+            ->where('active', true)
+            ->orderBy('id')
+            ->pluck('uri_pattern');
+
+        foreach ($patterns as $pattern) {
+            if ($this->pathMatchesPattern((string)$pattern, $path)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasExplicitAllowForAnySalesAccount(int $userId, string $method, string $path): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+
+        $patterns = DB::table('account_sales_route_permissions as perm')
+            ->join('account_user as au', function ($join): void {
+                $join->on('au.account_id', '=', 'perm.account_id')
+                    ->where('au.role', '=', 'sales');
+            })
+            ->where('au.user_id', $userId)
+            ->where('perm.http_method', $method)
+            ->where('perm.active', true)
+            ->orderBy('perm.id')
+            ->pluck('perm.uri_pattern');
+
+        foreach ($patterns as $pattern) {
+            if ($this->pathMatchesPattern((string)$pattern, $path)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

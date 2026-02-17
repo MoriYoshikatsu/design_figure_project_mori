@@ -41,14 +41,30 @@ final class QuoteController extends Controller
         'total',
     ];
 
-    public function index()
+    public function index(Request $request)
     {
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
+        $q = trim((string)$request->input('q', ''));
+        $status = (string)$request->input('status', '');
+        $currency = (string)$request->input('currency', '');
+        $accountId = (string)$request->input('account_id', '');
+        $accountType = (string)$request->input('account_type', '');
+        $assignee = trim((string)$request->input('assignee_name', ''));
+        $hasMemo = (string)$request->input('has_memo', '');
+        $totalMin = (string)$request->input('total_min', '');
+        $totalMax = (string)$request->input('total_max', '');
+        $createdFrom = (string)$request->input('created_from', '');
+        $createdTo = (string)$request->input('created_to', '');
+        $updatedFrom = (string)$request->input('updated_from', '');
+        $updatedTo = (string)$request->input('updated_to', '');
+
         $accountEmails = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'q.account_id')
             ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)");
 
-        $quotes = DB::table('quotes as q')
+        $query = DB::table('quotes as q')
             ->join('accounts as a', 'a.id', '=', 'q.account_id')
             ->select('q.*')
             ->selectRaw("
@@ -73,12 +89,123 @@ final class QuoteController extends Controller
                 ) as account_display_name
             ")
             ->addSelect('a.internal_name as account_name', 'a.internal_name as account_internal_name', 'a.assignee_name')
-            ->selectSub($accountEmails, 'account_emails')
-            ->orderBy('q.id', 'desc')
-            ->limit(200)
-            ->get();
+            ->selectSub($accountEmails, 'account_emails');
 
-        return view('ops.quotes.index', ['quotes' => $quotes]);
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->whereRaw('cast(q.id as text) ilike ?', ["%{$q}%"])
+                    ->orWhereRaw('cast(q.account_id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('q.status', 'ilike', "%{$q}%")
+                    ->orWhere('q.currency', 'ilike', "%{$q}%")
+                    ->orWhere('q.memo', 'ilike', "%{$q}%")
+                    ->orWhereRaw('cast(q.total as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('a.internal_name', 'ilike', "%{$q}%")
+                    ->orWhere('a.assignee_name', 'ilike', "%{$q}%")
+                    ->orWhereExists(function ($sq) use ($q) {
+                        $sq->selectRaw('1')
+                            ->from('account_user as au')
+                            ->join('users as u', 'u.id', '=', 'au.user_id')
+                            ->whereColumn('au.account_id', 'q.account_id')
+                            ->where(function ($userSub) use ($q) {
+                                $userSub->where('u.name', 'ilike', "%{$q}%")
+                                    ->orWhere('u.email', 'ilike', "%{$q}%");
+                            });
+                    });
+            });
+        }
+        if ($status !== '') {
+            $query->where('q.status', $status);
+        }
+        if ($currency !== '') {
+            $query->where('q.currency', $currency);
+        }
+        if ($accountId !== '' && is_numeric($accountId)) {
+            $query->where('q.account_id', (int)$accountId);
+        }
+        if ($accountType !== '') {
+            $query->where('a.account_type', $accountType);
+        }
+        if ($assignee !== '') {
+            $query->where('a.assignee_name', 'ilike', "%{$assignee}%");
+        }
+        if ($hasMemo === 'with') {
+            $query->whereNotNull('q.memo')->where('q.memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('q.memo')->orWhere('q.memo', '');
+            });
+        }
+        if ($totalMin !== '' && is_numeric($totalMin)) {
+            $query->where('q.total', '>=', (float)$totalMin);
+        }
+        if ($totalMax !== '' && is_numeric($totalMax)) {
+            $query->where('q.total', '<=', (float)$totalMax);
+        }
+        if ($createdFrom !== '' && $isDate($createdFrom)) {
+            $query->whereDate('q.created_at', '>=', $createdFrom);
+        }
+        if ($createdTo !== '' && $isDate($createdTo)) {
+            $query->whereDate('q.created_at', '<=', $createdTo);
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $query->whereDate('q.updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $query->whereDate('q.updated_at', '<=', $updatedTo);
+        }
+
+        $quotes = $query->orderBy('q.id', 'desc')->limit(200)->get();
+
+        $statusOptions = DB::table('quotes')
+            ->select('status')
+            ->whereNotNull('status')
+            ->distinct()
+            ->orderBy('status')
+            ->pluck('status')
+            ->all();
+
+        $currencyOptions = DB::table('quotes')
+            ->select('currency')
+            ->whereNotNull('currency')
+            ->where('currency', '<>', '')
+            ->distinct()
+            ->orderBy('currency')
+            ->pluck('currency')
+            ->all();
+
+        $accountTypeOptions = DB::table('accounts')
+            ->select('account_type')
+            ->whereNotNull('account_type')
+            ->distinct()
+            ->orderBy('account_type')
+            ->pluck('account_type')
+            ->all();
+
+        return view('ops.quotes.index', [
+            'quotes' => $quotes,
+            'filters' => [
+                'q' => $q,
+                'status' => $status,
+                'currency' => $currency,
+                'account_id' => $accountId,
+                'account_type' => $accountType,
+                'assignee_name' => $assignee,
+                'has_memo' => $hasMemo,
+                'total_min' => $totalMin,
+                'total_max' => $totalMax,
+                'created_from' => $createdFrom,
+                'created_to' => $createdTo,
+                'updated_from' => $updatedFrom,
+                'updated_to' => $updatedTo,
+            ],
+            'statusOptions' => $statusOptions,
+            'currencyOptions' => $currencyOptions,
+            'accountTypeOptions' => $accountTypeOptions,
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
+        ]);
     }
 
     public function show(int $id, SvgRenderer $renderer)

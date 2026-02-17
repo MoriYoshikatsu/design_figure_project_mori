@@ -9,10 +9,69 @@ use Illuminate\Support\Facades\DB;
 
 final class AdminTemplateController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $templates = DB::table('product_templates')->orderBy('id', 'desc')->limit(200)->get();
-        return view('admin.templates.index', ['templates' => $templates]);
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
+        $q = trim((string)$request->input('q', ''));
+        $active = (string)$request->input('active', '');
+        $hasMemo = (string)$request->input('has_memo', '');
+        $createdFrom = (string)$request->input('created_from', '');
+        $createdTo = (string)$request->input('created_to', '');
+        $updatedFrom = (string)$request->input('updated_from', '');
+        $updatedTo = (string)$request->input('updated_to', '');
+
+        $query = DB::table('product_templates');
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->whereRaw('cast(id as text) ilike ?', ["%{$q}%"])
+                    ->orWhere('template_code', 'ilike', "%{$q}%")
+                    ->orWhere('name', 'ilike', "%{$q}%")
+                    ->orWhere('memo', 'ilike', "%{$q}%");
+            });
+        }
+        if ($active === '1') {
+            $query->where('active', true);
+        } elseif ($active === '0') {
+            $query->where('active', false);
+        }
+        if ($hasMemo === 'with') {
+            $query->whereNotNull('memo')->where('memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $query->where(function ($sub) {
+                $sub->whereNull('memo')->orWhere('memo', '');
+            });
+        }
+        if ($createdFrom !== '' && $isDate($createdFrom)) {
+            $query->whereDate('created_at', '>=', $createdFrom);
+        }
+        if ($createdTo !== '' && $isDate($createdTo)) {
+            $query->whereDate('created_at', '<=', $createdTo);
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $query->whereDate('updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $query->whereDate('updated_at', '<=', $updatedTo);
+        }
+
+        $templates = $query->orderBy('id', 'desc')->limit(200)->get();
+        return view('admin.templates.index', [
+            'templates' => $templates,
+            'filters' => [
+                'q' => $q,
+                'active' => $active,
+                'has_memo' => $hasMemo,
+                'created_from' => $createdFrom,
+                'created_to' => $createdTo,
+                'updated_from' => $updatedFrom,
+                'updated_to' => $updatedTo,
+            ],
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
+        ]);
     }
 
     public function create()

@@ -43,46 +43,5 @@
             <a href="{{ route('admin.accounts.index') }}">一覧へ戻る</a>
         </div>
     </form>
-{{-- 
-    <h2 style="margin-top:16px;">権限設定（account_user）</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>user_id</th>
-                <th>ユーザー名</th>
-                <th>メール</th>
-                <th>role</th>
-                <th>メモ</th>
-                <th>付与日時</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse($members as $m)
-                <tr>
-                    <td>{{ $m->user_id }}</td>
-                    <td>{{ $m->user_name }}</td>
-                    <td>{{ $m->user_email }}</td>
-                    <td>{{ $m->role }}</td>
-                    <td>
-                        <form method="POST" action="{{ route('admin.accounts.members.memo.update', [$account->id, $m->user_id]) }}">
-                            @csrf
-                            @method('PUT')
-                            <textarea name="memo" rows="2" style="width:100%;">{{ old('memo', $m->memo) }}</textarea>
-                            <button type="submit">保存</button>
-                        </form>
-                    </td>
-                    <td>{{ $m->assigned_at }}</td>
-                </tr>
-            @empty
-                <tr>
-                    <td colspan="6">このアカウントに紐づくユーザーは未設定です。</td>
-                </tr>
-            @endforelse
-        </tbody>
-    </table> --}}
-{{-- 
-    <h2 style="margin-top:20px;">権限設定ページ</h2>
-    <div class="actions"> --}}
         <a href="{{ route('admin.accounts.permissions', $account->id) }}">このアカウントのルート権限設定ページへ</a>
-    {{-- </div> --}}
 @endsection

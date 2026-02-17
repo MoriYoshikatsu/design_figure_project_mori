@@ -23,6 +23,10 @@ Route::get('/', function () {
     return view('landing');
 });
 
+Route::middleware(['auth'])->group(function () {
+    Route::view('/user/settings', 'auth.settings')->name('user.settings');
+});
+
 Route::get('/configurator', Configurator::class);
 
 Route::post('/configurator/autosave', function (Request $request) {
