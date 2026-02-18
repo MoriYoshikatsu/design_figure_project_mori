@@ -976,6 +976,75 @@ final class ChangeRequestReviewController extends Controller
             ->leftJoin('users as approver', 'approver.id', '=', 'cr.approved_by')
             ->select('cr.*')
             ->addSelect('requester.email as requested_by_email', 'approver.email as approved_by_email')
+            ->selectRaw("
+                case
+                    when cr.entity_type = 'quote' then (
+                        select coalesce(
+                            nullif(a.internal_name, ''),
+                            (
+                                select u2.name
+                                from account_user as au2
+                                join users as u2 on u2.id = au2.user_id
+                                where au2.account_id = a.id
+                                order by
+                                    case au2.role
+                                        when 'customer' then 1
+                                        when 'admin' then 2
+                                        when 'sales' then 3
+                                        else 9
+                                    end,
+                                    au2.user_id
+                                limit 1
+                            ),
+                            '-'
+                        )
+                        from quotes as q
+                        join accounts as a on a.id = q.account_id
+                        where q.id = cr.entity_id
+                        limit 1
+                    )
+                    else (
+                        select coalesce(nullif(a.internal_name, ''), u.name)
+                        from account_user as au
+                        join accounts as a on a.id = au.account_id
+                        join users as u on u.id = au.user_id
+                        where au.user_id = cr.requested_by
+                        order by au.account_id
+                        limit 1
+                    )
+                end as request_account_display_name
+            ")
+            ->selectRaw("
+                case
+                    when cr.entity_type = 'quote' then (
+                        select string_agg(distinct u.email, ', ' order by u.email)
+                        from quotes as q
+                        join account_user as au on au.account_id = q.account_id
+                        join users as u on u.id = au.user_id
+                        where q.id = cr.entity_id
+                    )
+                    else requester.email
+                end as request_account_email
+            ")
+            ->selectRaw("
+                case
+                    when cr.entity_type = 'quote' then (
+                        select a.assignee_name
+                        from quotes as q
+                        join accounts as a on a.id = q.account_id
+                        where q.id = cr.entity_id
+                        limit 1
+                    )
+                    else (
+                        select a.assignee_name
+                        from account_user as au
+                        join accounts as a on a.id = au.account_id
+                        where au.user_id = cr.requested_by
+                        order by au.account_id
+                        limit 1
+                    )
+                end as request_account_assignee_name
+            ")
             ->selectSub(
                 DB::table('account_user as au')
                     ->join('accounts as a', 'a.id', '=', 'au.account_id')

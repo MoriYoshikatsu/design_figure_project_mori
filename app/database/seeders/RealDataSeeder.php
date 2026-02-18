@@ -193,12 +193,12 @@ final class RealDataSeeder extends Seeder
             $this->skuRow('SLEEVE_SUS_PIPE', 'SUSパイプ', 'SLEEVE', ['material' => 'sus']),
 
             // FIBER（ファイバ）
-            $this->skuRow('FIBER_SMF28E+', 'SMF28e+', 'FIBER', ['mfd' => '9/125', 'minLen' => 50, 'maxLen' => 10000]),
-            $this->skuRow('FIBER_UHNA1', 'UHNA1', 'FIBER', ['mfd' => '10/125', 'minLen' => 50, 'maxLen' => 10000]),
-            $this->skuRow('FIBER_PMF', 'PMF', 'FIBER', ['mfd' => '10/125', 'minLen' => 50, 'maxLen' => 10000]),
+            $this->skuRow('FIBER_SMF28E+', 'SMF28e+', 'FIBER', ['mfd' => '9/125', 'minLenM' => 0.05, 'maxLenM' => 10.0]),
+            $this->skuRow('FIBER_UHNA1', 'UHNA1', 'FIBER', ['mfd' => '10/125', 'minLenM' => 0.05, 'maxLenM' => 10.0]),
+            $this->skuRow('FIBER_PMF', 'PMF', 'FIBER', ['mfd' => '10/125', 'minLenM' => 0.05, 'maxLenM' => 10.0]),
 
             // TUBE（チューブ）
-            $this->skuRow('TUBE_0.9_LOOSE', 'Φ0.9ルースチューブ', 'TUBE', ['minLen' => 30, 'maxLen' => 10000]),
+            $this->skuRow('TUBE_0.9_LOOSE', 'Φ0.9ルースチューブ', 'TUBE', ['minLenM' => 0.03, 'maxLenM' => 10.0]),
 
             // CONNECTOR（コネクタ：端子）
             $this->skuRow('CONN_FERRULE_PC', 'フェルール/PCコネクタ', 'CONNECTOR', ['polish' => 'PC']),
@@ -290,9 +290,9 @@ final class RealDataSeeder extends Seeder
             'CONNECTOR' => 2800.0,
         ];
 
-        $perMmBaseByCategory = [
-            'FIBER' => 1.20,
-            'TUBE' => 0.75,
+        $perMBaseByCategory = [
+            'FIBER' => 1200.0,
+            'TUBE' => 750.0,
         ];
 
         $rows = [];
@@ -301,15 +301,15 @@ final class RealDataSeeder extends Seeder
                 $category = strtoupper((string)$sku->category);
                 $codeHash = abs(crc32((string)$sku->sku_code));
                 $priceBump = (float)(($codeHash % 7) * 100); // 固定単価の軽いバリエーション
-                $perMmBump = (float)(($codeHash % 5) * 0.03); // mm単価の軽いバリエーション
+                $perMBump = (float)(($codeHash % 5) * 30); // m単価の軽いバリエーション
 
                 if (in_array($category, ['FIBER', 'TUBE'], true)) {
                     $rows[] = [
                         'price_book_id' => (int)$pbId,
                         'sku_id' => (int)$sku->id,
-                        'pricing_model' => 'PER_MM',
+                        'pricing_model' => 'PER_M',
                         'unit_price' => null,
-                        'price_per_mm' => ($perMmBaseByCategory[$category] ?? 1.0) + $perMmBump,
+                        'price_per_m' => ($perMBaseByCategory[$category] ?? 1000.0) + $perMBump,
                         'formula' => null,
                         'min_qty' => 1,
                         'created_at' => now(),
@@ -323,7 +323,7 @@ final class RealDataSeeder extends Seeder
                     'sku_id' => (int)$sku->id,
                     'pricing_model' => 'FIXED',
                     'unit_price' => ($fixedBaseByCategory[$category] ?? 1000.0) + $priceBump + ($idx * 10),
-                    'price_per_mm' => null,
+                    'price_per_m' => null,
                     'formula' => null,
                     'min_qty' => 1,
                     'created_at' => now(),
@@ -405,11 +405,11 @@ final class RealDataSeeder extends Seeder
 
             $fibers = [];
             for ($k = 0; $k < $fiberCount; $k++) {
-                $len = 200 + ($k * 50) + ($i * 10);
+                $len = (200 + ($k * 50) + ($i * 10)) / 1000;
                 $fibers[] = [
                     'skuCode' => ($k % 2 === 0) ? 'FIBER_A' : 'FIBER_B',
-                    'lengthMm' => $len,
-                    'toleranceMm' => max(1, (int)round($len * 0.01)),
+                    'lengthM' => $len,
+                    'toleranceM' => round(max(0.001, $len * 0.01), 6),
                 ];
             }
 
@@ -419,9 +419,9 @@ final class RealDataSeeder extends Seeder
                 $tubes[] = [
                     'skuCode' => ($t % 2 === 0) ? 'TUBE_X' : 'TUBE_Y',
                     'anchor' => ['type' => 'MFD', 'index' => min($mfdCount - 1, $t)],
-                    'startOffsetMm' => ($t === 0) ? -10 : 30,
-                    'lengthMm' => 150 + $t * 20,
-                    'toleranceMm' => null,
+                    'startOffsetM' => ($t === 0) ? -0.01 : 0.03,
+                    'lengthM' => (150 + $t * 20) / 1000,
+                    'toleranceM' => null,
                 ];
             }
 

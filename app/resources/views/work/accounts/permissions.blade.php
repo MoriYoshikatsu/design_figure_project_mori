@@ -118,19 +118,25 @@
                         <textarea name="memo" rows="2" style="width:100%;"></textarea>
                     </td>
                 </tr>
+                <tr>
+                    <th>ラベル</th>
+                    <td colspan="3">
+                        <input type="text" name="label" placeholder="例: 見積編集申請（任意）">
+                    </td>
+                </tr>
             </tbody>
         </table>
         <input type="hidden" name="source" value="manual">
         <button type="submit">手入力ルール追加を申請</button>
     </form>
-{{-- 
-    <h3 style="margin-top:16px;">登録済みルール一覧</h3>
+    <h1 style="margin-top:16px;">既存登録権限の編集</h1>
     <table>
         <thead>
             <tr>
                 <th>ID</th>
                 <th>Method</th>
                 <th>URIパターン</th>
+                <th>ラベル</th>
                 <th>source</th>
                 <th>active</th>
                 <th>メモ</th>
@@ -144,6 +150,7 @@
                     <td>{{ $perm->id }}</td>
                     <td>{{ $perm->http_method }}</td>
                     <td><code>{{ $perm->uri_pattern }}</code></td>
+                    <td>{{ $perm->label ?: '-' }}</td>
                     <td>{{ $perm->source }}</td>
                     <td>{{ (bool)$perm->active ? 'true' : 'false' }}</td>
                     <td>{{ $perm->memo ?: '-' }}</td>
@@ -178,6 +185,9 @@
                                 </div>
                             </div>
                             <div style="margin-top:6px;">
+                                <input type="text" name="label" value="{{ old('label', $perm->label) }}" placeholder="権限ラベル（任意）">
+                            </div>
+                            <div style="margin-top:6px;">
                                 <textarea name="memo" rows="2" style="width:100%;">{{ $perm->memo }}</textarea>
                             </div>
                         </form>
@@ -192,11 +202,11 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8">Salesルート許可は未登録です。</td>
+                    <td colspan="9">Salesルート許可は未登録です。</td>
                 </tr>
             @endforelse
         </tbody>
-    </table> --}}
+    </table>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const groupMasters = Array.from(document.querySelectorAll('.catalog-group-master'));

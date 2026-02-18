@@ -1,13 +1,13 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>編集承認リクエスト</h1>
+    <h1>承認リクエスト 一覧</h1>
 
     <form method="GET" action="{{ route('work.change-requests.index') }}" style="margin:12px 0;">
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID/対象種別 / ステータス / 申請者 / 承認者 / メモ">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="名前/メモ など">
             </div>
             <div class="col">
                 <label>ステータス</label>
@@ -126,11 +126,11 @@
         <thead>
             <tr>
                 <th>ID</th>
+                <th>ステータス</th>
+                <th>操作</th>
                 <th>対象種別</th>
                 <th>対象ID</th>
-                <th>操作</th>
-                <th>ステータス</th>
-                <th>アカウント表示名</th>
+                <th>申請対象作成者</th>
                 <th>登録メールアドレス</th>
                 <th>担当者</th>
                 <th>メモ</th>
@@ -144,13 +144,13 @@
             @foreach($requests as $r)
                 <tr>
                     <td>{{ $r->id }}</td>
+                    <td>{{ $r->status }}</td>
+                    <td>{{ $r->operation ?? 'UPDATE' }}</td>
                     <td>{{ $r->entity_type }}</td>
                     <td>{{ $r->entity_id }}</td>
-                    <td>{{ $r->operation ?? 'UPDATE' }}</td>
-                    <td>{{ $r->status }}</td>
-                    <td>{{ $r->requested_by_account_display_name ?? '-' }}</td>
-                    <td>{{ $r->requested_by_email ?? '-' }}</td>
-                    <td>{{ $r->requested_by_assignee_name ?? '-' }}</td>
+                    <td>{{ $r->request_account_display_name ?? $r->requested_by_account_display_name ?? '-' }}</td>
+                    <td>{{ $r->request_account_email ?? $r->requested_by_email ?? '-' }}</td>
+                    <td>{{ $r->request_account_assignee_name ?? $r->requested_by_assignee_name ?? '-' }}</td>
                     <td>{{ $r->memo ?? '-' }}</td>
                     <td>{{ $r->created_at }}</td>
                     <td>{{ $r->requested_by_account_display_name ?? ('ID: '.$r->requested_by) }}</td>

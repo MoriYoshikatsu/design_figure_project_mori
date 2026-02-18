@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 final class TemplateVersionController extends Controller
 {
+    private const FIXED_DSL_VERSION = '0.2';
+
     public function store(Request $request, int $templateId)
     {
         $template = DB::table('product_templates')->whereNull('deleted_at')->where('id', $templateId)->first();
@@ -16,7 +18,6 @@ final class TemplateVersionController extends Controller
 
         $data = $request->validate([
             'version' => 'required|integer|min:1',
-            'dsl_version' => 'required|string|max:255',
             'dsl_json' => 'required|string',
             'memo' => 'nullable|string|max:5000',
         ]);
@@ -38,11 +39,12 @@ final class TemplateVersionController extends Controller
         $active = $request->boolean('active', true);
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') $memo = null;
+        $dslVersion = self::FIXED_DSL_VERSION;
 
         $after = [
             'template_id' => $templateId,
             'version' => $data['version'],
-            'dsl_version' => $data['dsl_version'],
+            'dsl_version' => $dslVersion,
             'dsl_json' => $decoded,
             'active' => $active,
             'memo' => $memo,
@@ -93,7 +95,6 @@ final class TemplateVersionController extends Controller
 
         $data = $request->validate([
             'version' => 'required|integer|min:1',
-            'dsl_version' => 'required|string|max:255',
             'dsl_json' => 'required|string',
             'memo' => 'nullable|string|max:5000',
         ]);
@@ -116,10 +117,14 @@ final class TemplateVersionController extends Controller
         $active = $request->boolean('active', false);
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') $memo = null;
+        $dslVersion = trim((string)($version->dsl_version ?? ''));
+        if ($dslVersion === '') {
+            $dslVersion = self::FIXED_DSL_VERSION;
+        }
 
         $after = [
             'version' => $data['version'],
-            'dsl_version' => $data['dsl_version'],
+            'dsl_version' => $dslVersion,
             'dsl_json' => $decoded,
             'active' => $active,
             'memo' => $memo,

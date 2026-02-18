@@ -6,7 +6,7 @@
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID/実行者/アクション など">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="実行者 など">
             </div>
             {{-- <div class="col">
                 <label>実行者</label>

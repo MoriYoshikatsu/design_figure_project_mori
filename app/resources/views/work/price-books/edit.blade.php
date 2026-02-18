@@ -14,8 +14,8 @@
                 <label>バージョン</label>
                 <input type="number" name="version" value="{{ old('version', $book->version) }}">
             </div>
-        </div>
-        <div class="row" style="margin-top:8px;">
+        {{-- </div>
+        <div class="row" style="margin-top:8px;"> --}}
             <div class="col">
                 <label>通貨</label>
                 <input type="text" name="currency" value="{{ old('currency', $book->currency) }}">
@@ -45,12 +45,12 @@
 
     <hr style="margin:16px 0;">
 
-    <h2>明細</h2>
+    <h1>明細</h1>
     <form method="GET" action="{{ route('work.price-books.edit', $book->id) }}" style="margin:12px 0;">
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="item_q" value="{{ $itemFilters['item_q'] ?? '' }}" placeholder="明細ID / SKU / モデル / メモ / 式">
+                <input type="text" name="item_q" value="{{ $itemFilters['item_q'] ?? '' }}" placeholder="名称/式/メモ など">
             </div>
             <div class="col">
                 <label>価格モデル</label>
@@ -58,6 +58,15 @@
                     <option value="">すべて</option>
                     @foreach($pricingModelOptions as $opt)
                         <option value="{{ $opt }}" @if(($itemFilters['pricing_model'] ?? '') === $opt) selected @endif>{{ $opt }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col">
+                <label>単価レンジ</label>
+                <select name="unit_price_band">
+                    <option value="">すべて</option>
+                    @foreach($unitPriceBandOptions as $key => $label)
+                        <option value="{{ $key }}" @if(($itemFilters['unit_price_band'] ?? '') === $key) selected @endif>{{ $label }}</option>
                     @endforeach
                 </select>
             </div>
@@ -70,7 +79,7 @@
                     @endforeach
                 </select>
             </div>
-            <div class="col">
+            {{-- <div class="col">
                 <label>メモ</label>
                 <select name="item_has_memo">
                     <option value="">すべて</option>
@@ -90,23 +99,15 @@
                 <input type="number" step="0.001" name="min_qty_max" value="{{ $itemFilters['min_qty_max'] ?? '' }}">
             </div>
             <div class="col">
-                <label>単価（最小）</label>
-                <input type="number" step="0.01" name="unit_price_min" value="{{ $itemFilters['unit_price_min'] ?? '' }}">
+                <label>m単価（最小）</label>
+                <input type="number" step="0.0001" name="price_per_m_min" value="{{ $itemFilters['price_per_m_min'] ?? '' }}">
             </div>
             <div class="col">
-                <label>単価（最大）</label>
-                <input type="number" step="0.01" name="unit_price_max" value="{{ $itemFilters['unit_price_max'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>mm単価（最小）</label>
-                <input type="number" step="0.0001" name="price_per_mm_min" value="{{ $itemFilters['price_per_mm_min'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>mm単価（最大）</label>
-                <input type="number" step="0.0001" name="price_per_mm_max" value="{{ $itemFilters['price_per_mm_max'] ?? '' }}">
+                <label>m単価（最大）</label>
+                <input type="number" step="0.0001" name="price_per_m_max" value="{{ $itemFilters['price_per_m_max'] ?? '' }}">
             </div>
         </div>
-        <div class="row" style="margin-top:8px;">
+        <div class="row" style="margin-top:8px;"> --}}
             <div class="col">
                 <label>明細更新日（開始）</label>
                 <input type="date" name="item_updated_from" value="{{ $itemFilters['item_updated_from'] ?? '' }}">
@@ -115,16 +116,13 @@
                 <label>明細更新日（終了）</label>
                 <input type="date" name="item_updated_to" value="{{ $itemFilters['item_updated_to'] ?? '' }}">
             </div>
-        </div>
-        <div class="actions" style="margin-top:8px;">
-            <button type="submit">絞り込み</button>
-            <a href="{{ route('work.price-books.edit', $book->id) }}">クリア</a>
+            <div class="actions" style="margin-top:8px;">
+                <button type="submit">絞り込み</button>
+                <a href="{{ route('work.price-books.edit', $book->id) }}">クリア</a>
+                <div class="muted" style="margin:8px 0;">{{ count($items) }}件</div>
+            </div>
         </div>
     </form>
-
-    <div class="muted" style="margin:8px 0;">
-        表示件数: {{ count($items) }}件
-    </div>
 
     <table>
         <thead>
@@ -133,7 +131,7 @@
                 <th>名称</th>
                 <th>モデル</th>
                 <th>単価</th>
-                <th>mm単価</th>
+                <th>m単価</th>
                 <th>式</th>
                 <th>最小数量</th>
                 <th>メモ</th>
@@ -147,7 +145,7 @@
                     <td>{{ $it->sku_name }}</td>
                     <td>{{ $it->pricing_model }}</td>
                     <td>{{ $it->unit_price }}</td>
-                    <td>{{ $it->price_per_mm }}</td>
+                    <td>{{ $it->price_per_m }}</td>
                     <td><span class="muted">{{ $it->formula }}</span></td>
                     <td>{{ $it->min_qty }}</td>
                     <td>{{ $it->memo ?? '-' }}</td>
@@ -188,7 +186,7 @@
                 <label>価格モデル</label>
                 <select name="pricing_model">
                     <option value="FIXED">FIXED</option>
-                    <option value="PER_MM">PER_MM</option>
+                    <option value="PER_M">PER_M</option>
                     <option value="FORMULA">FORMULA</option>
                 </select>
             </div>
@@ -203,8 +201,8 @@
                 <input type="number" step="0.01" name="unit_price">
             </div>
             <div class="col">
-                <label>mm単価</label>
-                <input type="number" step="0.0001" name="price_per_mm">
+                <label>m単価</label>
+                <input type="number" step="0.0001" name="price_per_m">
             </div>
             <div class="col">
                 <label>式（JSON）</label>

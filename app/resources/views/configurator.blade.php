@@ -40,10 +40,10 @@
                             <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                         @endforeach
                     </select>
-                    <label>長さ(mm)</label>
-                    <input type="number" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthMm" style="width:100%;">
-                    <label>希望許容誤差(mm)</label>
-                    <input type="number" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.toleranceMm" style="width:100%;">
+                    <label>長さ(m)</label>
+                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthM" style="width:100%;">
+                    <label>希望許容誤差(m)</label>
+                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.toleranceM" style="width:100%;">
                 </div>
             @endforeach
 
@@ -64,17 +64,17 @@
                     <label>チューブ左端位置のファイバ番号</label>
                     <input type="number" min="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startFiberIndex" style="width:100%;">
 
-                    <label>そのファイバ左端からの距離(mm)</label>
-                    <input type="number" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startOffsetMm" style="width:100%;">
+                    <label>そのファイバ左端からの距離(m)</label>
+                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startOffsetM" style="width:100%;">
 
                     <label>チューブ右端位置のファイバ番号</label>
                     <input type="number" min="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endFiberIndex" style="width:100%;">
 
-                    <label>そのファイバ左端からの距離(mm)</label>
-                    <input type="number" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endOffsetMm" style="width:100%;">
+                    <label>そのファイバ左端からの距離(m)</label>
+                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endOffsetM" style="width:100%;">
 
-                    <label>希望許容誤差(mm)</label>
-                    <input type="number" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.toleranceMm" style="width:100%;">
+                    <label>希望許容誤差(m)</label>
+                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.toleranceM" style="width:100%;">
                 </div>
             @endforeach
 
@@ -107,6 +107,22 @@
                 </select>
             </div>
 
+            @if($quoteEditId)
+                <hr style="margin:12px 0;">
+
+                <h2 style="font-weight:700;">概要カード表示項目</h2>
+                <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
+                    <div style="display:grid; grid-template-columns:1fr; gap:4px;">
+                        @foreach(($summaryFieldOptions ?? []) as $key => $label)
+                            <label style="display:flex; align-items:center; gap:6px;">
+                                <input type="checkbox" wire:model="summaryFields" value="{{ $key }}">
+                                <span>{{ $label }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             <h2 style="font-weight:700;">メモ</h2>
             <div style="margin-top:12px;">
                 <label>詳細な希望仕様など</label>
@@ -115,10 +131,12 @@
         </div>
 
         <div style="flex:1;">
-            <button wire:click="newSession" type="button">新規ファイバ作成（新規セッション）</button>
+            @if(!$quoteEditId)
+                <button wire:click="newSession" type="button">新規ファイバ作成（新規セッション）</button>
+            @endif
             @if($quoteEditId)
                 <button type="button" wire:click="requestQuoteEdit">
-                    見積変更申請
+                    見積変更申請を送信
                 </button>
             @else
                 <button type="button" wire:click="issueQuote">
@@ -181,6 +199,7 @@ document.addEventListener('livewire:init', () => {
         if (!dirty) return;
 
         const sessionId = c.get('sessionId');
+        if (!sessionId || Number(sessionId) <= 0) return;
         const config = c.get('config');
         const memo = c.get('memo');
 
@@ -204,6 +223,7 @@ document.addEventListener('livewire:init', () => {
         if (!dirty) return;
 
         const sessionId = c.get('sessionId');
+        if (!sessionId || Number(sessionId) <= 0) return;
         const config = c.get('config');
         const memo = c.get('memo');
 

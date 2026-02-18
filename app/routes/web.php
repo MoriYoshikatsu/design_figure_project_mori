@@ -291,6 +291,7 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::get('/price-books/create', [PriceBookController::class, 'create'])->name('price-books.create');
     Route::post('/price-books', [PriceBookController::class, 'store'])->name('price-books.store');
     Route::post('/price-books/edit-request/create', [PriceBookController::class, 'store'])->name('price-books.edit-request.create');
+    Route::get('/price-books/{id}', [PriceBookController::class, 'show'])->name('price-books.show');
     Route::get('/price-books/{id}/edit', [PriceBookController::class, 'edit'])->name('price-books.edit');
     Route::put('/price-books/{id}', [PriceBookController::class, 'update'])->name('price-books.update');
     Route::post('/price-books/{id}/edit-request/update', [PriceBookController::class, 'update'])->name('price-books.edit-request.update');
@@ -309,6 +310,7 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');
     Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
     Route::post('/templates/edit-request/create', [TemplateController::class, 'store'])->name('templates.edit-request.create');
+    Route::get('/templates/{id}', [TemplateController::class, 'show'])->name('templates.show');
     Route::get('/templates/{id}/edit', [TemplateController::class, 'edit'])->name('templates.edit');
     Route::put('/templates/{id}', [TemplateController::class, 'update'])->name('templates.update');
     Route::post('/templates/{id}/edit-request/update', [TemplateController::class, 'update'])->name('templates.edit-request.update');
@@ -334,10 +336,6 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::post('/quotes/{id}/edit-request/store', [QuoteController::class, 'storeEditRequest'])->name('quotes.edit-request.store');
     Route::post('/quotes/{id}/edit-request/update', [QuoteController::class, 'storeEditRequest'])->name('quotes.edit-request.update');
     Route::get('/quotes/{id}/snapshot.pdf', [QuoteController::class, 'downloadSnapshotPdf'])->name('quotes.snapshot.pdf');
-    Route::put('/quotes/{id}/display-name-source', [QuoteController::class, 'updateDisplayNameSource'])->name('quotes.display-name-source.update');
-    Route::post('/quotes/{id}/display-name-source/edit-request/update', [QuoteController::class, 'updateDisplayNameSource'])->name('quotes.display-name-source.edit-request.update');
-    Route::put('/quotes/{id}/summary-fields', [QuoteController::class, 'updateSummaryFields'])->name('quotes.summary-fields.update');
-    Route::post('/quotes/{id}/summary-fields/edit-request/update', [QuoteController::class, 'updateSummaryFields'])->name('quotes.summary-fields.edit-request.update');
     Route::put('/quotes/{id}/memo', [QuoteController::class, 'updateMemo'])->name('quotes.memo.update');
     Route::post('/quotes/{id}/memo/edit-request/update', [QuoteController::class, 'updateMemo'])->name('quotes.memo.edit-request.update');
 

@@ -60,9 +60,9 @@ return new class extends Migration
             $table->unsignedBigInteger('price_book_id');
             $table->unsignedBigInteger('sku_id');
 
-            $table->enum('pricing_model', ['FIXED', 'PER_MM', 'FORMULA']);
+            $table->enum('pricing_model', ['FIXED', 'PER_M', 'FORMULA']);
             $table->decimal('unit_price', 12, 2)->nullable();     // FIXED
-            $table->decimal('price_per_mm', 12, 6)->nullable();   // PER_MM
+            $table->decimal('price_per_m', 12, 6)->nullable();   // PER_M
             $table->jsonb('formula')->nullable();                 // FORMULA（JSON式）
 
             $table->decimal('min_qty', 12, 3)->default(1);
@@ -150,7 +150,7 @@ return new class extends Migration
             $table->decimal('unit_price', 12, 6);
             $table->decimal('line_total', 12, 2);
 
-            $table->jsonb('options')->default('{}'); // lengthMm, toleranceMm 等
+            $table->jsonb('options')->default('{}'); // lengthM, toleranceM 等
             $table->string('source_path')->nullable(); // $.fibers[1] など
             $table->integer('sort_order')->default(0);
             $table->text('memo')->nullable();

@@ -146,7 +146,7 @@ final class PricingService
     {
         return match ($model) {
             'FIXED' => $this->asNumber($pbi['unit_price'] ?? null),
-            'PER_MM' => $this->asNumber($pbi['price_per_mm'] ?? null) * $this->lengthFromOptions($options),
+            'PER_M', 'PER_MM' => $this->pricePerMeter($pbi) * $this->lengthFromOptions($options),
             'FORMULA' => $this->evalFormula($pbi['formula'] ?? null, $options),
             default => null,
         };
@@ -170,11 +170,38 @@ final class PricingService
 
     private function lengthFromOptions(array $options): float
     {
-        $len = $options['lengthMm'] ?? null;
+        $len = $options['lengthM'] ?? null;
         if (!is_numeric($len)) {
-            $len = $options['totalFiberLengthMm'] ?? null;
+            $legacyLen = $options['lengthMm'] ?? null;
+            if (is_numeric($legacyLen)) {
+                $len = (float)$legacyLen / 1000;
+            }
+        }
+        if (!is_numeric($len)) {
+            $len = $options['totalFiberLengthM'] ?? null;
+        }
+        if (!is_numeric($len)) {
+            $legacyTotalLen = $options['totalFiberLengthMm'] ?? null;
+            if (is_numeric($legacyTotalLen)) {
+                $len = (float)$legacyTotalLen / 1000;
+            }
         }
         return $this->asNumber($len);
+    }
+
+    private function pricePerMeter(array $pbi): float
+    {
+        $perM = $pbi['price_per_m'] ?? null;
+        if (is_numeric($perM)) {
+            return (float)$perM;
+        }
+
+        $legacyPerMm = $pbi['price_per_mm'] ?? null;
+        if (is_numeric($legacyPerMm)) {
+            return (float)$legacyPerMm * 1000;
+        }
+
+        return 0.0;
     }
 
     private function asNumber(mixed $v): float

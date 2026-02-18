@@ -9,6 +9,7 @@ use App\Services\WorkChangeRequestService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 final class AccountController extends Controller
 {
@@ -49,6 +50,11 @@ final class AccountController extends Controller
             ->selectRaw("string_agg(u.name || ' (' || au.role || ')', ', ' order by u.id)")
             ->whereColumn('au.account_id', 'a.id');
 
+        $accountEmails = DB::table('account_user as au')
+            ->join('users as u', 'u.id', '=', 'au.user_id')
+            ->selectRaw("string_agg(distinct u.email, ', ' order by u.email)")
+            ->whereColumn('au.account_id', 'a.id');
+
         $fallbackUserName = DB::table('account_user as au')
             ->join('users as u', 'u.id', '=', 'au.user_id')
             ->whereColumn('au.account_id', 'a.id')
@@ -70,6 +76,7 @@ final class AccountController extends Controller
             ->selectSub($roleList, 'role_list')
             ->selectSub($roleSummary, 'role_summary')
             ->selectSub($memberSummary, 'member_summary')
+            ->selectSub($accountEmails, 'account_emails')
             ->selectSub($fallbackUserName, 'fallback_user_name');
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
@@ -266,6 +273,9 @@ final class AccountController extends Controller
             'internal_name' => 'nullable|string|max:255',
             'memo' => 'nullable|string|max:5000',
             'assignee_name' => 'nullable|string|max:255',
+            'user_name' => 'required|string|max:255',
+            'user_email' => 'required|string|email|max:255',
+            'user_password' => 'required|string|min:8|max:255',
         ]);
 
         $role = (string)$data['role'];
@@ -276,6 +286,19 @@ final class AccountController extends Controller
         if ($memo === '') $memo = null;
         $assigneeName = trim((string)($data['assignee_name'] ?? ''));
         if ($assigneeName === '') $assigneeName = null;
+        $userName = trim((string)($data['user_name'] ?? ''));
+        $userEmail = strtolower(trim((string)($data['user_email'] ?? '')));
+        $userPasswordHash = Hash::make((string)$data['user_password']);
+
+        $existingUser = DB::table('users')
+            ->whereRaw('lower(email) = ?', [$userEmail])
+            ->exists();
+        if ($existingUser) {
+            return redirect()
+                ->route('work.accounts.index')
+                ->withErrors(['user_email' => 'そのメールアドレスは既に登録されています。'])
+                ->withInput();
+        }
 
         $after = [
             'account_type' => $accountType,
@@ -283,6 +306,9 @@ final class AccountController extends Controller
             'internal_name' => $internal,
             'memo' => $memo,
             'assignee_name' => $assigneeName,
+            'user_name' => $userName,
+            'user_email' => $userEmail,
+            'user_password_hash' => $userPasswordHash,
         ];
 
         app(WorkChangeRequestService::class)->queueCreate(
@@ -376,12 +402,13 @@ final class AccountController extends Controller
                 (string)$request->input('comment', '')
             );
 
-            return redirect()->route('work.accounts.edit', $id)->with('status', 'チェックボックス許可の反映申請を送信しました');
+            return redirect()->route('work.accounts.permissions', $id)->with('status', 'チェックボックス許可の反映申請を送信しました');
         }
 
         $data = $request->validate([
             'http_method' => 'required|string|max:10',
             'uri_pattern' => 'required|string|max:255',
+            'label' => 'nullable|string|max:255',
             'source' => 'nullable|in:checkbox,manual',
             'memo' => 'nullable|string|max:5000',
         ]);
@@ -393,7 +420,7 @@ final class AccountController extends Controller
             || !$this->isValidUriPattern($pattern)
         ) {
             return redirect()
-                ->route('work.accounts.edit', $id)
+                ->route('work.accounts.permissions', $id)
                 ->withErrors(['uri_pattern' => 'URIパターンかHTTPメソッドが不正です。'])
                 ->withInput();
         }
@@ -401,6 +428,10 @@ final class AccountController extends Controller
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') {
             $memo = null;
+        }
+        $label = trim((string)($data['label'] ?? ''));
+        if ($label === '') {
+            $label = null;
         }
         $source = (string)($data['source'] ?? 'manual');
         $userId = (int)auth()->id();
@@ -424,6 +455,7 @@ final class AccountController extends Controller
                     'permission_catalog_id' => (int)($existing['permission_catalog_id'] ?? 0),
                     'http_method' => $method,
                     'uri_pattern' => $pattern,
+                    'label' => $label,
                     'source' => $source,
                     'active' => true,
                     'memo' => $memo,
@@ -431,7 +463,7 @@ final class AccountController extends Controller
                 $userId > 0 ? $userId : 0,
                 (string)$request->input('comment', '')
             );
-            return redirect()->route('work.accounts.edit', $id)->with('status', 'Salesルート許可の更新申請を送信しました');
+            return redirect()->route('work.accounts.permissions', $id)->with('status', 'Salesルート許可の更新申請を送信しました');
         }
 
         app(WorkChangeRequestService::class)->queueCreate(
@@ -441,6 +473,7 @@ final class AccountController extends Controller
                 'permission_catalog_id' => $existingCatalog ? (int)$existingCatalog->id : 0,
                 'http_method' => $method,
                 'uri_pattern' => $pattern,
+                'label' => $label,
                 'source' => $source,
                 'active' => true,
                 'memo' => $memo,
@@ -449,7 +482,7 @@ final class AccountController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.edit', $id)->with('status', 'Salesルート許可の追加申請を送信しました');
+        return redirect()->route('work.accounts.permissions', $id)->with('status', 'Salesルート許可の追加申請を送信しました');
     }
 
     public function updateSalesRoutePermission(Request $request, int $id, int $permId)
@@ -460,6 +493,7 @@ final class AccountController extends Controller
         $data = $request->validate([
             'http_method' => 'required|string|max:10',
             'uri_pattern' => 'required|string|max:255',
+            'label' => 'nullable|string|max:255',
             'source' => 'required|in:checkbox,manual',
             'active' => 'nullable|boolean',
             'memo' => 'nullable|string|max:5000',
@@ -472,7 +506,7 @@ final class AccountController extends Controller
             || !$this->isValidUriPattern($pattern)
         ) {
             return redirect()
-                ->route('work.accounts.edit', $id)
+                ->route('work.accounts.permissions', $id)
                 ->withErrors(['uri_pattern' => 'URIパターンかHTTPメソッドが不正です。'])
                 ->withInput();
         }
@@ -481,7 +515,23 @@ final class AccountController extends Controller
         if ($memo === '') {
             $memo = null;
         }
+        $label = trim((string)($data['label'] ?? ''));
+        if ($label === '') {
+            $label = null;
+        }
         $active = filter_var($data['active'] ?? false, FILTER_VALIDATE_BOOL);
+
+        $duplicatedCatalog = DB::table('work_permission_catalog')
+            ->where('http_method', $method)
+            ->where('uri_pattern', $pattern)
+            ->where('id', '!=', $permId)
+            ->exists();
+        if ($duplicatedCatalog) {
+            return redirect()
+                ->route('work.accounts.permissions', $id)
+                ->withErrors(['uri_pattern' => '同じMethod/URIパターンの権限が既に登録されています。'])
+                ->withInput();
+        }
 
         app(WorkChangeRequestService::class)->queueUpdate(
             'account_sales_route_permission',
@@ -492,6 +542,7 @@ final class AccountController extends Controller
                 'permission_catalog_id' => $permId,
                 'http_method' => $method,
                 'uri_pattern' => $pattern,
+                'label' => $label,
                 'source' => $data['source'],
                 'active' => $active,
                 'memo' => $memo,
@@ -500,7 +551,7 @@ final class AccountController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.edit', $id)->with('status', 'Salesルート許可の更新申請を送信しました');
+        return redirect()->route('work.accounts.permissions', $id)->with('status', 'Salesルート許可の更新申請を送信しました');
     }
 
     public function destroySalesRoutePermission(Request $request, int $id, int $permId)
@@ -516,7 +567,7 @@ final class AccountController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.edit', $id)->with('status', 'Salesルート許可の削除申請を送信しました');
+        return redirect()->route('work.accounts.permissions', $id)->with('status', 'Salesルート許可の削除申請を送信しました');
     }
 
     private function isValidUriPattern(string $pattern): bool
@@ -554,13 +605,14 @@ final class AccountController extends Controller
                 ->where('g.account_id', $accountId)
                 ->where('g.effect', 'allow')
                 ->where('c.active', true)
-                ->groupBy('c.id', 'c.http_method', 'c.uri_pattern')
+                ->groupBy('c.id', 'c.http_method', 'c.uri_pattern', 'c.label')
                 ->orderBy('c.http_method')
                 ->orderBy('c.uri_pattern')
                 ->select([
                     'c.id as permission_catalog_id',
                     'c.http_method',
                     'c.uri_pattern',
+                    'c.label',
                     DB::raw('count(*) as grant_count'),
                     DB::raw('sum(case when g.active then 1 else 0 end) as active_count'),
                     DB::raw("coalesce(max(g.memo), '') as memo_sample"),
@@ -574,6 +626,7 @@ final class AccountController extends Controller
                 'id' => (int)$row->permission_catalog_id,
                 'http_method' => (string)$row->http_method,
                 'uri_pattern' => (string)$row->uri_pattern,
+                'label' => trim((string)($row->label ?? '')) !== '' ? (string)$row->label : null,
                 'source' => $this->grantMemoSource((string)($row->memo_sample ?? '')),
                 'active' => (int)($row->active_count ?? 0) >= $salesUserCount,
                 'memo' => $memo,
@@ -712,7 +765,7 @@ final class AccountController extends Controller
     }
 
     /**
-     * @return array<int, array{account_id:int,permission_catalog_id:int,http_method:string,uri_pattern:string,source:string,active:bool,memo:?string}>
+     * @return array<int, array{account_id:int,permission_catalog_id:int,http_method:string,uri_pattern:string,label:?string,source:string,active:bool,memo:?string}>
      */
     private function snapshotAccountPermissionsForRequest(int $accountId): array
     {
@@ -728,13 +781,14 @@ final class AccountController extends Controller
             ->where('g.effect', 'allow')
             ->where('g.account_id', $accountId)
             ->where('c.active', true)
-            ->groupBy('c.id', 'c.http_method', 'c.uri_pattern')
+            ->groupBy('c.id', 'c.http_method', 'c.uri_pattern', 'c.label')
             ->orderBy('c.http_method')
             ->orderBy('c.uri_pattern')
             ->select([
                 'c.id as permission_catalog_id',
                 'c.http_method',
                 'c.uri_pattern',
+                'c.label',
                 DB::raw('sum(case when g.active then 1 else 0 end) as active_count'),
                 DB::raw("coalesce(max(g.memo), '') as memo_sample"),
             ])
@@ -748,6 +802,7 @@ final class AccountController extends Controller
                 'permission_catalog_id' => (int)$row->permission_catalog_id,
                 'http_method' => strtoupper((string)$row->http_method),
                 'uri_pattern' => (string)$row->uri_pattern,
+                'label' => trim((string)($row->label ?? '')) !== '' ? (string)$row->label : null,
                 'source' => $this->grantMemoSource($memoSample),
                 'active' => (int)($row->active_count ?? 0) > 0,
                 'memo' => $this->stripGrantMemoSource($memoSample),
@@ -758,7 +813,7 @@ final class AccountController extends Controller
     }
 
     /**
-     * @return array{account_id:int,permission_catalog_id:int,http_method:string,uri_pattern:string,source:string,active:bool,memo:?string}|null
+     * @return array{account_id:int,permission_catalog_id:int,http_method:string,uri_pattern:string,label:?string,source:string,active:bool,memo:?string}|null
      */
     private function findAccountPermissionByCatalogId(int $accountId, int $catalogId): ?array
     {
@@ -779,11 +834,12 @@ final class AccountController extends Controller
             ->where('g.account_id', $accountId)
             ->where('g.permission_catalog_id', $catalogId)
             ->where('c.active', true)
-            ->groupBy('c.id', 'c.http_method', 'c.uri_pattern')
+            ->groupBy('c.id', 'c.http_method', 'c.uri_pattern', 'c.label')
             ->select([
                 'c.id as permission_catalog_id',
                 'c.http_method',
                 'c.uri_pattern',
+                'c.label',
                 DB::raw('sum(case when g.active then 1 else 0 end) as active_count'),
                 DB::raw("coalesce(max(g.memo), '') as memo_sample"),
             ])
@@ -798,6 +854,7 @@ final class AccountController extends Controller
             'permission_catalog_id' => (int)$row->permission_catalog_id,
             'http_method' => strtoupper((string)$row->http_method),
             'uri_pattern' => (string)$row->uri_pattern,
+            'label' => trim((string)($row->label ?? '')) !== '' ? (string)$row->label : null,
             'source' => $this->grantMemoSource($memoSample),
             'active' => (int)($row->active_count ?? 0) > 0,
             'memo' => $this->stripGrantMemoSource($memoSample),

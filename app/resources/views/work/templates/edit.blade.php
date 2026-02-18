@@ -43,7 +43,6 @@
             <tr>
                 <th>ID</th>
                 <th>バージョン</th>
-                <th>DSLバージョン</th>
                 <th>有効</th>
                 <th>メモ</th>
                 <th></th>
@@ -54,7 +53,6 @@
                 <tr>
                     <td>{{ $v->id }}</td>
                     <td>{{ $v->version }}</td>
-                    <td>{{ $v->dsl_version }}</td>
                     <td>{{ $v->active ? '有効' : '無効' }}</td>
                     <td>{{ $v->memo ?? '-' }}</td>
                     <td class="actions">
@@ -87,8 +85,8 @@
                 <input type="number" name="version" value="{{ old('version', $nextVersion) }}">
             </div>
             <div class="col">
-                <label>DSLバージョン</label>
-                <input type="text" name="dsl_version" value="{{ old('dsl_version', '0.2') }}">
+                <label>ルールフォーマット</label>
+                <input type="text" value="システム固定（0.2）" readonly>
             </div>
             <div class="col">
                 <label>有効</label>
@@ -98,7 +96,7 @@
             </div>
         </div>
         <div style="margin-top:8px;">
-            <label>dsl_json</label>
+            <label>ルール定義(JSON)</label>
             <textarea name="dsl_json">{{ old('dsl_json') }}</textarea>
         </div>
         <div style="margin-top:8px;">

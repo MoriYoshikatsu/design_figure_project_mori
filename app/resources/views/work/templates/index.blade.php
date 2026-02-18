@@ -84,7 +84,7 @@
                             @if(!empty($t->pending_operation))
                                 <span class="muted">申請中（{{ $t->pending_operation }}）</span>
                             @endif
-                            <a href="{{ route('work.templates.edit', $t->id) }}">編集</a>
+                            <a href="{{ route('work.templates.show', $t->id) }}">詳細</a>
                             <form method="POST" action="{{ route('work.templates.edit-request.delete', $t->id) }}">
                                 @csrf
                                 <input type="hidden" name="_mode" value="submit">

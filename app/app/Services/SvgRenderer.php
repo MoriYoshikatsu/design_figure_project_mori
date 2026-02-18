@@ -32,15 +32,15 @@ final class SvgRenderer
         $fiberCount = (int)($derived['fiberCount'] ?? ($mfdCount + 1));
         if ($fiberCount < 1) $fiberCount = 1;
 
-        // --- fiber長さ（mm）を取得（未入力はnull）
+        // --- fiber長さ（m）を取得（未入力はnull）
         $fiberLens = [];
         for ($i = 0; $i < $fiberCount; $i++) {
-            $len = $fibers[$i]['lengthMm'] ?? null;
+            $len = $this->extractLengthM($fibers[$i] ?? [], 'lengthM', 'lengthMm');
             $fiberLens[$i] = is_numeric($len) ? (float)$len : null;
         }
 
-        // 未入力がある場合もSVGが崩れないように、暫定で1区間100mm相当を割り当て
-        $fallbackPerSeg = 100.0;
+        // 未入力がある場合もSVGが崩れないように、暫定で1区間0.1m相当を割り当て
+        $fallbackPerSeg = 0.1;
 
         // 実長（actual）と表示用（display）の長さを分ける
         $actualSegmentLens = [];
@@ -58,14 +58,20 @@ final class SvgRenderer
             }
         }
 
-        $totalLen = (float)($derived['totalLengthMm'] ?? array_sum($displaySegmentLens));
+        $totalLen = (float)($derived['totalLengthM'] ?? 0);
+        if ($totalLen <= 0 && is_numeric($derived['totalLengthMm'] ?? null)) {
+            $totalLen = (float)$derived['totalLengthMm'] / 1000;
+        }
+        if ($totalLen <= 0) {
+            $totalLen = array_sum($displaySegmentLens);
+        }
         if ($totalLen <= 0) $totalLen = array_sum($displaySegmentLens);
 
-        // --- 区間の開始/終了（mm）と MFDマーカー（display mm）を計算
+        // --- 区間の開始/終了（m）と MFDマーカー（display m）を計算
         $segStart = [];
         $segEnd   = [];
-        $mfdPos   = []; // MFD[k]の位置（display mm）
-        $mfdActualPos = []; // MFD[k]の位置（actual mm）
+        $mfdPos   = []; // MFD[k]の位置（display m）
+        $mfdActualPos = []; // MFD[k]の位置（actual m）
 
         $actualStart = [];
         $actualEnd   = [];
@@ -86,20 +92,20 @@ final class SvgRenderer
             $segStart[$i] = $displayStart[$i];
             $segEnd[$i] = $displayEnd[$i];
 
-            // MFD[k] は fiber[k] の終端（actual mm）
+            // MFD[k] は fiber[k] の終端（actual m）
             if ($i < $mfdCount) {
                 $mfdActualPos[$i] = $actualEnd[$i];
             }
         }
 
-        $mapMm = function (float $mm) use ($fiberCount, $actualStart, $actualEnd, $displayStart, $displayEnd, $actualSegmentLens, $displaySegmentLens): float {
-            if ($mm <= 0) return 0.0;
+        $mapM = function (float $m) use ($fiberCount, $actualStart, $actualEnd, $displayStart, $displayEnd, $actualSegmentLens, $displaySegmentLens): float {
+            if ($m <= 0) return 0.0;
             for ($i = 0; $i < $fiberCount; $i++) {
-                if ($mm <= $actualEnd[$i]) {
+                if ($m <= $actualEnd[$i]) {
                     $segActual = $actualSegmentLens[$i] ?: 1.0;
                     $segDisplay = $displaySegmentLens[$i] ?: 1.0;
                     $ratio = $segDisplay / $segActual;
-                    return $displayStart[$i] + ($mm - $actualStart[$i]) * $ratio;
+                    return $displayStart[$i] + ($m - $actualStart[$i]) * $ratio;
                 }
             }
             return $displayEnd[$fiberCount - 1] ?? 0.0;
@@ -107,7 +113,7 @@ final class SvgRenderer
 
         for ($k = 0; $k < $mfdCount; $k++) {
             if (!array_key_exists($k, $mfdActualPos)) continue;
-            $mfdPos[$k] = $mapMm((float)$mfdActualPos[$k]);
+            $mfdPos[$k] = $mapM((float)$mfdActualPos[$k]);
         }
 
         // --- SVGレイアウト（px）
@@ -224,9 +230,9 @@ final class SvgRenderer
                 $svg[] = $this->arrowHead($x, $dimY, true);
                 $svg[] = $this->arrowHead($x + $w, $dimY, false);
                 $segLen = $actualSegmentLens[$i] ?? null;
-                $tolMm = $fibers[$i]['toleranceMm'] ?? null;
-                $tolTxt = (is_numeric($tolMm)) ? ' ± '.$tolMm.'mm' : '';
-                $svg[] = '<text x="'.($x + $w / 2).'" y="'.($dimY + 12).'" class="small" text-anchor="middle">'. $esc(($segLen !== null ? $segLen : '?').'mm'.$tolTxt) .'</text>';
+                $tolM = $this->extractLengthM($fibers[$i] ?? [], 'toleranceM', 'toleranceMm');
+                $tolTxt = (is_numeric($tolM)) ? ' ± '.$tolM.'m' : '';
+                $svg[] = '<text x="'.($x + $w / 2).'" y="'.($dimY + 12).'" class="small" text-anchor="middle">'. $esc(($segLen !== null ? $segLen : '?').'m'.$tolTxt) .'</text>';
             }
 
             if (!empty($segmentIllustrations[$i])) {
@@ -259,23 +265,23 @@ final class SvgRenderer
             $segActualLen = $actualSegmentLens[$targetIdx] ?? 0.0;
             $segDisplayLen = $displaySegmentLens[$targetIdx] ?? 0.0;
             $ratio = ($segActualLen > 0) ? ($segDisplayLen / $segActualLen) : 0.0;
-            $startMm = 0.0;
+            $startM = 0.0;
 
-            $offsetMm = is_numeric($tubes[$j]['startOffsetMm'] ?? null) ? (float)$tubes[$j]['startOffsetMm'] : 0.0;
-            $lenMm = is_numeric($tubes[$j]['lengthMm'] ?? null) ? (float)$tubes[$j]['lengthMm'] : 0.0;
+            $offsetM = $this->extractLengthM($tubes[$j] ?? [], 'startOffsetM', 'startOffsetMm') ?? 0.0;
+            $lenM = $this->extractLengthM($tubes[$j] ?? [], 'lengthM', 'lengthMm') ?? 0.0;
 
             // 新方式: start/end ファイバ指定があればそれを優先
             $startFiberIdx = is_numeric($tubes[$j]['startFiberIndex'] ?? null) ? (int)$tubes[$j]['startFiberIndex'] : null;
             $endFiberIdx = is_numeric($tubes[$j]['endFiberIndex'] ?? null) ? (int)$tubes[$j]['endFiberIndex'] : null;
-            $endOffsetMm = is_numeric($tubes[$j]['endOffsetMm'] ?? null) ? (float)$tubes[$j]['endOffsetMm'] : null;
+            $endOffsetM = $this->extractLengthM($tubes[$j] ?? [], 'endOffsetM', 'endOffsetMm');
 
-            if ($startFiberIdx !== null && $endFiberIdx !== null && $endOffsetMm !== null
+            if ($startFiberIdx !== null && $endFiberIdx !== null && $endOffsetM !== null
                 && $startFiberIdx >= 0 && $startFiberIdx < $fiberCount
                 && $endFiberIdx >= 0 && $endFiberIdx < $fiberCount) {
                 $startSegLen = $actualSegmentLens[$startFiberIdx] ?? 0.0;
                 $endSegLen = $actualSegmentLens[$endFiberIdx] ?? 0.0;
-                $startOffset = max(0.0, min($startSegLen, $offsetMm));
-                $endOffset = max(0.0, min($endSegLen, $endOffsetMm));
+                $startOffset = max(0.0, min($startSegLen, $offsetM));
+                $endOffset = max(0.0, min($endSegLen, $endOffsetM));
 
                 $startActual = ($actualStart[$startFiberIdx] ?? 0.0) + $startOffset;
                 $endActual = ($actualStart[$endFiberIdx] ?? 0.0) + $endOffset;
@@ -285,22 +291,22 @@ final class SvgRenderer
                     $startActual = $tmp;
                 }
 
-                $startDisplay = $mapMm($startActual);
-                $endDisplay = $mapMm($endActual);
+                $startDisplay = $mapM($startActual);
+                $endDisplay = $mapM($endActual);
 
                 $x = $margin + $startDisplay * $scale;
                 $w = max(1.0, ($endDisplay - $startDisplay) * $scale);
-                $lenMm = max(0.0, $endActual - $startActual);
+                $lenM = max(0.0, $endActual - $startActual);
                 $targetIdx = $startFiberIdx;
-                $startMm = $startOffset;
+                $startM = $startOffset;
                 $segActualLen = $actualSegmentLens[$targetIdx] ?? 0.0;
                 $segDisplayLen = $displaySegmentLens[$targetIdx] ?? 0.0;
                 $ratio = ($segActualLen > 0) ? ($segDisplayLen / $segActualLen) : 0.0;
             } else {
-                $startMm = max(0.0, min($segActualLen, $offsetMm));
-                $endMm = max($startMm, min($segActualLen, $startMm + max(0.0, $lenMm)));
-                $x = $margin + ($segStart[$targetIdx] + ($startMm * $ratio)) * $scale;
-                $w = max(1.0, ($endMm - $startMm) * $ratio * $scale);
+                $startM = max(0.0, min($segActualLen, $offsetM));
+                $endM = max($startM, min($segActualLen, $startM + max(0.0, $lenM)));
+                $x = $margin + ($segStart[$targetIdx] + ($startM * $ratio)) * $scale;
+                $w = max(1.0, ($endM - $startM) * $ratio * $scale);
             }
             $y = $tubeY;
 
@@ -321,19 +327,19 @@ final class SvgRenderer
                 $svg[] = '<line x1="'.$x.'" y1="'.$dimY.'" x2="'.($x+$w).'" y2="'.$dimY.'" class="dim" />';
                 $svg[] = $this->arrowHead($x, $dimY, true);
                 $svg[] = $this->arrowHead($x + $w, $dimY, false);
-                $tolMm = $tubes[$j]['toleranceMm'] ?? null;
-                $tolTxt = (is_numeric($tolMm)) ? ' ± '.$tolMm.'mm' : '';
-                $svg[] = '<text x="'.($x + $w / 2).'" y="'.($dimY - 4).'" class="small" text-anchor="middle">'. $esc($lenMm.'mm'.$tolTxt) .'</text>';
+                $tolM = $this->extractLengthM($tubes[$j] ?? [], 'toleranceM', 'toleranceMm');
+                $tolTxt = (is_numeric($tolM)) ? ' ± '.$tolM.'m' : '';
+                $svg[] = '<text x="'.($x + $w / 2).'" y="'.($dimY - 4).'" class="small" text-anchor="middle">'. $esc($lenM.'m'.$tolTxt) .'</text>';
 
                 // 左端開始距離（ファイバ左端→チューブ左端）
-                if ($offsetMm > 0) {
+                if ($offsetM > 0) {
                     $segX = $margin + $segStart[$targetIdx] * $scale;
-                    $offsetW = max(1.0, $startMm * $ratio * $scale);
+                    $offsetW = max(1.0, $startM * $ratio * $scale);
                     $offsetY = $aboveOffsetDimY;
                     $svg[] = '<line x1="'.$segX.'" y1="'.$offsetY.'" x2="'.($segX + $offsetW).'" y2="'.$offsetY.'" class="dim" />';
                     $svg[] = $this->arrowHead($segX, $offsetY, true);
                     $svg[] = $this->arrowHead($segX + $offsetW, $offsetY, false);
-                    $svg[] = '<text x="'.($segX + $offsetW / 2).'" y="'.($offsetY - 4).'" class="small" text-anchor="middle">'. $esc($offsetMm.'mm') .'</text>';
+                    $svg[] = '<text x="'.($segX + $offsetW / 2).'" y="'.($offsetY - 4).'" class="small" text-anchor="middle">'. $esc($offsetM.'m') .'</text>';
                 }
             }
 
@@ -349,10 +355,10 @@ final class SvgRenderer
 
         // --- MFDマーカー
         for ($k = 0; $k < $mfdCount; $k++) {
-            $mm = $mfdPos[$k] ?? null;
-            if ($mm === null) continue;
+            $m = $mfdPos[$k] ?? null;
+            if ($m === null) continue;
 
-            $x = $margin + $mm * $scale;
+            $x = $margin + $m * $scale;
             $cls = 'marker'.($targets['mfd'] ? ' err' : '');
             $svg[] = '<line x1="'.$x.'" y1="'.($axisY-36).'" x2="'.$x.'" y2="'.($axisY+36).'" class="'.$cls.'" id="mfd-'.$k.'" data-path="mfd.'.$k.'" stroke-dasharray="4 4" stroke="#9ca3af" opacity="0.7" />';
             $sleeveCode = $sleeves[$k]['skuCode'] ?? null;
@@ -432,6 +438,21 @@ final class SvgRenderer
         }
         $points = $p1.','.$y.' '.$p2.','.($y - $half).' '.$p2.','.($y + $half);
         return '<polygon points="'.$points.'" fill="#111827" />';
+    }
+
+    private function extractLengthM(array $row, string $primaryKey, string $legacyKey): ?float
+    {
+        $value = $row[$primaryKey] ?? null;
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+
+        $legacyValue = $row[$legacyKey] ?? null;
+        if (is_numeric($legacyValue)) {
+            return (float)$legacyValue / 1000;
+        }
+
+        return null;
     }
 
     /**

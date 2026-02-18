@@ -13,8 +13,8 @@
                 <input type="number" name="version" value="{{ old('version', $version->version) }}">
             </div>
             <div class="col">
-                <label>DSLバージョン</label>
-                <input type="text" name="dsl_version" value="{{ old('dsl_version', $version->dsl_version) }}">
+                <label>ルールフォーマット</label>
+                <input type="text" value="システム固定（{{ $version->dsl_version ?: '0.2' }}）" readonly>
             </div>
             <div class="col">
                 <label>有効</label>
@@ -24,7 +24,7 @@
             </div>
         </div>
         <div style="margin-top:8px;">
-            <label>dsl_json</label>
+            <label>ルール定義(JSON)</label>
             <textarea name="dsl_json">{{ old('dsl_json', $dslJson) }}</textarea>
         </div>
         <div style="margin-top:8px;">

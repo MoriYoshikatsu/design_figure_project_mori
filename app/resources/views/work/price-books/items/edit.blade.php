@@ -21,7 +21,7 @@
             <div class="col">
                 <label>価格モデル</label>
                 <select name="pricing_model">
-                    @foreach(['FIXED','PER_MM','FORMULA'] as $m)
+                    @foreach(['FIXED','PER_M','FORMULA'] as $m)
                         <option value="{{ $m }}" @if($item->pricing_model === $m) selected @endif>{{ $m }}</option>
                     @endforeach
                 </select>
@@ -37,8 +37,8 @@
                 <input type="number" step="0.01" name="unit_price" value="{{ old('unit_price', $item->unit_price) }}">
             </div>
             <div class="col">
-                <label>mm単価</label>
-                <input type="number" step="0.0001" name="price_per_mm" value="{{ old('price_per_mm', $item->price_per_mm) }}">
+                <label>m単価</label>
+                <input type="number" step="0.0001" name="price_per_m" value="{{ old('price_per_m', $item->price_per_m) }}">
             </div>
         </div>
         <div style="margin-top:8px;">

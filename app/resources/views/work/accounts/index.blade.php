@@ -56,7 +56,7 @@
 
     @if(($canCreateAccount ?? false) === true)
         <details style="margin:12px 0;">
-            <summary>アカウント新規作成（申請）</summary>
+            <summary>アカウント・ユーザー新規登録申請</summary>
             <form method="POST" action="{{ route('work.accounts.edit-request.create') }}" style="margin-top:8px;">
                 @csrf
                 <div class="row">
@@ -69,6 +69,18 @@
                         </select>
                     </div>
                     <div class="col">
+                        <label>登録ユーザー名</label>
+                        <input type="text" name="user_name" value="{{ old('user_name') }}" placeholder="例: 山田 太郎" required>
+                    </div>
+                    <div class="col">
+                        <label>登録メールアドレス</label>
+                        <input type="email" name="user_email" value="{{ old('user_email') }}" placeholder="例: user@example.com" required>
+                    </div>
+                    <div class="col">
+                        <label>登録パスワード</label>
+                        <input type="password" name="user_password" autocomplete="new-password" required>
+                    </div>
+                    <div class="col">
                         <label>アカウント表示名</label>
                         <input type="text" name="internal_name" value="{{ old('internal_name') }}" placeholder="例: 株式会社サンプル">
                     </div>
@@ -76,16 +88,16 @@
                         <label>担当者名</label>
                         <input type="text" name="assignee_name" value="{{ old('assignee_name') }}" placeholder="例: 山田 太郎">
                     </div>
+                    <div class="actions" style="margin-top:8px;">
+                        <button type="submit">登録申請を送信</button>
+                    </div>
                 </div>
-                <div class="row" style="margin-top:8px;">
+                {{-- <div class="row" style="margin-top:8px;">
                     <div class="col">
                         <label>メモ</label>
                         <textarea name="memo" rows="2">{{ old('memo') }}</textarea>
                     </div>
-                </div>
-                <div class="actions" style="margin-top:8px;">
-                    <button type="submit">作成申請を送信</button>
-                </div>
+                </div> --}}
             </form>
         </details>
     @endif
@@ -96,9 +108,10 @@
                 <th>ID</th>
                 <th>アカウント表示名</th>
                 <th>ユーザー登録名</th>
+                <th>登録メールアドレス</th>
+                <th>担当者</th>
                 <th>権限区分</th>
                 <th>許可route</th>
-                <th>担当者</th>
                 <th>メモ</th>
                 <th>作成日</th>
                 <th>更新日</th>
@@ -115,12 +128,13 @@
                     <td>{{ $a->id }}</td>
                     <td>{{ $display }}</td>
                     <td>{{ $fallbackUserName ?: '-' }}</td>
+                    <td>{{ $a->account_emails ?: '-' }}</td>
+                    <td>{{ $a->assignee_name ?? '-' }}</td>
                     <td>
                         <div>{{ $a->role_list ?: '未設定' }}</div>
                         {{-- <div class="muted">{{ $a->member_summary ?? '-' }}</div> --}}
                     </td>
                     <td style="white-space:pre-line;">{{ $a->route_access_summary ?? '-' }}</td>
-                    <td>{{ $a->assignee_name ?? '-' }}</td>
                     <td>{{ $a->memo ?? '-' }}</td>
                     <td>{{ $a->created_at }}</td>
                     <td>{{ $a->updated_at }}</td>

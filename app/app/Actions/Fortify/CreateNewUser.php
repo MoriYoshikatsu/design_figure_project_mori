@@ -82,14 +82,23 @@ class CreateNewUser implements CreatesNewUsers
                 continue;
             }
 
+            $currentAccount = DB::table('accounts')
+                ->where('id', $accountId)
+                ->lockForUpdate()
+                ->first(['internal_name']);
+
+            $updatePayload = [
+                'account_type' => 'B2C',
+                'memo' => DB::raw("case when memo = 'GUEST_TEMP' then null else memo end"),
+                'updated_at' => now(),
+            ];
+            if (($currentAccount->internal_name ?? null) === null) {
+                $updatePayload['internal_name'] = trim($userName) !== '' ? $userName : null;
+            }
+
             DB::table('accounts')
                 ->where('id', $accountId)
-                ->update([
-                    'account_type' => 'B2C',
-                    'internal_name' => trim($userName) !== '' ? $userName : null,
-                    'memo' => DB::raw("case when memo = 'GUEST_TEMP' then null else memo end"),
-                    'updated_at' => now(),
-                ]);
+                ->update($updatePayload);
 
             DB::table('account_user')->insert([
                 'account_id' => $accountId,

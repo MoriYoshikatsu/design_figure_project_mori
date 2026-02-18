@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 final class WorkChangeRequestApplier
 {
@@ -50,9 +52,44 @@ final class WorkChangeRequestApplier
                 'updated_at' => now(),
             ]);
 
-            if ($requestedBy > 0 && DB::table('users')->where('id', $requestedBy)->exists()) {
+            $linkedUserId = 0;
+            $userName = trim((string)($after['user_name'] ?? ''));
+            $userEmail = strtolower(trim((string)($after['user_email'] ?? '')));
+            $userPasswordHash = (string)($after['user_password_hash'] ?? '');
+
+            if ($userName !== '' && $userEmail !== '' && $userPasswordHash !== '') {
+                $existingUserId = (int)DB::table('users')
+                    ->whereRaw('lower(email) = ?', [$userEmail])
+                    ->value('id');
+
+                if ($existingUserId > 0) {
+                    $linkedUserId = $existingUserId;
+                } else {
+                    if (
+                        !str_starts_with($userPasswordHash, '$2y$')
+                        && !str_starts_with($userPasswordHash, '$argon2i$')
+                        && !str_starts_with($userPasswordHash, '$argon2id$')
+                    ) {
+                        $userPasswordHash = Hash::make($userPasswordHash);
+                    }
+
+                    $linkedUserId = (int)DB::table('users')->insertGetId([
+                        'name' => $userName,
+                        'email' => $userEmail,
+                        'password' => $userPasswordHash,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            if ($linkedUserId <= 0 && $requestedBy > 0 && DB::table('users')->where('id', $requestedBy)->exists()) {
+                $linkedUserId = $requestedBy;
+            }
+
+            if ($linkedUserId > 0) {
                 DB::table('account_user')->updateOrInsert(
-                    ['account_id' => $id, 'user_id' => $requestedBy],
+                    ['account_id' => $id, 'user_id' => $linkedUserId],
                     [
                         'role' => $role,
                         'updated_at' => now(),
@@ -61,7 +98,9 @@ final class WorkChangeRequestApplier
                 );
             }
 
-            $this->auditLogger->log($actorId, 'ACCOUNT_CREATED', 'account', $id, null, $after);
+            $auditAfter = $after;
+            unset($auditAfter['user_password_hash']);
+            $this->auditLogger->log($actorId, 'ACCOUNT_CREATED', 'account', $id, null, $auditAfter);
             return $id;
         }
 
@@ -96,18 +135,30 @@ final class WorkChangeRequestApplier
         }
 
         if ($entityType === 'price_book_item') {
-            $id = (int)DB::table('price_book_items')->insertGetId([
+            $pricingModel = $this->normalizePricingModel((string)($after['pricing_model'] ?? 'FIXED'));
+            $hasPricePerM = Schema::hasColumn('price_book_items', 'price_per_m');
+            if (!$hasPricePerM && $pricingModel === 'PER_M') {
+                $pricingModel = 'PER_MM';
+            }
+
+            $insert = [
                 'price_book_id' => (int)($after['price_book_id'] ?? 0),
                 'sku_id' => (int)($after['sku_id'] ?? 0),
-                'pricing_model' => $after['pricing_model'] ?? 'FIXED',
+                'pricing_model' => $pricingModel,
                 'unit_price' => $after['unit_price'] ?? null,
-                'price_per_mm' => $after['price_per_mm'] ?? null,
                 'formula' => !empty($after['formula']) ? json_encode($after['formula'], JSON_UNESCAPED_UNICODE) : null,
                 'min_qty' => $after['min_qty'] ?? 1,
                 'memo' => $after['memo'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+            if ($hasPricePerM) {
+                $insert['price_per_m'] = $this->resolvePricePerM($after);
+            } else {
+                $insert['price_per_mm'] = $this->resolvePricePerMm($after);
+            }
+
+            $id = (int)DB::table('price_book_items')->insertGetId($insert);
             $this->auditLogger->log($actorId, 'PRICE_BOOK_ITEM_CREATED', 'price_book_item', $id, null, $after);
             return $id;
         }
@@ -284,16 +335,28 @@ final class WorkChangeRequestApplier
         }
 
         if ($entityType === 'price_book_item') {
-            DB::table('price_book_items')->whereNull('deleted_at')->where('id', $entityId)->update([
+            $pricingModel = $this->normalizePricingModel((string)($after['pricing_model'] ?? 'FIXED'));
+            $hasPricePerM = Schema::hasColumn('price_book_items', 'price_per_m');
+            if (!$hasPricePerM && $pricingModel === 'PER_M') {
+                $pricingModel = 'PER_MM';
+            }
+
+            $update = [
                 'sku_id' => (int)($after['sku_id'] ?? 0),
-                'pricing_model' => $after['pricing_model'] ?? 'FIXED',
+                'pricing_model' => $pricingModel,
                 'unit_price' => $after['unit_price'] ?? null,
-                'price_per_mm' => $after['price_per_mm'] ?? null,
                 'formula' => !empty($after['formula']) ? json_encode($after['formula'], JSON_UNESCAPED_UNICODE) : null,
                 'min_qty' => $after['min_qty'] ?? 1,
                 'memo' => $after['memo'] ?? null,
                 'updated_at' => now(),
-            ]);
+            ];
+            if ($hasPricePerM) {
+                $update['price_per_m'] = $this->resolvePricePerM($after);
+            } else {
+                $update['price_per_mm'] = $this->resolvePricePerMm($after);
+            }
+
+            DB::table('price_book_items')->whereNull('deleted_at')->where('id', $entityId)->update($update);
             $this->auditLogger->log($actorId, 'PRICE_BOOK_ITEM_UPDATED', 'price_book_item', $entityId, $before, $after);
             return $entityId;
         }
@@ -424,6 +487,42 @@ final class WorkChangeRequestApplier
         return $entityId;
     }
 
+    private function normalizePricingModel(string $model): string
+    {
+        $normalized = strtoupper(trim($model));
+        if ($normalized === 'PER_MM') {
+            return 'PER_M';
+        }
+
+        return $normalized !== '' ? $normalized : 'FIXED';
+    }
+
+    private function resolvePricePerM(array $row): ?float
+    {
+        $value = $row['price_per_m'] ?? null;
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+
+        $legacyValue = $row['price_per_mm'] ?? null;
+        if (is_numeric($legacyValue)) {
+            return (float)$legacyValue * 1000;
+        }
+
+        return null;
+    }
+
+    private function resolvePricePerMm(array $row): ?float
+    {
+        $legacyValue = $row['price_per_mm'] ?? null;
+        if (is_numeric($legacyValue)) {
+            return (float)$legacyValue;
+        }
+
+        $perM = $this->resolvePricePerM($row);
+        return $perM !== null ? ($perM / 1000) : null;
+    }
+
     private function applyAccountScopedPermission(array $after, int $actorId): int
     {
         $accountId = (int)($after['account_id'] ?? 0);
@@ -437,7 +536,12 @@ final class WorkChangeRequestApplier
             return 0;
         }
 
-        $catalogId = $this->ensurePermissionCatalog($method, $pattern);
+        $catalogId = $this->upsertPermissionCatalog(
+            (int)($after['permission_catalog_id'] ?? 0),
+            $method,
+            $pattern,
+            $after['label'] ?? null
+        );
         if ($catalogId <= 0) {
             return 0;
         }
@@ -454,7 +558,7 @@ final class WorkChangeRequestApplier
         return $catalogId;
     }
 
-    private function ensurePermissionCatalog(string $method, string $pattern): int
+    private function upsertPermissionCatalog(int $catalogId, string $method, string $pattern, mixed $label = null): int
     {
         $method = strtoupper(trim($method));
         $pattern = $this->normalizePermissionPattern($pattern);
@@ -462,23 +566,80 @@ final class WorkChangeRequestApplier
             return 0;
         }
 
-        $key = strtolower($method . ':' . $pattern);
-        DB::table('work_permission_catalog')->updateOrInsert(
-            ['permission_key' => $key],
-            [
+        $normalizedLabel = trim((string)$label);
+        $permissionKey = strtolower($method . ':' . $pattern);
+
+        if ($catalogId > 0) {
+            $exists = DB::table('work_permission_catalog')
+                ->where('id', $catalogId)
+                ->exists();
+            if ($exists) {
+                $duplicateId = (int)DB::table('work_permission_catalog')
+                    ->where('permission_key', $permissionKey)
+                    ->where('id', '!=', $catalogId)
+                    ->value('id');
+                if ($duplicateId > 0) {
+                    return $duplicateId;
+                }
+
+                $update = [
+                    'permission_key' => $permissionKey,
+                    'http_method' => $method,
+                    'uri_pattern' => $pattern,
+                    'active' => true,
+                    'updated_at' => now(),
+                ];
+                if ($normalizedLabel !== '') {
+                    $update['label'] = $normalizedLabel;
+                }
+
+                DB::table('work_permission_catalog')
+                    ->where('id', $catalogId)
+                    ->update($update);
+
+                return $catalogId;
+            }
+        }
+
+        $existingByKey = DB::table('work_permission_catalog')
+            ->where('permission_key', $permissionKey)
+            ->first(['id']);
+        if ($existingByKey) {
+            $update = [
                 'http_method' => $method,
                 'uri_pattern' => $pattern,
-                'label' => 'manual:' . $method . ' ' . $pattern,
-                'default_scope' => 'account',
                 'active' => true,
                 'updated_at' => now(),
-                'created_at' => now(),
-            ]
-        );
+            ];
+            if ($normalizedLabel !== '') {
+                $update['label'] = $normalizedLabel;
+            }
 
-        return (int)DB::table('work_permission_catalog')
-            ->where('permission_key', $key)
-            ->value('id');
+            DB::table('work_permission_catalog')
+                ->where('id', (int)$existingByKey->id)
+                ->update($update);
+            return (int)$existingByKey->id;
+        }
+
+        if ($normalizedLabel === '') {
+            $normalizedLabel = 'manual:' . $method . ' ' . $pattern;
+        }
+
+        return (int)DB::table('work_permission_catalog')->insertGetId([
+            'permission_key' => $permissionKey,
+            'http_method' => $method,
+            'uri_pattern' => $pattern,
+            'label' => $normalizedLabel,
+            'default_scope' => 'account',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function ensurePermissionCatalog(string $method, string $pattern): int
+    {
+        return $this->upsertPermissionCatalog(0, $method, $pattern);
     }
 
     private function upsertAccountPermissionGrantForSalesUsers(

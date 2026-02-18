@@ -95,6 +95,15 @@ final class WorkPermissionService
 
         $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
         $method = strtoupper($request->method());
+        $pathsToMatch = [$path];
+        if ($method === 'GET') {
+            if (preg_match('#^/work/price-books/\d+$#', $path)) {
+                $pathsToMatch[] = $path . '/edit';
+            }
+            if (preg_match('#^/work/templates/\d+$#', $path)) {
+                $pathsToMatch[] = $path . '/edit';
+            }
+        }
         $accountId = $this->resolveAccountContextId($request, $userId);
         $accountScopeIds = $accountId !== null
             ? [$accountId]
@@ -134,7 +143,14 @@ final class WorkPermissionService
             if (!$this->methodMatches($ruleMethod, $method)) {
                 continue;
             }
-            if (!$this->pathMatchesPattern($rulePattern, $path)) {
+            $matched = false;
+            foreach ($pathsToMatch as $candidatePath) {
+                if ($this->pathMatchesPattern($rulePattern, $candidatePath)) {
+                    $matched = true;
+                    break;
+                }
+            }
+            if (!$matched) {
                 continue;
             }
 

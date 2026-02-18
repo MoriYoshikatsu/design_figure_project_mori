@@ -1,16 +1,16 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>価格表管理</h1>
+    <h1>パーツ価格表 一覧</h1>
     <div class="actions" style="margin:8px 0;">
-        <a href="{{ route('work.price-books.create') }}">価格表作成</a>
+        <button type=button href="{{ route('work.price-books.create') }}">価格表作成</button>
     </div>
 
     <form method="GET" action="{{ route('work.price-books.index') }}" style="margin:12px 0;">
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / 名称 / 版 / 通貨 / メモ">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="名称/バージョン/メモ など">
             </div>
             <div class="col">
                 <label>通貨</label>
@@ -22,7 +22,7 @@
                 </select>
             </div>
             <div class="col">
-                <label>期間ステータス</label>
+                <label>有効期間状態</label>
                 <select name="period">
                     <option value="">すべて</option>
                     @foreach($periodOptions as $key => $label)
@@ -30,7 +30,7 @@
                     @endforeach
                 </select>
             </div>
-        </div>
+        {{-- </div>
         <div class="row" style="margin-top:8px;">
             <div class="col">
                 <label>バージョン（最小）</label>
@@ -66,7 +66,7 @@
             <div class="col">
                 <label>有効終了日（終了）</label>
                 <input type="date" name="valid_to_to" value="{{ $filters['valid_to_to'] ?? '' }}">
-            </div>
+            </div> --}}
             <div class="col">
                 <label>作成日（開始）</label>
                 <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
@@ -83,16 +83,13 @@
                 <label>更新日（終了）</label>
                 <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}">
             </div>
-        </div>
-        <div class="actions" style="margin-top:8px;">
-            <button type="submit">絞り込み</button>
-            <a href="{{ route('work.price-books.index') }}">クリア</a>
+            <div class="actions" style="margin-top:8px;">
+                <button type="submit">絞り込み</button>
+                <a href="{{ route('work.price-books.index') }}">クリア</a>
+                <div class="muted" style="margin:8px 0;">{{ count($books) }}件</div>
+            </div>
         </div>
     </form>
-
-    <div class="muted" style="margin:8px 0;">
-        表示件数: {{ count($books) }}件（最大200件）
-    </div>
 
     <table>
         <thead>
@@ -103,6 +100,8 @@
                 <th>通貨</th>
                 <th>有効期間</th>
                 <th>メモ</th>
+                <th>作成日</th>
+                <th>更新日</th>
                 <th></th>
             </tr>
         </thead>
@@ -115,6 +114,8 @@
                     <td>{{ $b->currency }}</td>
                     <td>{{ $b->valid_from }} ~ {{ $b->valid_to }}</td>
                     <td>{{ $b->memo ?? '-' }}</td>
+                    <td>{{ $b->created_at ?? '-' }}</td>
+                    <td>{{ $b->updated_at ?? '-' }}</td>
                     <td class="actions">
                         @if(!empty($b->is_pending_create))
                             <span class="muted">申請中（CREATE）</span>
@@ -122,7 +123,7 @@
                             @if(!empty($b->pending_operation))
                                 <span class="muted">申請中（{{ $b->pending_operation }}）</span>
                             @endif
-                            <a href="{{ route('work.price-books.edit', $b->id) }}">編集</a>
+                            <a href="{{ route('work.price-books.show', $b->id) }}">詳細</a>
                             <form method="POST" action="{{ route('work.price-books.edit-request.delete', $b->id) }}">
                                 @csrf
                                 <input type="hidden" name="_mode" value="submit">

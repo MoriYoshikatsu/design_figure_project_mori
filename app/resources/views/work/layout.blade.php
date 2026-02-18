@@ -129,11 +129,12 @@
         .account-actions a:hover,
         .account-actions button:hover { background: #f3f4f6; }
         .app-shell { flex: 1; min-width: 0; padding: 16px; }
+        h1 { margin: 0 0 12px; }
         table { border-collapse: collapse; width: 100%; }
         th, td { border: 1px solid #ddd; padding: 6px; }
         th { background: #f3f4f6; text-align: left; }
         input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; }
-        textarea { min-height: 140px; }
+        textarea { min-height: 56px; }
         .row { display: flex; gap: 12px; flex-wrap: wrap; }
         .col { flex: 1; }
         .muted { color: #6b7280; }
@@ -153,60 +154,65 @@
     </style>
 </head>
 <body>
+    @php
+        $showSidebar = \App\Support\RoleHelper::currentHasRole(['admin', 'sales']);
+    @endphp
     <div class="layout-root">
-        <aside class="sidebar">
-            <nav class="sidebar-nav">
-                <a href="{{ route('configurator') }}" class="sidebar-item @if(request()->routeIs('configurator')) is-active @endif" data-label="コンフィギュレータ">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5v4M12 17.5v4M4.2 7l3 1.7M16.8 15.3l3 1.7M4.2 17l3-1.7M16.8 8.7l3-1.7"/><circle cx="12" cy="12" r="4"/></svg>
-                </a>
-                <a href="{{ route('work.accounts.index') }}" class="sidebar-item @if(request()->routeIs('work.accounts.*')) is-active @endif" data-label="アカウント">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.2 3.6-5 7.5-5s6.7 1.8 7.5 5"/></svg>
-                </a>
-                <a href="{{ route('work.sessions.index') }}" class="sidebar-item @if(request()->routeIs('work.sessions.*')) is-active @endif" data-label="仕様書セッション">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-                </a>
-                <a href="{{ route('work.quotes.index') }}" class="sidebar-item @if(request()->routeIs('work.quotes.*')) is-active @endif" data-label="仕様書見積">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
-                </a>
-                <a href="{{ route('work.skus.index') }}" class="sidebar-item @if(request()->routeIs('work.skus.*')) is-active @endif" data-label="パーツ(SKU)">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/></svg>
-                </a>
-                <a href="{{ route('work.price-books.index') }}" class="sidebar-item @if(request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ価格表">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
-                </a>
-                <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 4 12l4 6M16 6l4 6-4 6M13.5 4l-3 16"/></svg>
-                </a>
-                <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="承認リクエスト">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v11h-15z"/><path d="M8 10.5h8M8 14.5h5"/><path d="m15.5 4 1.5 2"/></svg>
-                </a>
-                <a href="{{ route('work.audit-logs.index') }}" class="sidebar-item @if(request()->routeIs('work.audit-logs.*')) is-active @endif" data-label="監査ログ">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v7l4 2"/><circle cx="12" cy="12" r="8"/></svg>
-                </a>
-            </nav>
+        @if($showSidebar)
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <a href="{{ route('configurator') }}" class="sidebar-item @if(request()->routeIs('configurator')) is-active @endif" data-label="コンフィギュレータ">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5v4M12 17.5v4M4.2 7l3 1.7M16.8 15.3l3 1.7M4.2 17l3-1.7M16.8 8.7l3-1.7"/><circle cx="12" cy="12" r="4"/></svg>
+                    </a>
+                    <a href="{{ route('work.accounts.index') }}" class="sidebar-item @if(request()->routeIs('work.accounts.*')) is-active @endif" data-label="アカウント">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.2 3.6-5 7.5-5s6.7 1.8 7.5 5"/></svg>
+                    </a>
+                    <a href="{{ route('work.sessions.index') }}" class="sidebar-item @if(request()->routeIs('work.sessions.*')) is-active @endif" data-label="仕様書セッション">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                    </a>
+                    <a href="{{ route('work.quotes.index') }}" class="sidebar-item @if(request()->routeIs('work.quotes.*')) is-active @endif" data-label="仕様書見積">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+                    </a>
+                    <a href="{{ route('work.skus.index') }}" class="sidebar-item @if(request()->routeIs('work.skus.*')) is-active @endif" data-label="パーツ(SKU)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/></svg>
+                    </a>
+                    <a href="{{ route('work.price-books.index') }}" class="sidebar-item @if(request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ価格表">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+                    </a>
+                    <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 4 12l4 6M16 6l4 6-4 6M13.5 4l-3 16"/></svg>
+                    </a>
+                    <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="承認リクエスト">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v11h-15z"/><path d="M8 10.5h8M8 14.5h5"/><path d="m15.5 4 1.5 2"/></svg>
+                    </a>
+                    <a href="{{ route('work.audit-logs.index') }}" class="sidebar-item @if(request()->routeIs('work.audit-logs.*')) is-active @endif" data-label="監査ログ">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v7l4 2"/><circle cx="12" cy="12" r="8"/></svg>
+                    </a>
+                </nav>
 
-            @auth
-                @php $currentUser = auth()->user(); @endphp
-                <details class="account-menu">
-                    <summary class="sidebar-item sidebar-trigger" data-label="{{ $currentUser?->name ?? 'ユーザーメニュー' }}" aria-label="ユーザーメニューを開く">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-                    </summary>
-                    <div class="account-dropdown">
-                        <div class="account-meta">
-                            <strong>{{ $currentUser?->name ?? 'ユーザー' }}</strong>
-                            <div class="muted">{{ $currentUser?->email ?? '' }}</div>
+                @auth
+                    @php $currentUser = auth()->user(); @endphp
+                    <details class="account-menu">
+                        <summary class="sidebar-item sidebar-trigger" data-label="{{ $currentUser?->name ?? 'ユーザーメニュー' }}" aria-label="ユーザーメニューを開く">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                        </summary>
+                        <div class="account-dropdown">
+                            <div class="account-meta">
+                                <strong>{{ $currentUser?->name ?? 'ユーザー' }}</strong>
+                                <div class="muted">{{ $currentUser?->email ?? '' }}</div>
+                            </div>
+                            <div class="account-actions">
+                                <a href="{{ route('user.settings') }}">ユーザー設定</a>
+                                <form method="POST" action="{{ route('logout') }}">
+                                    @csrf
+                                    <button type="submit">ログアウト</button>
+                                </form>
+                            </div>
                         </div>
-                        <div class="account-actions">
-                            <a href="{{ route('user.settings') }}">ユーザー設定</a>
-                            <form method="POST" action="{{ route('logout') }}">
-                                @csrf
-                                <button type="submit">ログアウト</button>
-                            </form>
-                        </div>
-                    </div>
-                </details>
-            @endauth
-        </aside>
+                    </details>
+                @endauth
+            </aside>
+        @endif
 
         <main class="app-shell">
         @php

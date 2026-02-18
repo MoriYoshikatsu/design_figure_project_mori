@@ -12,6 +12,37 @@ use Throwable;
 
 final class Configurator extends Component
 {
+    /** @var array<string, string> */
+    private const SUMMARY_FIELD_LABELS = [
+        'quote_id' => '見積ID',
+        'status' => 'ステータス',
+        'account_internal_name' => 'accounts.internal_name',
+        'account_user_name' => 'users.name',
+        'assignee_name' => '担当者',
+        'customer_emails' => '登録メールアドレス',
+        'request_count' => '承認リクエスト件数',
+        'template_version_id' => 'ルールテンプレ',
+        'price_book_id' => '納品物価格表',
+        'subtotal' => '小計',
+        'tax' => '税',
+        'total' => '合計',
+    ];
+    /** @var array<int, string> */
+    private const SUMMARY_DEFAULT_FIELDS = [
+        'quote_id',
+        'status',
+        'account_internal_name',
+        'account_user_name',
+        'assignee_name',
+        'customer_emails',
+        'request_count',
+        'template_version_id',
+        'price_book_id',
+        'subtotal',
+        'tax',
+        'total',
+    ];
+
     public array $config = [];
     public array $derived = [];
     public array $errors = [];
@@ -25,9 +56,14 @@ final class Configurator extends Component
     public ?int $templateVersionId = null;
     public array $templateDsl = [];
     public ?int $quoteEditId = null;
+    public ?int $quoteAccountId = null;
     public ?array $initialConfig = null;
     public ?int $initialTemplateVersionId = null;
     public ?string $initialMemo = null;
+    public ?array $initialSummaryFields = null;
+    public ?array $initialSummaryFieldOptions = null;
+    public array $summaryFields = [];
+    public array $summaryFieldOptions = [];
     public ?string $memo = null;
     public bool $isSaving = false;      // 保存中フラグ
     public ?string $saveError = null;   // 保存失敗メッセージ（なければnull）
@@ -36,10 +72,21 @@ final class Configurator extends Component
     private float $lastSavedAt = 0.0;       // 最終保存時刻（秒）
     private float $saveIntervalSec = 1.0;   // 保存間隔（秒）
 
-    public function mount(?int $quoteEditId = null, ?array $initialConfig = null, ?int $initialTemplateVersionId = null, ?string $initialMemo = null): void
+    public function mount(
+        ?int $quoteEditId = null,
+        ?int $quoteAccountId = null,
+        ?array $initialConfig = null,
+        ?int $initialTemplateVersionId = null,
+        ?string $initialMemo = null,
+        ?array $initialSummaryFields = null,
+        ?array $summaryFieldOptions = null
+    ): void
     {
         if ($quoteEditId) {
             $this->quoteEditId = $quoteEditId;
+        }
+        if ($quoteAccountId) {
+            $this->quoteAccountId = $quoteAccountId;
         }
         if (is_array($initialConfig)) {
             $this->initialConfig = $initialConfig;
@@ -49,6 +96,41 @@ final class Configurator extends Component
         }
         if ($initialMemo !== null) {
             $this->initialMemo = $initialMemo;
+        }
+        if (is_array($initialSummaryFields)) {
+            $this->initialSummaryFields = $initialSummaryFields;
+        }
+        if (is_array($summaryFieldOptions)) {
+            $this->initialSummaryFieldOptions = $summaryFieldOptions;
+        }
+
+        $this->summaryFieldOptions = is_array($this->initialSummaryFieldOptions) && !empty($this->initialSummaryFieldOptions)
+            ? $this->initialSummaryFieldOptions
+            : self::SUMMARY_FIELD_LABELS;
+        $this->summaryFields = $this->normalizeSummaryFields(
+            is_array($this->initialSummaryFields) ? $this->initialSummaryFields : self::SUMMARY_DEFAULT_FIELDS
+        );
+
+        // 見積編集モードでは configurator_sessions を新規作成しない
+        if ($this->quoteEditId && is_array($this->initialConfig)) {
+            $this->sessionId = null;
+            $this->templateVersionOptions = $this->buildTemplateVersionOptions();
+            $templateVersionId = $this->initialTemplateVersionId ?: $this->ensureTemplateVersionId();
+            $this->templateVersionId = (int)$templateVersionId;
+            $this->templateDsl = $this->loadTemplateDsl((int)$templateVersionId) ?? [];
+            $this->config = $this->initialConfig;
+            $this->normalizeConfigUnitsToM();
+            $this->derived = [];
+            $this->errors = [];
+            $this->memo = $this->normalizeMemo($this->initialMemo);
+            $this->skuOptions = $this->buildSkuOptions();
+            $this->skuNameMap = $this->buildSkuNameMap();
+            $this->skuSvgMap = $this->buildSkuSvgMap();
+            $this->dirty = false;
+            $this->saveError = null;
+            $this->saveStatus = '';
+            $this->recompute(true);
+            return;
         }
 
         $cookieName = 'config_session_id';
@@ -123,6 +205,7 @@ final class Configurator extends Component
         $this->templateVersionId = (int)$session->template_version_id;
         $this->templateDsl = $this->loadTemplateDsl($this->templateVersionId) ?? [];
         $this->config = $session->config ?? $this->defaultConfig();
+        $this->normalizeConfigUnitsToM();
         $this->derived = $session->derived ?? [];
         $this->errors = $session->validation_errors ?? [];
         $this->memo = $session->memo;
@@ -165,9 +248,9 @@ final class Configurator extends Component
                 ['skuCode' => 'SLEEVE_RECOTE'],
             ],
             'fibers' => [
-                ['skuCode' => 'FIBER_SMF28', 'lengthMm' => 500, 'toleranceMm' => 5, 'toleranceAuto' => true],
-                ['skuCode' => 'FIBER_SMF28', 'lengthMm' => 300, 'toleranceMm' => 3, 'toleranceAuto' => true],
-                ['skuCode' => 'FIBER_SMF28', 'lengthMm' => 500, 'toleranceMm' => 5, 'toleranceAuto' => true],
+                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => 0.005, 'toleranceAuto' => true],
+                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.3, 'toleranceM' => 0.003, 'toleranceAuto' => true],
+                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => 0.005, 'toleranceAuto' => true],
             ],
             'tubeCount' => 1,
             'tubes' => [
@@ -176,9 +259,9 @@ final class Configurator extends Component
                     'anchor' => ['type' => 'MFD', 'index' => 0],
                     'startFiberIndex' => 0,
                     'endFiberIndex' => 0,
-                    'startOffsetMm' => 0,
-                    'endOffsetMm' => 200,
-                    'toleranceMm' => null,
+                    'startOffsetM' => 0,
+                    'endOffsetM' => 0.2,
+                    'toleranceM' => null,
                     'toleranceAuto' => true,
                 ],
             ],
@@ -384,11 +467,10 @@ final class Configurator extends Component
         $options = [];
         foreach ($rows as $r) {
             $label = sprintf(
-                '%s (%s) v%s / DSL %s',
+                '%s (%s) v%s',
                 (string)$r->template_name,
                 (string)$r->template_code,
-                (string)$r->version,
-                (string)$r->dsl_version
+                (string)$r->version
             );
             $options[] = [
                 'id' => (int)$r->id,
@@ -471,13 +553,15 @@ final class Configurator extends Component
         $this->dirty = true;
 
         if ($name === 'memo') {
-            $this->autoSaveIfDue();
+            if (!$this->quoteEditId) {
+                $this->autoSaveIfDue();
+            }
             return;
         }
 
         if (!str_starts_with($name, 'config.')) return;
 
-        if (str_contains($name, '.toleranceMm')) {
+        if (str_contains($name, '.toleranceM')) {
             $this->markToleranceAutoByPath($name, $value);
         }
 
@@ -485,7 +569,9 @@ final class Configurator extends Component
         $this->recompute($resizeArrays);
 
         // ついでに「一定間隔で自動保存」もここで（次章）
-        $this->autoSaveIfDue();
+        if (!$this->quoteEditId) {
+            $this->autoSaveIfDue();
+        }
     }
 
     public function saveNow(): void
@@ -570,18 +656,17 @@ final class Configurator extends Component
             ->first(['snapshot', 'memo']);
         $baseSnapshot = is_array($quoteRow?->snapshot) ? $quoteRow?->snapshot : json_decode((string)($quoteRow?->snapshot ?? ''), true);
         if (!is_array($baseSnapshot)) $baseSnapshot = [];
-        $nameSource = (string)($baseSnapshot['account_display_name_source'] ?? 'internal_name');
-        if (!in_array($nameSource, ['internal_name', 'user_name'], true)) {
-            $nameSource = 'internal_name';
-        }
-        $summaryFields = $baseSnapshot['summary_card_fields'] ?? [];
-        if (!is_array($summaryFields)) {
-            $summaryFields = [];
-        }
-        $snapshot['account_display_name_source'] = $nameSource;
+        $summaryFields = $this->normalizeSummaryFields($this->summaryFields);
+        $this->summaryFields = $summaryFields;
+        $baseSummaryFields = $this->normalizeSummaryFields(
+            is_array($baseSnapshot['summary_card_fields'] ?? null)
+                ? $baseSnapshot['summary_card_fields']
+                : self::SUMMARY_DEFAULT_FIELDS
+        );
+
         $snapshot['summary_card_fields'] = $summaryFields;
-        $baseSnapshot['account_display_name_source'] = $nameSource;
-        $baseSnapshot['summary_card_fields'] = $summaryFields;
+        $baseSnapshot['summary_card_fields'] = $baseSummaryFields;
+        unset($snapshot['account_display_name_source'], $baseSnapshot['account_display_name_source']);
         $baseSnapshot['memo'] = $this->normalizeMemo((string)($quoteRow?->memo ?? ''));
 
         app(WorkChangeRequestService::class)->queueUpdate(
@@ -620,6 +705,8 @@ final class Configurator extends Component
 
     private function recompute(bool $resizeArrays): void
     {
+        $this->normalizeConfigUnitsToM();
+
         // 1) derived（導出）
         $mfdCount = (int)($this->config['mfdCount'] ?? 1);
         $mfdCount = max(1, min(10, $mfdCount));      // 1..10 に丸める
@@ -632,7 +719,7 @@ final class Configurator extends Component
             // sleeves（MFD点ごと）
             $this->ensureArraySize('sleeves', $mfdCount, ['skuCode'=>null]);
 
-            $this->ensureArraySize('fibers', $fiberCount, ['skuCode'=>null,'lengthMm'=>null,'toleranceMm'=>null,'toleranceAuto'=>true]);
+            $this->ensureArraySize('fibers', $fiberCount, ['skuCode'=>null,'lengthM'=>null,'toleranceM'=>null,'toleranceAuto'=>true]);
 
             $tubeCount = (int)($this->config['tubeCount'] ?? 0);
             $tubeCount = max(0, min($tubeCount, $fiberCount));   // 0..fiberCount
@@ -644,10 +731,10 @@ final class Configurator extends Component
                 'targetFiberIndex'=>0,
                 'startFiberIndex'=>0,
                 'endFiberIndex'=>0,
-                'startOffsetMm'=>0,
-                'endOffsetMm'=>null,
-                'lengthMm'=>null,
-                'toleranceMm'=>null,
+                'startOffsetM'=>0,
+                'endOffsetM'=>null,
+                'lengthM'=>null,
+                'toleranceM'=>null,
                 'toleranceAuto'=>true,
             ]);
         }
@@ -662,24 +749,24 @@ final class Configurator extends Component
         $this->applyToleranceDefaultsToFibers();
         $this->applyToleranceDefaultsToTubes();
 
-        // 2.5.1) 旧フィールド互換（targetFiberIndex/lengthMm → start/end）
+        // 2.5.1) 旧フィールド互換（targetFiberIndex/lengthM → start/end）
         $this->migrateTubeStartEndFields();
 
-        // 2.6) totalLengthMm を計算（未入力は暫定100mmで計算）
+        // 2.6) totalLengthM を計算（未入力は暫定0.1mで計算）
         //      長すぎる区間は「表示用に上限を設ける」 + 挿絵で示す
-        $fallbackPerSeg = 100.0;
-        $segmentCapMm = 1200.0; // 要件に合わせて調整
+        $fallbackPerSeg = 0.1;
+        $segmentCapM = 1.2; // 要件に合わせて調整
         $displayLens = [];
         $segmentIllustrations = [];
 
         foreach (($this->config['fibers'] ?? []) as $i => $f) {
-            $len = $f['lengthMm'] ?? null;
+            $len = $f['lengthM'] ?? null;
             $actual = (is_numeric($len) && (float)$len > 0) ? (float)$len : $fallbackPerSeg;
-            $display = min($actual, $segmentCapMm);
+            $display = min($actual, $segmentCapM);
             $displayLens[$i] = $display;
 
-            if ($actual > $segmentCapMm) {
-                $segmentIllustrations[$i] = $this->makeSegmentIllustrationDataUrl($actual, $segmentCapMm);
+            if ($actual > $segmentCapM) {
+                $segmentIllustrations[$i] = $this->makeSegmentIllustrationDataUrl($actual, $segmentCapM);
             }
         }
 
@@ -693,8 +780,8 @@ final class Configurator extends Component
         $this->derived = array_merge($derived, [
             'displaySegmentLens' => $displayLens,
             'segmentIllustrations' => $segmentIllustrations,
-            'segmentLengthCapMm' => $segmentCapMm,
-            'totalLengthMm' => array_sum($displayLens),
+            'segmentLengthCapM' => $segmentCapM,
+            'totalLengthM' => array_sum($displayLens),
             'skuNameByCode' => $this->skuNameMap,
             'skuSvgByCode' => $this->skuSvgMap,
         ]);
@@ -708,7 +795,10 @@ final class Configurator extends Component
 
         /** @var \App\Services\PricingService $pricing */
         $pricing = app(\App\Services\PricingService::class);
-        $this->derived['pricing'] = $pricing->price($this->resolveAccountId(), $this->derived['bom'] ?? []);
+        $pricingAccountId = ($this->quoteEditId && $this->quoteAccountId)
+            ? (int)$this->quoteAccountId
+            : $this->resolveAccountId();
+        $this->derived['pricing'] = $pricing->price($pricingAccountId, $this->derived['bom'] ?? []);
 
         // 4) SVG生成（DIせず app() で解決するのが安定）
         /** @var SvgRenderer $renderer */
@@ -760,20 +850,26 @@ final class Configurator extends Component
         $this->config[$key] = $arr;
     }
 
-    private function autoTolerance(?float $lengthMm, float $rate = 0.01, int $minDefault = 1, int $min = 0, int $max = 20): ?int
+    private function autoTolerance(
+        ?float $lengthM,
+        float $rate = 0.01,
+        float $minDefault = 0.001,
+        float $min = 0.0,
+        float $max = 0.02
+    ): ?float
     {
-        if ($lengthMm === null || $lengthMm <= 0) return null;
+        if ($lengthM === null || $lengthM <= 0) return null;
 
-        $v = (int)ceil($lengthMm * $rate);
+        $v = $lengthM * $rate;
         if ($v < $minDefault) $v = $minDefault;
         if ($v < $min) $v = $min;
         if ($v > $max) $v = $max;
-        return $v;
+        return round($v, 6);
     }
 
-    private function makeSegmentIllustrationDataUrl(float $actualMm, float $capMm): string
+    private function makeSegmentIllustrationDataUrl(float $actualM, float $capM): string
     {
-        $label = 'LONG > ' . (int)round($capMm) . 'mm';
+        $label = 'LONG > ' . rtrim(rtrim(number_format($capM, 3, '.', ''), '0'), '.') . 'm';
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="22" viewBox="0 0 180 22">'
             . '<rect x="0" y="0" width="180" height="22" rx="3" fill="#fde68a" stroke="#92400e" stroke-width="1"/>'
             . '<path d="M6 11 H20 M26 11 H40 M46 11 H60 M66 11 H80 M86 11 H100 M106 11 H120 M126 11 H140 M146 11 H160 M166 11 H174" stroke="#92400e" stroke-width="2"/>'
@@ -797,17 +893,17 @@ final class Configurator extends Component
         if (!is_array($fibers)) return;
 
         foreach ($fibers as $i => $f) {
-            $tol = $f['toleranceMm'] ?? null;
+            $tol = $f['toleranceM'] ?? null;
             $auto = $f['toleranceAuto'] ?? true;
 
             // 手入力で固定されていないものだけ自動更新
             if ($auto === true) {
-                $len = $f['lengthMm'] ?? null;
+                $len = $f['lengthM'] ?? null;
                 $len = is_numeric($len) ? (float)$len : null;
 
                 $computed = $this->autoTolerance($len);
                 if ($computed !== null) {
-                    $fibers[$i]['toleranceMm'] = $computed;
+                    $fibers[$i]['toleranceM'] = $computed;
                     $fibers[$i]['toleranceAuto'] = true;
                 }
             }
@@ -822,16 +918,16 @@ final class Configurator extends Component
         if (!is_array($tubes)) return;
 
         foreach ($tubes as $j => $t) {
-            $tol = $t['toleranceMm'] ?? null;
+            $tol = $t['toleranceM'] ?? null;
             $auto = $t['toleranceAuto'] ?? true;
 
             if ($auto === true) {
-                $len = $t['lengthMm'] ?? null;
+                $len = $t['lengthM'] ?? null;
                 $len = is_numeric($len) ? (float)$len : null;
 
                 $computed = $this->autoTolerance($len);
                 if ($computed !== null) {
-                    $tubes[$j]['toleranceMm'] = $computed;
+                    $tubes[$j]['toleranceM'] = $computed;
                     $tubes[$j]['toleranceAuto'] = true;
                 }
             }
@@ -848,29 +944,96 @@ final class Configurator extends Component
         foreach ($tubes as $j => $t) {
             if (!is_array($t)) continue;
 
-            $hasStart = array_key_exists('startFiberIndex', $t) || array_key_exists('endFiberIndex', $t) || array_key_exists('endOffsetMm', $t);
+            $hasStart = array_key_exists('startFiberIndex', $t) || array_key_exists('endFiberIndex', $t) || array_key_exists('endOffsetM', $t);
             if ($hasStart) continue;
 
             $target = $t['targetFiberIndex'] ?? 0;
-            $startOffset = $t['startOffsetMm'] ?? 0;
-            $len = $t['lengthMm'] ?? null;
+            $startOffset = $t['startOffsetM'] ?? 0;
+            $len = $t['lengthM'] ?? null;
 
             $tubes[$j]['startFiberIndex'] = $target;
             $tubes[$j]['endFiberIndex'] = $target;
-            $tubes[$j]['startOffsetMm'] = $startOffset;
+            $tubes[$j]['startOffsetM'] = $startOffset;
             if (is_numeric($len)) {
-                $tubes[$j]['endOffsetMm'] = (float)$startOffset + (float)$len;
+                $tubes[$j]['endOffsetM'] = (float)$startOffset + (float)$len;
             }
         }
 
         $this->config['tubes'] = $tubes;
     }
 
+    private function normalizeConfigUnitsToM(): void
+    {
+        $fibers = $this->config['fibers'] ?? [];
+        if (is_array($fibers)) {
+            foreach ($fibers as $i => $fiber) {
+                if (!is_array($fiber)) {
+                    continue;
+                }
+
+                if (!array_key_exists('lengthM', $fiber)) {
+                    $lengthM = $this->extractLengthM($fiber, 'lengthM', 'lengthMm');
+                    if ($lengthM !== null) {
+                        $fibers[$i]['lengthM'] = $lengthM;
+                    }
+                }
+                if (!array_key_exists('toleranceM', $fiber)) {
+                    $toleranceM = $this->extractLengthM($fiber, 'toleranceM', 'toleranceMm');
+                    if ($toleranceM !== null) {
+                        $fibers[$i]['toleranceM'] = $toleranceM;
+                    }
+                }
+                unset($fibers[$i]['lengthMm'], $fibers[$i]['toleranceMm']);
+            }
+            $this->config['fibers'] = $fibers;
+        }
+
+        $tubes = $this->config['tubes'] ?? [];
+        if (is_array($tubes)) {
+            foreach ($tubes as $j => $tube) {
+                if (!is_array($tube)) {
+                    continue;
+                }
+
+                foreach ([
+                    ['new' => 'startOffsetM', 'old' => 'startOffsetMm'],
+                    ['new' => 'endOffsetM', 'old' => 'endOffsetMm'],
+                    ['new' => 'lengthM', 'old' => 'lengthMm'],
+                    ['new' => 'toleranceM', 'old' => 'toleranceMm'],
+                ] as $mapping) {
+                    if (!array_key_exists($mapping['new'], $tube)) {
+                        $valueM = $this->extractLengthM($tube, $mapping['new'], $mapping['old']);
+                        if ($valueM !== null) {
+                            $tubes[$j][$mapping['new']] = $valueM;
+                        }
+                    }
+                    unset($tubes[$j][$mapping['old']]);
+                }
+            }
+            $this->config['tubes'] = $tubes;
+        }
+    }
+
+    private function extractLengthM(array $row, string $primaryKey, string $legacyKey): ?float
+    {
+        $value = $row[$primaryKey] ?? null;
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+
+        $legacyValue = $row[$legacyKey] ?? null;
+        if (is_numeric($legacyValue)) {
+            return (float)$legacyValue / 1000;
+        }
+
+        return null;
+    }
+
     private function markToleranceAutoByPath(string $name, mixed $value): void
     {
         $isAuto = ($value === null || $value === '');
 
-        if (preg_match('/^config\.fibers\.(\d+)\.toleranceMm$/', $name, $m)) {
+        if (preg_match('/^config\.fibers\.(\d+)\.toleranceM$/', $name, $m)) {
             $idx = (int)$m[1];
             if (isset($this->config['fibers'][$idx])) {
                 $this->config['fibers'][$idx]['toleranceAuto'] = $isAuto;
@@ -878,7 +1041,7 @@ final class Configurator extends Component
             return;
         }
 
-        if (preg_match('/^config\.tubes\.(\d+)\.toleranceMm$/', $name, $m)) {
+        if (preg_match('/^config\.tubes\.(\d+)\.toleranceM$/', $name, $m)) {
             $idx = (int)$m[1];
             if (isset($this->config['tubes'][$idx])) {
                 $this->config['tubes'][$idx]['toleranceAuto'] = $isAuto;
@@ -905,7 +1068,7 @@ final class Configurator extends Component
             $errors[] = ['path' => 'fibers', 'message' => 'fibers配列の個数が不正です'];
         }
 
-        // チューブ開始位置（MFD基準±mm）
+        // チューブ開始位置（MFD基準±m）
         $errors = array_merge($errors, $this->validateTubesStartPosition($config));
 
         return $errors;
@@ -924,18 +1087,18 @@ final class Configurator extends Component
         $fiberCount = $mfdCount + 1;
 
         // fiber長さ（未入力に備えた暫定値）
-        $fallbackPerSeg = 100.0;
+        $fallbackPerSeg = 0.1;
         $fibers = $config['fibers'] ?? [];
         $segLens = [];
 
         for ($i = 0; $i < $fiberCount; $i++) {
-            $len = $fibers[$i]['lengthMm'] ?? null;
+            $len = $this->extractLengthM($fibers[$i] ?? [], 'lengthM', 'lengthMm');
             $segLens[$i] = (is_numeric($len) && (float)$len > 0) ? (float)$len : $fallbackPerSeg;
         }
 
         $totalLen = array_sum($segLens);
 
-        // MFD[k]の位置（mm）= fiber[k]の終端
+        // MFD[k]の位置（m）= fiber[k]の終端
         $mfdPos = [];
         $cum = 0.0;
         for ($i = 0; $i < $fiberCount; $i++) {
@@ -947,6 +1110,9 @@ final class Configurator extends Component
         if (!is_array($tubes)) return $errors;
 
         foreach ($tubes as $j => $tube) {
+            if (!is_array($tube)) {
+                continue;
+            }
             // 1) anchor.index（MFD番号）
             $aIdx = $tube['anchor']['index'] ?? null;
             if (!is_numeric($aIdx)) {
@@ -959,45 +1125,74 @@ final class Configurator extends Component
                 continue;
             }
 
-            // 2) startOffsetMm（±mm）
-            $offset = $tube['startOffsetMm'] ?? null;
+            // 2) startOffsetM（±m）
+            $offset = $this->extractLengthM($tube, 'startOffsetM', 'startOffsetMm');
             if (!is_numeric($offset)) {
-                $errors[] = ['path' => "tubes.$j.startOffsetMm", 'message' => 'startOffsetMm（±mm）が数値ではありません'];
+                $errors[] = ['path' => "tubes.$j.startOffsetM", 'message' => 'startOffsetM（±m）が数値ではありません'];
                 continue;
             }
             $offset = (float)$offset;
 
-            // 3) lengthMm（チューブ長）
-            $lenMm = $tube['lengthMm'] ?? null;
-            if (!is_numeric($lenMm)) {
-                $errors[] = ['path' => "tubes.$j.lengthMm", 'message' => 'チューブ長さが数値ではありません'];
+            // 3) lengthM（チューブ長）
+            $lenM = $this->extractLengthM($tube, 'lengthM', 'lengthMm');
+            if (!is_numeric($lenM)) {
+                $errors[] = ['path' => "tubes.$j.lengthM", 'message' => 'チューブ長さが数値ではありません'];
                 continue;
             }
-            $lenMm = (float)$lenMm;
-            if ($lenMm <= 0) {
-                $errors[] = ['path' => "tubes.$j.lengthMm", 'message' => 'チューブ長さは0より大きくしてください'];
+            $lenM = (float)$lenM;
+            if ($lenM <= 0) {
+                $errors[] = ['path' => "tubes.$j.lengthM", 'message' => 'チューブ長さは0より大きくしてください'];
                 continue;
             }
 
-            // 開始・終了（mm）
-            $anchorMm = $mfdPos[$aIdx] ?? 0.0;
-            $startMm = $anchorMm + $offset;
-            $endMm = $startMm + $lenMm;
+            // 開始・終了（m）
+            $anchorM = $mfdPos[$aIdx] ?? 0.0;
+            $startM = $anchorM + $offset;
+            $endM = $startM + $lenM;
 
             // 範囲チェック（0..totalLen）
-            if ($startMm < 0 || $startMm > $totalLen) {
-                $errors[] = ['path' => "tubes.$j.startOffsetMm", 'message' => "開始位置が範囲外です（0〜{$totalLen}mm）"];
+            if ($startM < 0 || $startM > $totalLen) {
+                $errors[] = ['path' => "tubes.$j.startOffsetM", 'message' => "開始位置が範囲外です（0〜{$totalLen}m）"];
             }
-            if ($endMm < 0 || $endMm > $totalLen) {
-                $errors[] = ['path' => "tubes.$j.lengthMm", 'message' => "終了位置が範囲外です（0〜{$totalLen}mm）"];
+            if ($endM < 0 || $endM > $totalLen) {
+                $errors[] = ['path' => "tubes.$j.lengthM", 'message' => "終了位置が範囲外です（0〜{$totalLen}m）"];
             }
         }
 
         return $errors;
     }
 
+    /**
+     * @param array<int, mixed> $raw
+     * @return array<int, string>
+     */
+    private function normalizeSummaryFields(array $raw): array
+    {
+        $allowed = array_keys($this->summaryFieldOptions ?: self::SUMMARY_FIELD_LABELS);
+        $selected = [];
+        foreach ($raw as $field) {
+            $field = (string)$field;
+            if ($field === 'account_display_name') {
+                $field = 'account_internal_name';
+            }
+            if (!in_array($field, $allowed, true)) {
+                continue;
+            }
+            if (!in_array($field, $selected, true)) {
+                $selected[] = $field;
+            }
+        }
+
+        return empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+    }
+
     public function newSession(): void
     {
+        // 見積編集モードでは sessions を増やさない
+        if ($this->quoteEditId) {
+            return;
+        }
+
         $cookieName = 'config_session_id';
         $templateVersionId = $this->templateVersionId;
         if (!$templateVersionId) {

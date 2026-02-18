@@ -130,6 +130,84 @@ final class TemplateController extends Controller
         return view('work.templates.create');
     }
 
+    public function show(int $id)
+    {
+        $template = DB::table('product_templates')->whereNull('deleted_at')->where('id', $id)->first();
+        if (!$template) abort(404);
+
+        $templatePendingOperation = DB::table('change_requests')
+            ->where('entity_type', 'product_template')
+            ->where('entity_id', $id)
+            ->where('status', 'PENDING')
+            ->whereIn('operation', ['UPDATE', 'DELETE'])
+            ->orderByDesc('id')
+            ->value('operation');
+
+        $versions = DB::table('product_template_versions')
+            ->where('template_id', $id)
+            ->whereNull('deleted_at')
+            ->orderBy('version', 'desc')
+            ->get();
+
+        $pendingVersionCreates = DB::table('change_requests')
+            ->where('entity_type', 'product_template_version')
+            ->where('operation', 'CREATE')
+            ->where('status', 'PENDING')
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get(['id', 'proposed_json', 'created_at']);
+        foreach ($pendingVersionCreates as $req) {
+            $payload = app(WorkChangeRequestService::class)->decodePayload($req->proposed_json);
+            $after = is_array($payload['after'] ?? null) ? $payload['after'] : [];
+            if ((int)($after['template_id'] ?? 0) !== $id) {
+                continue;
+            }
+
+            $virtual = (object)[
+                'id' => 'REQ-' . $req->id,
+                'version' => (int)($after['version'] ?? 0),
+                'dsl_version' => (string)($after['dsl_version'] ?? ''),
+                'active' => (bool)($after['active'] ?? true),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => $req->created_at,
+                'is_pending_create' => true,
+                'pending_operation' => 'CREATE',
+            ];
+            $versions->prepend($virtual);
+        }
+
+        $versionIds = $versions
+            ->filter(fn ($version) => is_numeric((string)$version->id))
+            ->pluck('id')
+            ->map(fn ($v) => (int)$v)
+            ->all();
+        if (!empty($versionIds)) {
+            $pendingByVersion = DB::table('change_requests')
+                ->where('entity_type', 'product_template_version')
+                ->where('status', 'PENDING')
+                ->whereIn('operation', ['UPDATE', 'DELETE'])
+                ->whereIn('entity_id', $versionIds)
+                ->orderByDesc('id')
+                ->get(['entity_id', 'operation'])
+                ->groupBy('entity_id');
+            foreach ($versions as $version) {
+                if (!is_numeric((string)$version->id)) {
+                    continue;
+                }
+                $rows = $pendingByVersion->get((int)$version->id);
+                if ($rows && !$rows->isEmpty()) {
+                    $version->pending_operation = (string)$rows->first()->operation;
+                }
+            }
+        }
+
+        return view('work.templates.show', [
+            'template' => $template,
+            'versions' => $versions,
+            'templatePendingOperation' => $templatePendingOperation,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([

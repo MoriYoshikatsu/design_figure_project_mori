@@ -11,13 +11,12 @@ use Illuminate\Support\Facades\DB;
 
 final class QuoteController extends Controller
 {
-    private const ACCOUNT_NAME_SOURCE_INTERNAL = 'internal_name';
-    private const ACCOUNT_NAME_SOURCE_USER = 'user_name';
     /** @var array<string, string> */
     private const SUMMARY_FIELD_LABELS = [
         'quote_id' => '見積ID',
         'status' => 'ステータス',
-        'account_display_name' => 'アカウント表示名',
+        'account_internal_name' => 'accounts.internal_name',
+        'account_user_name' => 'users.name',
         'assignee_name' => '担当者',
         'customer_emails' => '登録メールアドレス',
         'request_count' => '承認リクエスト件数',
@@ -31,7 +30,8 @@ final class QuoteController extends Controller
     private const SUMMARY_DEFAULT_FIELDS = [
         'quote_id',
         'status',
-        'account_display_name',
+        'account_internal_name',
+        'account_user_name',
         'assignee_name',
         'customer_emails',
         'request_count',
@@ -273,8 +273,6 @@ final class QuoteController extends Controller
         $quote->display_memo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
 
         $snapshot = $this->decodeJson($quote->snapshot) ?? [];
-        $nameSource = $this->resolveAccountNameSource($snapshot);
-        $quote->account_display_name_source = $nameSource;
         $quote->account_display_name = $this->resolveAccountDisplayNameInternalFirst(
             (string)($quote->account_internal_name ?? ''),
             (string)($quote->account_user_name ?? '')
@@ -364,7 +362,6 @@ final class QuoteController extends Controller
         $snapshot = $this->decodeJson($quote->snapshot) ?? [];
         $config = is_array($snapshot['config'] ?? null) ? $snapshot['config'] : [];
         $templateVersionId = (int)($snapshot['template_version_id'] ?? 0);
-        $displayNameSource = $this->resolveAccountNameSource($snapshot);
         $quoteMemo = trim((string)($quote->memo ?? ''));
         $sessionMemo = trim((string)($quote->session_memo ?? ''));
         $initialMemo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
@@ -376,74 +373,9 @@ final class QuoteController extends Controller
             'initialConfig' => $config,
             'templateVersionId' => $templateVersionId,
             'initialMemo' => $initialMemo,
-            'displayNameSource' => $displayNameSource,
             'summaryFieldOptions' => $summaryFieldOptions,
             'selectedSummaryFields' => $selectedSummaryFields,
         ]);
-    }
-
-    public function updateDisplayNameSource(Request $request, int $id)
-    {
-        $quote = DB::table('quotes')->whereNull('deleted_at')->where('id', $id)->first();
-        if (!$quote) abort(404);
-
-        $data = $request->validate([
-            'display_name_source' => 'required|in:'.self::ACCOUNT_NAME_SOURCE_INTERNAL.','.self::ACCOUNT_NAME_SOURCE_USER,
-        ]);
-
-        $snapshot = $this->decodeJson($quote->snapshot) ?? [];
-        $snapshot['account_display_name_source'] = $data['display_name_source'];
-
-        app(WorkChangeRequestService::class)->queueUpdate(
-            'quote',
-            $id,
-            [
-                'snapshot' => $this->decodeJson($quote->snapshot) ?? [],
-                'memo' => $quote->memo,
-            ],
-            [
-                'snapshot' => $snapshot,
-            ],
-            (int)$request->user()->id,
-            (string)$request->input('comment', '')
-        );
-
-        return redirect()
-            ->route('work.quotes.edit', $id)
-            ->with('status', '概要カードの表示名設定の更新申請を送信しました');
-    }
-
-    public function updateSummaryFields(Request $request, int $id)
-    {
-        $quote = DB::table('quotes')->whereNull('deleted_at')->where('id', $id)->first();
-        if (!$quote) abort(404);
-
-        $data = $request->validate([
-            'summary_fields' => 'array',
-            'summary_fields.*' => 'string',
-        ]);
-
-        $selected = $this->normalizeSummaryFields($data['summary_fields'] ?? []);
-        $snapshot = $this->decodeJson($quote->snapshot) ?? [];
-        $snapshot['summary_card_fields'] = $selected;
-
-        app(WorkChangeRequestService::class)->queueUpdate(
-            'quote',
-            $id,
-            [
-                'snapshot' => $this->decodeJson($quote->snapshot) ?? [],
-                'memo' => $quote->memo,
-            ],
-            [
-                'snapshot' => $snapshot,
-            ],
-            (int)$request->user()->id,
-            (string)$request->input('comment', '')
-        );
-
-        return redirect()
-            ->route('work.quotes.edit', $id)
-            ->with('status', '概要カード表示項目の更新申請を送信しました');
     }
 
     public function editRequest(int $id)
@@ -479,11 +411,8 @@ final class QuoteController extends Controller
         ]);
 
         $baseSnapshot = $this->decodeJson($quote->snapshot) ?? [];
-        $nameSource = $this->resolveAccountNameSource($baseSnapshot);
+        unset($baseSnapshot['account_display_name_source']);
         $summaryFields = $this->resolveSummaryCardFields($baseSnapshot);
-        if (!array_key_exists('account_display_name_source', $baseSnapshot)) {
-            $baseSnapshot['account_display_name_source'] = $nameSource;
-        }
         if (!array_key_exists('summary_card_fields', $baseSnapshot)) {
             $baseSnapshot['summary_card_fields'] = $summaryFields;
         }
@@ -504,12 +433,10 @@ final class QuoteController extends Controller
             if (isset($data['tax'])) $decoded['totals']['tax'] = (float)$data['tax'];
             if (isset($data['total'])) $decoded['totals']['total'] = (float)$data['total'];
         }
-        if (!array_key_exists('account_display_name_source', $decoded)) {
-            $decoded['account_display_name_source'] = $nameSource;
-        }
         if (!array_key_exists('summary_card_fields', $decoded)) {
             $decoded['summary_card_fields'] = $summaryFields;
         }
+        unset($decoded['account_display_name_source']);
         if (!array_key_exists('memo', $decoded)) {
             $decoded['memo'] = $quote->memo;
         }
@@ -608,8 +535,6 @@ final class QuoteController extends Controller
         $quote->display_memo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
 
         $snapshot = $this->decodeJson($quote->snapshot) ?? [];
-        $nameSource = $this->resolveAccountNameSource($snapshot);
-        $quote->account_display_name_source = $nameSource;
         $quote->account_display_name = $this->resolveAccountDisplayNameInternalFirst(
             (string)($quote->account_internal_name ?? ''),
             (string)($quote->account_user_name ?? '')
@@ -655,39 +580,6 @@ final class QuoteController extends Controller
         ], $filename);
     }
 
-    private function resolveAccountNameSource(array $snapshot): string
-    {
-        $source = (string)($snapshot['account_display_name_source'] ?? self::ACCOUNT_NAME_SOURCE_INTERNAL);
-        if (!in_array($source, [self::ACCOUNT_NAME_SOURCE_INTERNAL, self::ACCOUNT_NAME_SOURCE_USER], true)) {
-            return self::ACCOUNT_NAME_SOURCE_INTERNAL;
-        }
-        return $source;
-    }
-
-    private function resolveAccountDisplayName(string $source, string $internalName, string $userName): string
-    {
-        $internalName = trim($internalName);
-        $userName = trim($userName);
-
-        if ($source === self::ACCOUNT_NAME_SOURCE_USER) {
-            if ($userName !== '') {
-                return $userName;
-            }
-            if ($internalName !== '') {
-                return $internalName;
-            }
-            return '-';
-        }
-
-        if ($internalName !== '') {
-            return $internalName;
-        }
-        if ($userName !== '') {
-            return $userName;
-        }
-        return '-';
-    }
-
     private function resolveAccountDisplayNameInternalFirst(string $internalName, string $userName): string
     {
         $internalName = trim($internalName);
@@ -726,6 +618,9 @@ final class QuoteController extends Controller
         $selected = [];
         foreach ($raw as $field) {
             $field = (string)$field;
+            if ($field === 'account_display_name') {
+                $field = 'account_internal_name';
+            }
             if (!in_array($field, $allowed, true)) {
                 continue;
             }
@@ -748,7 +643,8 @@ final class QuoteController extends Controller
         $valueMap = [
             'quote_id' => $quote->id ?? '',
             'status' => $quote->status ?? '',
-            'account_display_name' => $quote->account_display_name ?? '-',
+            'account_internal_name' => trim((string)($quote->account_internal_name ?? '')) !== '' ? (string)$quote->account_internal_name : '-',
+            'account_user_name' => trim((string)($quote->account_user_name ?? '')) !== '' ? (string)$quote->account_user_name : '-',
             'assignee_name' => $quote->assignee_name ?? '-',
             'customer_emails' => $quote->account_emails ?? ($quote->customer_emails ?? '-'),
             'request_count' => $requestCount,

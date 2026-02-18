@@ -102,14 +102,14 @@ final class BomBuilder
         $sort = 0;
 
         $mfdCount = (int)($config['mfdCount'] ?? 1);
-        $totalFiberLengthMm = $this->sumLengths($config['fibers'] ?? []);
+        $totalFiberLengthM = $this->sumLengths($config['fibers'] ?? []);
 
         $items[] = $this->normalizeItem([
             'sku_code' => 'PROC_MFD_CONVERSION',
             'quantity' => $mfdCount,
             'options' => [
                 'mfdCount' => $mfdCount,
-                'totalFiberLengthMm' => $totalFiberLengthMm,
+                'totalFiberLengthM' => $totalFiberLengthM,
             ],
             'source_path' => null,
             'sort_order' => $sort,
@@ -138,8 +138,8 @@ final class BomBuilder
                 'sku_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [
-                    'lengthMm' => $f['lengthMm'] ?? null,
-                    'toleranceMm' => $f['toleranceMm'] ?? null,
+                    'lengthM' => $this->extractLengthM($f, 'lengthM', 'lengthMm'),
+                    'toleranceM' => $this->extractLengthM($f, 'toleranceM', 'toleranceMm'),
                 ],
                 'source_path' => "\$.fibers[$i]",
                 'sort_order' => $sort,
@@ -151,18 +151,18 @@ final class BomBuilder
         foreach ($tubes as $i => $t) {
             $skuCode = $t['skuCode'] ?? null;
             if ($this->isEmpty($skuCode)) continue;
-            $tubeLen = $this->resolveTubeLengthMm($t, $config);
+            $tubeLen = $this->resolveTubeLengthM($t, $config);
             $items[] = $this->normalizeItem([
                 'sku_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [
                     'startFiberIndex' => $t['startFiberIndex'] ?? null,
-                    'startOffsetMm' => $t['startOffsetMm'] ?? null,
+                    'startOffsetM' => $this->extractLengthM($t, 'startOffsetM', 'startOffsetMm'),
                     'endFiberIndex' => $t['endFiberIndex'] ?? null,
-                    'endOffsetMm' => $t['endOffsetMm'] ?? null,
+                    'endOffsetM' => $this->extractLengthM($t, 'endOffsetM', 'endOffsetMm'),
                     'targetFiberIndex' => $t['targetFiberIndex'] ?? null,
-                    'lengthMm' => $tubeLen,
-                    'toleranceMm' => $t['toleranceMm'] ?? null,
+                    'lengthM' => $tubeLen,
+                    'toleranceM' => $this->extractLengthM($t, 'toleranceM', 'toleranceMm'),
                 ],
                 'source_path' => "\$.tubes[$i]",
                 'sort_order' => $sort,
@@ -195,23 +195,23 @@ final class BomBuilder
         return $items;
     }
 
-    private function resolveTubeLengthMm(array $tube, array $config): ?float
+    private function resolveTubeLengthM(array $tube, array $config): ?float
     {
         $startIdx = $tube['startFiberIndex'] ?? null;
         $endIdx = $tube['endFiberIndex'] ?? null;
-        $startOffset = $tube['startOffsetMm'] ?? null;
-        $endOffset = $tube['endOffsetMm'] ?? null;
+        $startOffset = $this->extractLengthM($tube, 'startOffsetM', 'startOffsetMm');
+        $endOffset = $this->extractLengthM($tube, 'endOffsetM', 'endOffsetMm');
         if (is_numeric($startIdx) && is_numeric($endIdx) && is_numeric($startOffset) && is_numeric($endOffset)) {
             $fibers = $config['fibers'] ?? [];
             $fiberCount = count($fibers);
             $si = (int)$startIdx;
             $ei = (int)$endIdx;
             if ($si < 0 || $ei < 0 || $si >= $fiberCount || $ei >= $fiberCount) {
-                return is_numeric($tube['lengthMm'] ?? null) ? (float)$tube['lengthMm'] : null;
+                return $this->extractLengthM($tube, 'lengthM', 'lengthMm');
             }
             $segLens = [];
             foreach ($fibers as $f) {
-                $len = $f['lengthMm'] ?? null;
+                $len = $this->extractLengthM($f, 'lengthM', 'lengthMm');
                 $segLens[] = (is_numeric($len) && (float)$len > 0) ? (float)$len : 0.0;
             }
             $cum = 0.0;
@@ -226,7 +226,7 @@ final class BomBuilder
             return $len >= 0 ? $len : null;
         }
 
-        return is_numeric($tube['lengthMm'] ?? null) ? (float)$tube['lengthMm'] : null;
+        return $this->extractLengthM($tube, 'lengthM', 'lengthMm');
     }
 
     private function buildOptions(mixed $map, array $config, array $derived, ?array $item, ?int $index): array
@@ -247,7 +247,15 @@ final class BomBuilder
         if ($sku === 'PROC_MFD_CONVERSION') {
             $options = is_array($item['options'] ?? null) ? $item['options'] : [];
             $options['mfdCount'] = (int)($config['mfdCount'] ?? ($options['mfdCount'] ?? 1));
-            $options['totalFiberLengthMm'] = $options['totalFiberLengthMm'] ?? $this->sumLengths($config['fibers'] ?? []);
+            if (!array_key_exists('totalFiberLengthM', $options) || !is_numeric($options['totalFiberLengthM'])) {
+                $legacyTotal = $options['totalFiberLengthMm'] ?? null;
+                if (is_numeric($legacyTotal)) {
+                    $options['totalFiberLengthM'] = (float)$legacyTotal / 1000;
+                } else {
+                    $options['totalFiberLengthM'] = $this->sumLengths($config['fibers'] ?? []);
+                }
+            }
+            unset($options['totalFiberLengthMm']);
             $options['fiberItems'] = $options['fiberItems'] ?? $this->collectFiberItems($config['fibers'] ?? []);
             $item['options'] = $options;
         }
@@ -262,8 +270,8 @@ final class BomBuilder
             if (!is_array($f)) continue;
             $items[] = [
                 'skuCode' => $f['skuCode'] ?? null,
-                'lengthMm' => $f['lengthMm'] ?? null,
-                'toleranceMm' => $f['toleranceMm'] ?? null,
+                'lengthM' => $this->extractLengthM($f, 'lengthM', 'lengthMm'),
+                'toleranceM' => $this->extractLengthM($f, 'toleranceM', 'toleranceMm'),
             ];
         }
         return $items;
@@ -274,12 +282,27 @@ final class BomBuilder
         $sum = 0.0;
         foreach ($items as $it) {
             if (!is_array($it)) continue;
-            $len = $it['lengthMm'] ?? null;
+            $len = $this->extractLengthM($it, 'lengthM', 'lengthMm');
             if (is_numeric($len)) {
                 $sum += (float)$len;
             }
         }
         return $sum;
+    }
+
+    private function extractLengthM(array $row, string $primaryKey, string $legacyKey): ?float
+    {
+        $v = $row[$primaryKey] ?? null;
+        if (is_numeric($v)) {
+            return (float)$v;
+        }
+
+        $legacy = $row[$legacyKey] ?? null;
+        if (is_numeric($legacy)) {
+            return (float)$legacy / 1000;
+        }
+
+        return null;
     }
 
     private function evalExpr(mixed $expr, array $config, array $derived, ?array $item, ?int $index): mixed

@@ -82,11 +82,11 @@ final class QuoteService
                 'snapshot' => json_encode([
                     'template_version_id' => (int)$session->template_version_id,
                     'price_book_id' => $pricingResult['price_book_id'] ?? null,
-                    'account_display_name_source' => 'internal_name',
                     'summary_card_fields' => [
                         'quote_id',
                         'status',
-                        'account_display_name',
+                        'account_internal_name',
+                        'account_user_name',
                         'assignee_name',
                         'customer_emails',
                         'request_count',

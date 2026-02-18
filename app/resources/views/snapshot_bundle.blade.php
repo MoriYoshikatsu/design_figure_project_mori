@@ -170,6 +170,14 @@
         $r = $bomByPath[$path] ?? null;
         $selectedSku = (string)($f['skuCode'] ?? '');
         $pricedSku = (string)($r['sku_code'] ?? '');
+        $fiberLength = $f['lengthM'] ?? null;
+        if (!is_numeric($fiberLength) && is_numeric($f['lengthMm'] ?? null)) {
+            $fiberLength = (float)$f['lengthMm'] / 1000;
+        }
+        $fiberTolerance = $f['toleranceM'] ?? null;
+        if (!is_numeric($fiberTolerance) && is_numeric($f['toleranceMm'] ?? null)) {
+            $fiberTolerance = (float)$f['toleranceMm'] / 1000;
+        }
         $rows[] = [
             'type' => 'ファイバ(F)',
             'index' => '['.$i.']',
@@ -178,8 +186,8 @@
             'sku_name' => $toSkuName($selectedSku),
             'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
             'source_path' => $r['source_path'] ?? $path,
-            'range' => isset($f['lengthMm']) ? ($f['lengthMm'].'mm') : '',
-            'tolerance' => isset($f['toleranceMm']) ? ('±'.$f['toleranceMm'].'mm') : '',
+            'range' => is_numeric($fiberLength) ? ($fiberLength.'m') : '',
+            'tolerance' => is_numeric($fiberTolerance) ? ('±'.$fiberTolerance.'m') : '',
             'quantity' => $r['quantity'] ?? '',
             'unit_price' => $r['unit_price'] ?? '',
             'line_total' => $r['line_total'] ?? '',
@@ -193,9 +201,21 @@
         $pricedSku = (string)($r['sku_code'] ?? '');
         $sf = $t['startFiberIndex'] ?? $t['targetFiberIndex'] ?? '';
         $ef = $t['endFiberIndex'] ?? $t['targetFiberIndex'] ?? '';
-        $so = $t['startOffsetMm'] ?? '';
-        $eo = $t['endOffsetMm'] ?? '';
-        $range = ($sf !== '' || $ef !== '') ? ('F'.$sf.'+'.$so.' → F'.$ef.'+'.$eo) : '';
+        $so = $t['startOffsetM'] ?? null;
+        if (!is_numeric($so) && is_numeric($t['startOffsetMm'] ?? null)) {
+            $so = (float)$t['startOffsetMm'] / 1000;
+        }
+        $eo = $t['endOffsetM'] ?? null;
+        if (!is_numeric($eo) && is_numeric($t['endOffsetMm'] ?? null)) {
+            $eo = (float)$t['endOffsetMm'] / 1000;
+        }
+        $soText = is_numeric($so) ? ($so . 'm') : '-';
+        $eoText = is_numeric($eo) ? ($eo . 'm') : '-';
+        $range = ($sf !== '' || $ef !== '') ? ('F'.$sf.'+'.$soText.' → F'.$ef.'+'.$eoText) : '';
+        $tubeTolerance = $t['toleranceM'] ?? null;
+        if (!is_numeric($tubeTolerance) && is_numeric($t['toleranceMm'] ?? null)) {
+            $tubeTolerance = (float)$t['toleranceMm'] / 1000;
+        }
         $rows[] = [
             'type' => 'チューブ(T)',
             'index' => '['.$i.']',
@@ -205,7 +225,7 @@
             'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
             'source_path' => $r['source_path'] ?? $path,
             'range' => $range,
-            'tolerance' => isset($t['toleranceMm']) ? ('±'.$t['toleranceMm'].'mm') : '',
+            'tolerance' => is_numeric($tubeTolerance) ? ('±'.$tubeTolerance.'m') : '',
             'quantity' => $r['quantity'] ?? '',
             'unit_price' => $r['unit_price'] ?? '',
             'line_total' => $r['line_total'] ?? '',
@@ -276,11 +296,11 @@
     $summaryAuto = [
         ['label' => 'ルールテンプレ', 'value' => $snapshot['template_version_id'] ?? ''],
         ['label' => '納品物価格表', 'value' => $snapshot['price_book_id'] ?? ''],
-        // ['label' => 'MFD数', 'value' => $config['mfdCount'] ?? ''],
-        // ['label' => 'チューブ数', 'value' => $config['tubeCount'] ?? ''],
-        // ['label' => 'エラー件数', 'value' => is_array($errors) ? count($errors) : 0],
-        // ['label' => 'BOM件数', 'value' => count($bom)],
-        // ['label' => '価格内訳件数', 'value' => count($pricing)],
+        ['label' => 'MFD数', 'value' => $config['mfdCount'] ?? ''],
+        ['label' => 'チューブ数', 'value' => $config['tubeCount'] ?? ''],
+        ['label' => 'エラー件数', 'value' => is_array($errors) ? count($errors) : 0],
+        ['label' => 'BOM件数', 'value' => count($bom)],
+        ['label' => '価格内訳件数', 'value' => count($pricing)],
         ['label' => '小計', 'value' => $totals['subtotal'] ?? ''],
         ['label' => '税', 'value' => $totals['tax'] ?? ''],
         ['label' => '合計', 'value' => $totals['total'] ?? ''],

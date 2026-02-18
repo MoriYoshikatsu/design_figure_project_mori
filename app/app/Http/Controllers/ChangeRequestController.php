@@ -83,6 +83,9 @@ final class ChangeRequestController extends Controller
             $approveRequest->setUserResolver(static fn () => $user);
             $canApprove = $workPermissionService->allowsRequest($approveRequest, (int)$user->id);
         }
+        $quoteSummaryContext = $entityType === 'quote'
+            ? $this->buildQuoteSummaryContext((int)$req->entity_id)
+            : [];
 
         return view('work.change-requests.show', [
             'req' => $req,
@@ -111,6 +114,7 @@ final class ChangeRequestController extends Controller
             'baseSnapshotPdfUrl' => route('work.change-requests.snapshot-base.pdf', $req->id),
             'compareSnapshotPdfUrl' => route('work.change-requests.snapshot-compare.pdf', $req->id),
             'memoUpdateUrl' => route('work.change-requests.memo.update', $req->id),
+            'quoteSummaryContext' => $quoteSummaryContext,
         ]);
     }
 
@@ -546,6 +550,77 @@ final class ChangeRequestController extends Controller
         return $dsl;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildQuoteSummaryContext(int $quoteId): array
+    {
+        if ($quoteId <= 0) {
+            return [];
+        }
+
+        $quote = DB::table('quotes as q')
+            ->leftJoin('accounts as a', 'a.id', '=', 'q.account_id')
+            ->where('q.id', $quoteId)
+            ->select(
+                'q.id',
+                'q.status',
+                'q.account_id',
+                'a.internal_name as account_internal_name',
+                'a.assignee_name'
+            )
+            ->first();
+        if (!$quote) {
+            return [];
+        }
+
+        $accountId = (int)($quote->account_id ?? 0);
+        $accountUserName = '';
+        $accountEmails = '';
+        if ($accountId > 0) {
+            $accountUserName = (string)(DB::table('account_user as au')
+                ->join('users as u', 'u.id', '=', 'au.user_id')
+                ->where('au.account_id', $accountId)
+                ->orderByRaw("
+                    case au.role
+                        when 'customer' then 1
+                        when 'admin' then 2
+                        when 'sales' then 3
+                        else 9
+                    end
+                ")
+                ->orderBy('au.user_id')
+                ->value('u.name') ?? '');
+
+            $emailRow = DB::table('account_user as au')
+                ->join('users as u', 'u.id', '=', 'au.user_id')
+                ->where('au.account_id', $accountId)
+                ->selectRaw("string_agg(distinct u.email, ', ' order by u.email) as emails")
+                ->first();
+            $accountEmails = (string)($emailRow->emails ?? '');
+        }
+
+        $requestCount = (int)DB::table('change_requests')
+            ->where('entity_type', 'quote')
+            ->where('entity_id', $quoteId)
+            ->count();
+
+        $internalName = trim((string)($quote->account_internal_name ?? ''));
+        $userName = trim($accountUserName);
+        $assignee = trim((string)($quote->assignee_name ?? ''));
+        $emails = trim($accountEmails);
+
+        return [
+            'quote_id' => (int)($quote->id ?? 0),
+            'status' => (string)($quote->status ?? ''),
+            'account_internal_name' => $internalName !== '' ? $internalName : '-',
+            'account_user_name' => $userName !== '' ? $userName : '-',
+            'assignee_name' => $assignee !== '' ? $assignee : '-',
+            'customer_emails' => $emails !== '' ? $emails : '-',
+            'request_count' => $requestCount,
+        ];
+    }
+
     private function decodeJson(mixed $value): ?array
     {
         if (is_array($value)) return $value;
@@ -790,6 +865,75 @@ final class ChangeRequestController extends Controller
             ->leftJoin('users as approver', 'approver.id', '=', 'cr.approved_by')
             ->select('cr.*')
             ->addSelect('requester.email as requested_by_email', 'approver.email as approved_by_email')
+            ->selectRaw("
+                case
+                    when cr.entity_type = 'quote' then (
+                        select coalesce(
+                            nullif(a.internal_name, ''),
+                            (
+                                select u2.name
+                                from account_user as au2
+                                join users as u2 on u2.id = au2.user_id
+                                where au2.account_id = a.id
+                                order by
+                                    case au2.role
+                                        when 'customer' then 1
+                                        when 'admin' then 2
+                                        when 'sales' then 3
+                                        else 9
+                                    end,
+                                    au2.user_id
+                                limit 1
+                            ),
+                            '-'
+                        )
+                        from quotes as q
+                        join accounts as a on a.id = q.account_id
+                        where q.id = cr.entity_id
+                        limit 1
+                    )
+                    else (
+                        select coalesce(nullif(a.internal_name, ''), u.name)
+                        from account_user as au
+                        join accounts as a on a.id = au.account_id
+                        join users as u on u.id = au.user_id
+                        where au.user_id = cr.requested_by
+                        order by au.account_id
+                        limit 1
+                    )
+                end as request_account_display_name
+            ")
+            ->selectRaw("
+                case
+                    when cr.entity_type = 'quote' then (
+                        select string_agg(distinct u.email, ', ' order by u.email)
+                        from quotes as q
+                        join account_user as au on au.account_id = q.account_id
+                        join users as u on u.id = au.user_id
+                        where q.id = cr.entity_id
+                    )
+                    else requester.email
+                end as request_account_email
+            ")
+            ->selectRaw("
+                case
+                    when cr.entity_type = 'quote' then (
+                        select a.assignee_name
+                        from quotes as q
+                        join accounts as a on a.id = q.account_id
+                        where q.id = cr.entity_id
+                        limit 1
+                    )
+                    else (
+                        select a.assignee_name
+                        from account_user as au
+                        join accounts as a on a.id = au.account_id
+                        where au.user_id = cr.requested_by
+                        order by au.account_id
+                        limit 1
+                    )
+                end as request_account_assignee_name
+            ")
             ->selectSub(
                 DB::table('account_user as au')
                     ->join('accounts as a', 'a.id', '=', 'au.account_id')
