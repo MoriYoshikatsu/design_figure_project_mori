@@ -4,12 +4,15 @@
     @php
         $canApprove = $canApprove ?? true;
         $operation = strtoupper((string)($req->operation ?? 'UPDATE'));
+        $entityTypeRaw = strtolower((string)($req->entity_type ?? ''));
         $isSnapshotEntity = (bool)($isSnapshotEntity ?? false);
         $requestHeading = $requestHeading ?? ((string)($req->entity_type ?? '-') . ' / ' . $operation);
         $entityTypeDisplay = $entityTypeLabel ?? (string)($req->entity_type ?? '-');
         $operationDisplay = $operationLabel ?? $operation;
         $statusDisplay = $statusLabel ?? (string)($req->status ?? '-');
         $targetDisplay = $targetLabel ?? ((int)($req->entity_id ?? 0) > 0 ? ('#' . (int)$req->entity_id) : '-');
+        $isDeleteOperation = $operation === 'DELETE';
+        $isAccountRelated = $entityTypeRaw === 'account' || str_starts_with($entityTypeRaw, 'account_');
 
         $snapshotPdfUrl = $snapshotPdfUrl ?? route('work.change-requests.snapshot.pdf', $req->id);
         $baseSnapshotPdfUrl = $baseSnapshotPdfUrl ?? route('work.change-requests.snapshot-base.pdf', $req->id);
@@ -67,7 +70,7 @@
             'account_user_name' => 'users.name',
             'assignee_name' => '担当者',
             'customer_emails' => '登録メールアドレス',
-            'request_count' => '承認リクエスト件数',
+            'request_count' => '承認変更申請件数',
             'template_version_id' => 'ルールテンプレ',
             'price_book_id' => '納品物価格表',
             'subtotal' => '小計',
@@ -189,8 +192,44 @@
         };
     @endphp
 
-    <h1>承認リクエスト #{{ $req->id ?? '' }}</h1>
+    <style>
+        .req-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.4;
+            margin-right: 4px;
+            border: 1px solid transparent;
+        }
+        .req-pill-delete {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+        .req-pill-account {
+            background: #e0e7ff;
+            color: #3730a3;
+            border-color: #a5b4fc;
+        }
+    </style>
+
+    <h1>承認変更申請 #{{ $req->id ?? '' }}</h1>
     {{-- <div class="muted" style="margin:4px 0 12px;">{{ $requestHeading }}</div> --}}
+
+    @if($isDeleteOperation || $isAccountRelated)
+        <div style="margin:8px 0 12px; padding:10px; border-radius:8px; border:1px solid @if($isDeleteOperation) #fca5a5 @else #a5b4fc @endif; background:@if($isDeleteOperation) #fef2f2 @else #eef2ff @endif;">
+            @if($isDeleteOperation)
+                <span class="req-pill req-pill-delete">DELETE</span>
+                削除操作の承認変更申請です。対象の取り扱いに注意してください。
+            @endif
+            @if($isAccountRelated)
+                <span class="req-pill req-pill-account">アカウント系</span>
+                アカウント/権限関連の承認変更申請です。
+            @endif
+        </div>
+    @endif
 
     @if($canApprove && $req->status === 'PENDING')
         <div class="actions" style="margin:12px 0;">
@@ -209,8 +248,8 @@
     <table>
         <tbody>
             <tr><th>ステータス</th><td>{{ $statusDisplay }} ({{ $req->status }})</td></tr>
-            <tr><th>操作</th><td>{{ $operationDisplay }}</td></tr>
-            <tr><th>対象種別</th><td>{{ $entityTypeDisplay }}</td></tr>
+            <tr><th>操作</th><td>@if($isDeleteOperation)<span class="req-pill req-pill-delete">DELETE</span>@endif{{ $operationDisplay }}</td></tr>
+            <tr><th>対象種別</th><td>@if($isAccountRelated)<span class="req-pill req-pill-account">アカウント系</span>@endif{{ $entityTypeDisplay }}</td></tr>
             <tr><th>対象ID</th><td>{{ $targetDisplay }}</td></tr>
             <tr><th>申請対象作成者</th><td>{{ $requestAccountLabel }}</td></tr>
             <tr><th>登録メールアドレス</th><td>{{ $requestAccountEmail }}</td></tr>

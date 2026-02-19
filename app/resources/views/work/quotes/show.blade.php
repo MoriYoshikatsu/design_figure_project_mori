@@ -17,7 +17,7 @@
         $errors = is_array($snapshotView['validation_errors'] ?? null) ? $snapshotView['validation_errors'] : [];
     @endphp
 
-    <h3>承認リクエスト</h3>
+    <h3>承認変更申請</h3>
     <table>
         <thead>
             <tr>

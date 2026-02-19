@@ -251,7 +251,7 @@ final class RealDataSeeder extends Seeder
             for ($i = 1; $i <= $need; $i++) {
                 $idx = $existing + $i;
                 $rows[] = [
-                    'name' => 'STANDARD',
+                    'name' => 'MFD',
                     'version' => $idx,
                     'currency' => 'JPY',
                     'valid_from' => now()->toDateString(),
@@ -350,7 +350,7 @@ final class RealDataSeeder extends Seeder
             DB::table('product_templates')->updateOrInsert(
                 ['template_code' => $code],
                 [
-                    'name' => "Demo Template {$i}",
+                    'name' => "MFD Template {$i}",
                     'active' => true,
                     'created_at' => now(),
                     'updated_at' => now(),

@@ -134,7 +134,7 @@
         th, td { border: 1px solid #ddd; padding: 6px; }
         th { background: #f3f4f6; text-align: left; }
         input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; }
-        textarea { min-height: 56px; }
+        textarea { min-height: 32px; }
         .row { display: flex; gap: 12px; flex-wrap: wrap; }
         .col { flex: 1; }
         .muted { color: #6b7280; }
@@ -182,7 +182,7 @@
                     <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 4 12l4 6M16 6l4 6-4 6M13.5 4l-3 16"/></svg>
                     </a>
-                    <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="承認リクエスト">
+                    <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="承認変更申請">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v11h-15z"/><path d="M8 10.5h8M8 14.5h5"/><path d="m15.5 4 1.5 2"/></svg>
                     </a>
                     <a href="{{ route('work.audit-logs.index') }}" class="sidebar-item @if(request()->routeIs('work.audit-logs.*')) is-active @endif" data-label="監査ログ">

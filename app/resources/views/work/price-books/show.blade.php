@@ -29,7 +29,83 @@
     </table>
 
     <h2 style="margin-top:16px;">明細一覧</h2>
-    <div class="muted" style="margin:8px 0;">表示件数: {{ count($items) }}件</div>
+    <form method="GET" action="{{ route('work.price-books.show', $book->id) }}" style="margin:12px 0;">
+        <div class="row">
+            <div class="col">
+                <label>フリーワード</label>
+                <input type="text" name="item_q" value="{{ $itemFilters['item_q'] ?? '' }}" placeholder="名称/式/メモ など">
+            </div>
+            <div class="col">
+                <label>価格モデル</label>
+                <select name="pricing_model">
+                    <option value="">すべて</option>
+                    @foreach($pricingModelOptions as $opt)
+                        <option value="{{ $opt }}" @if(($itemFilters['pricing_model'] ?? '') === $opt) selected @endif>{{ $opt }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col">
+                <label>単価レンジ</label>
+                <select name="unit_price_band">
+                    <option value="">すべて</option>
+                    @foreach($unitPriceBandOptions as $key => $label)
+                        <option value="{{ $key }}" @if(($itemFilters['unit_price_band'] ?? '') === $key) selected @endif>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col">
+                <label>SKU</label>
+                <select name="sku_id">
+                    <option value="">すべて</option>
+                    @foreach($skus as $sku)
+                        <option value="{{ $sku->id }}" @if(($itemFilters['sku_id'] ?? '') == (string)$sku->id) selected @endif>{{ $sku->sku_code }} / {{ $sku->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            {{-- <div class="col">
+                <label>メモ</label>
+                <select name="item_has_memo">
+                    <option value="">すべて</option>
+                    @foreach($presenceOptions as $key => $label)
+                        <option value="{{ $key }}" @if(($itemFilters['item_has_memo'] ?? '') === $key) selected @endif>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+            <div class="col">
+                <label>最小数量（最小）</label>
+                <input type="number" step="0.001" name="min_qty_min" value="{{ $itemFilters['min_qty_min'] ?? '' }}">
+            </div>
+            <div class="col">
+                <label>最小数量（最大）</label>
+                <input type="number" step="0.001" name="min_qty_max" value="{{ $itemFilters['min_qty_max'] ?? '' }}">
+            </div>
+            <div class="col">
+                <label>m単価（最小）</label>
+                <input type="number" step="0.0001" name="price_per_m_min" value="{{ $itemFilters['price_per_m_min'] ?? '' }}">
+            </div>
+            <div class="col">
+                <label>m単価（最大）</label>
+                <input type="number" step="0.0001" name="price_per_m_max" value="{{ $itemFilters['price_per_m_max'] ?? '' }}">
+            </div>
+        </div>
+        <div class="row" style="margin-top:8px;"> --}}
+            <div class="col">
+                <label>明細更新日（開始）</label>
+                <input type="date" name="item_updated_from" value="{{ $itemFilters['item_updated_from'] ?? '' }}">
+            </div>
+            <div class="col">
+                <label>明細更新日（終了）</label>
+                <input type="date" name="item_updated_to" value="{{ $itemFilters['item_updated_to'] ?? '' }}">
+            </div>
+            <div class="actions" style="margin-top:8px;">
+                <button type="submit">絞り込み</button>
+                <a href="{{ route('work.price-books.show', $book->id) }}">クリア</a>
+                <div class="muted" style="margin:8px 0;">{{ count($items) }}件</div>
+            </div>
+        </div>
+    </form>
 
     <table>
         <thead>
@@ -44,7 +120,7 @@
                 <th>最小数量</th>
                 <th>メモ</th>
                 <th>更新日</th>
-                <th></th>
+                {{-- <th></th> --}}
             </tr>
         </thead>
         <tbody>
@@ -60,13 +136,13 @@
                     <td>{{ $it->min_qty }}</td>
                     <td>{{ $it->memo ?? '-' }}</td>
                     <td>{{ $it->updated_at ?? '-' }}</td>
-                    <td class="actions">
+                    {{-- <td class="actions">
                         @if(!empty($it->pending_operation))
                             <span class="muted">申請中（{{ $it->pending_operation }}）</span>
                         @else
                             <a href="{{ route('work.price-books.items.edit', [$book->id, $it->id]) }}">編集</a>
                         @endif
-                    </td>
+                    </td> --}}
                 </tr>
             @empty
                 <tr>

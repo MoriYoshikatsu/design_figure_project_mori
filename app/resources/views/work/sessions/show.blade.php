@@ -31,7 +31,7 @@
             ['label' => '作成アカウント', 'value' => $session->account_display_name ?? ''],
             ['label' => 'メールアドレス', 'value' => $session->account_emails ?? '-'],
             ['label' => '担当者', 'value' => $session->assignee_name ?? '-'],
-            ['label' => '承認リクエスト数', 'value' => is_countable($requests) ? count($requests) : 0],
+            ['label' => '承認変更申請数', 'value' => is_countable($requests) ? count($requests) : 0],
         ],
         'showMemoCard' => true,
         'memoValue' => $session->memo ?? '',

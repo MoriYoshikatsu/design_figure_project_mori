@@ -332,7 +332,7 @@ final class SessionController extends Controller
                 ['label' => 'アカウント表示名', 'value' => $session->account_display_name ?? ''],
                 ['label' => '担当者', 'value' => $session->assignee_name ?? '-'],
                 ['label' => '登録メールアドレス', 'value' => $session->account_emails ?? '-'],
-                ['label' => '承認リクエスト件数', 'value' => $requestCount],
+                ['label' => '承認変更申請件数', 'value' => $requestCount],
             ],
             'showMemoCard' => true,
             'memoValue' => $session->memo ?? '',

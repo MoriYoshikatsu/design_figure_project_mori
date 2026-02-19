@@ -1,7 +1,8 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>価格表編集</h1>
+    <a href="{{ route('work.price-books.show', $book->id) }}">詳細画面へ</a>
+    <h1>価格表 #{{ $book->id }} 編集</h1>
     <form method="POST" action="{{ route('work.price-books.edit-request.update', $book->id) }}">
         @csrf
         <input type="hidden" name="_mode" value="submit">
