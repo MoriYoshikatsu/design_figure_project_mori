@@ -408,7 +408,7 @@ final class ChangeRequestReviewController extends Controller
         );
 
         return $pdfService->downloadSnapshotBundleUi([
-            'title' => '編集承認リクエスト スナップショット',
+            'title' => '編集承認変更申請 スナップショット',
             'panelTitle' => '申請内容（新しい版）',
             'summaryItems' => [
                 ['label' => '対象', 'value' => $req->entity_type . ' #' . $req->entity_id],
@@ -527,7 +527,7 @@ final class ChangeRequestReviewController extends Controller
         );
 
         return $pdfService->downloadSnapshotBundleUi([
-            'title' => '編集承認リクエスト 初版スナップショット',
+            'title' => '編集承認変更申請 初版スナップショット',
             'panelTitle' => '初版（申請時点の現行版）',
             'summaryItems' => [
                 ['label' => '対象', 'value' => $req->entity_type . ' #' . $req->entity_id],
@@ -751,7 +751,7 @@ final class ChangeRequestReviewController extends Controller
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('work.change-requests.show', $id)->with('status', 'リクエストメモを更新しました');
+        return redirect()->route('work.change-requests.show', $id)->with('status', '変更申請メモを更新しました');
     }
 
     private function applySessionChange(int $sessionId, array $proposed, int $actorId): void

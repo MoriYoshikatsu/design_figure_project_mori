@@ -1,7 +1,30 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>承認リクエスト 一覧</h1>
+    <style>
+        .req-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.4;
+            margin-right: 4px;
+            border: 1px solid transparent;
+        }
+        .req-pill-delete {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+        .req-pill-account {
+            background: #e0e7ff;
+            color: #3730a3;
+            border-color: #a5b4fc;
+        }
+    </style>
+
+    <h1>承認変更申請 一覧</h1>
 
     <form method="GET" action="{{ route('work.change-requests.index') }}" style="margin:12px 0;">
         <div class="row">
@@ -142,11 +165,35 @@
         </thead>
         <tbody>
             @foreach($requests as $r)
-                <tr>
+                @php
+                    $operationValue = strtoupper((string)($r->operation ?? 'UPDATE'));
+                    $entityTypeValue = strtolower((string)($r->entity_type ?? ''));
+                    $isDeleteOperation = $operationValue === 'DELETE';
+                    $isAccountRelated = $entityTypeValue === 'account' || str_starts_with($entityTypeValue, 'account_');
+                    $rowStyle = '';
+                    if ($isDeleteOperation && $isAccountRelated) {
+                        $rowStyle = 'background:#fef2f2;';
+                    } elseif ($isDeleteOperation) {
+                        $rowStyle = 'background:#fff1f2;';
+                    } elseif ($isAccountRelated) {
+                        $rowStyle = 'background:#eef2ff;';
+                    }
+                @endphp
+                <tr @if($rowStyle !== '') style="{{ $rowStyle }}" @endif>
                     <td>{{ $r->id }}</td>
                     <td>{{ $r->status }}</td>
-                    <td>{{ $r->operation ?? 'UPDATE' }}</td>
-                    <td>{{ $r->entity_type }}</td>
+                    <td>
+                        @if($isDeleteOperation)
+                            <span class="req-pill req-pill-delete">DELETE</span>
+                        @endif
+                        {{ $r->operation ?? 'UPDATE' }}
+                    </td>
+                    <td>
+                        @if($isAccountRelated)
+                            <span class="req-pill req-pill-account">アカウント系</span>
+                        @endif
+                        {{ $r->entity_type }}
+                    </td>
                     <td>{{ $r->entity_id }}</td>
                     <td>{{ $r->request_account_display_name ?? $r->requested_by_account_display_name ?? '-' }}</td>
                     <td>{{ $r->request_account_email ?? $r->requested_by_email ?? '-' }}</td>

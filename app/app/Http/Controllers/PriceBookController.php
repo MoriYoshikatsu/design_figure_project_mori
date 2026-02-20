@@ -197,10 +197,29 @@ final class PriceBookController extends Controller
         return view('work.price-books.create');
     }
 
-    public function show(int $id)
+    public function show(Request $request, int $id)
     {
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
         $book = DB::table('price_books')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$book) abort(404);
+
+        $itemQ = trim((string)$request->input('item_q', ''));
+        $pricingModel = strtoupper((string)$request->input('pricing_model', ''));
+        if ($pricingModel === 'PER_MM') {
+            $pricingModel = 'PER_M';
+        }
+        $skuId = (string)$request->input('sku_id', '');
+        $hasMemo = (string)$request->input('item_has_memo', '');
+        $minQtyMin = (string)$request->input('min_qty_min', '');
+        $minQtyMax = (string)$request->input('min_qty_max', '');
+        $unitPriceBand = (string)$request->input('unit_price_band', '');
+        $unitPriceMin = (string)$request->input('unit_price_min', '');
+        $unitPriceMax = (string)$request->input('unit_price_max', '');
+        $pricePerMMin = (string)$request->input('price_per_m_min', $request->input('price_per_mm_min', ''));
+        $pricePerMMax = (string)$request->input('price_per_m_max', $request->input('price_per_mm_max', ''));
+        $updatedFrom = (string)$request->input('item_updated_from', '');
+        $updatedTo = (string)$request->input('item_updated_to', '');
 
         $bookPendingOperation = DB::table('change_requests')
             ->where('entity_type', 'price_book')
@@ -215,7 +234,7 @@ final class PriceBookController extends Controller
             ? 'p.price_per_m as price_per_m'
             : '(p.price_per_mm * 1000) as price_per_m';
 
-        $items = DB::table('price_book_items as p')
+        $itemsQuery = DB::table('price_book_items as p')
             ->join('skus as s', 's.id', '=', 'p.sku_id')
             ->where('p.price_book_id', $id)
             ->whereNull('p.deleted_at')
@@ -232,10 +251,76 @@ final class PriceBookController extends Controller
                 'p.sku_id',
                 's.sku_code',
                 's.name as sku_name',
-            ])
-            ->orderBy('p.id')
-            ->limit(300)
-            ->get();
+            ]);
+
+        if ($itemQ !== '') {
+            $itemsQuery->where(function ($sub) use ($itemQ, $pricePerColumn) {
+                $sub->whereRaw('cast(p.id as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhere('s.sku_code', 'ilike', "%{$itemQ}%")
+                    ->orWhere('s.name', 'ilike', "%{$itemQ}%")
+                    ->orWhere('p.pricing_model', 'ilike', "%{$itemQ}%")
+                    ->orWhereRaw('cast(p.min_qty as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhereRaw('cast(p.unit_price as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhereRaw('cast(p.' . $pricePerColumn . ' as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhere('p.memo', 'ilike', "%{$itemQ}%")
+                    ->orWhereRaw('cast(p.formula as text) ilike ?', ["%{$itemQ}%"]);
+            });
+        }
+        if ($pricingModel !== '') {
+            if ($pricingModel === 'PER_M') {
+                $itemsQuery->whereIn('p.pricing_model', ['PER_M', 'PER_MM']);
+            } else {
+                $itemsQuery->where('p.pricing_model', $pricingModel);
+            }
+        }
+        if ($skuId !== '' && is_numeric($skuId)) {
+            $itemsQuery->where('p.sku_id', (int)$skuId);
+        }
+        if ($hasMemo === 'with') {
+            $itemsQuery->whereNotNull('p.memo')->where('p.memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $itemsQuery->where(function ($sub) {
+                $sub->whereNull('p.memo')->orWhere('p.memo', '');
+            });
+        }
+        if ($minQtyMin !== '' && is_numeric($minQtyMin)) {
+            $itemsQuery->where('p.min_qty', '>=', (float)$minQtyMin);
+        }
+        if ($minQtyMax !== '' && is_numeric($minQtyMax)) {
+            $itemsQuery->where('p.min_qty', '<=', (float)$minQtyMax);
+        }
+        if ($unitPriceBand !== '') {
+            if ($unitPriceBand === '0_1000') {
+                $itemsQuery->where('p.unit_price', '>=', 0)->where('p.unit_price', '<=', 1000);
+            } elseif ($unitPriceBand === '1001_5000') {
+                $itemsQuery->where('p.unit_price', '>=', 1001)->where('p.unit_price', '<=', 5000);
+            } elseif ($unitPriceBand === '5001_10000') {
+                $itemsQuery->where('p.unit_price', '>=', 5001)->where('p.unit_price', '<=', 10000);
+            } elseif ($unitPriceBand === '10000_up') {
+                $itemsQuery->where('p.unit_price', '>=', 10000);
+            }
+        } else {
+            if ($unitPriceMin !== '' && is_numeric($unitPriceMin)) {
+                $itemsQuery->where('p.unit_price', '>=', (float)$unitPriceMin);
+            }
+            if ($unitPriceMax !== '' && is_numeric($unitPriceMax)) {
+                $itemsQuery->where('p.unit_price', '<=', (float)$unitPriceMax);
+            }
+        }
+        if ($pricePerMMin !== '' && is_numeric($pricePerMMin)) {
+            $itemsQuery->where('p.' . $pricePerColumn, '>=', (float)$pricePerMMin / ($pricePerColumn === 'price_per_m' ? 1.0 : 1000.0));
+        }
+        if ($pricePerMMax !== '' && is_numeric($pricePerMMax)) {
+            $itemsQuery->where('p.' . $pricePerColumn, '<=', (float)$pricePerMMax / ($pricePerColumn === 'price_per_m' ? 1.0 : 1000.0));
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $itemsQuery->whereDate('p.updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $itemsQuery->whereDate('p.updated_at', '<=', $updatedTo);
+        }
+
+        $items = $itemsQuery->orderBy('p.id')->limit(300)->get();
 
         foreach ($items as $item) {
             if (($item->pricing_model ?? null) === 'PER_MM') {
@@ -261,10 +346,42 @@ final class PriceBookController extends Controller
             }
         }
 
+        $skus = DB::table('skus')
+            ->whereNull('deleted_at')
+            ->orderBy('sku_code')
+            ->get(['id', 'sku_code', 'name']);
+
         return view('work.price-books.show', [
             'book' => $book,
             'items' => $items,
             'bookPendingOperation' => $bookPendingOperation,
+            'skus' => $skus,
+            'itemFilters' => [
+                'item_q' => $itemQ,
+                'pricing_model' => $pricingModel,
+                'sku_id' => $skuId,
+                'item_has_memo' => $hasMemo,
+                'min_qty_min' => $minQtyMin,
+                'min_qty_max' => $minQtyMax,
+                'unit_price_band' => $unitPriceBand,
+                'unit_price_min' => $unitPriceMin,
+                'unit_price_max' => $unitPriceMax,
+                'price_per_m_min' => $pricePerMMin,
+                'price_per_m_max' => $pricePerMMax,
+                'item_updated_from' => $updatedFrom,
+                'item_updated_to' => $updatedTo,
+            ],
+            'pricingModelOptions' => ['FIXED', 'PER_M', 'FORMULA'],
+            'unitPriceBandOptions' => [
+                '0_1000' => '0 ~ 1000',
+                '1001_5000' => '1001 ~ 5000',
+                '5001_10000' => '5001 ~ 10000',
+                '10000_up' => '10000 ~',
+            ],
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
         ]);
     }
 

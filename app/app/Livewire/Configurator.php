@@ -20,7 +20,7 @@ final class Configurator extends Component
         'account_user_name' => 'users.name',
         'assignee_name' => '担当者',
         'customer_emails' => '登録メールアドレス',
-        'request_count' => '承認リクエスト件数',
+        'request_count' => '承認変更申請件数',
         'template_version_id' => 'ルールテンプレ',
         'price_book_id' => '納品物価格表',
         'subtotal' => '小計',
