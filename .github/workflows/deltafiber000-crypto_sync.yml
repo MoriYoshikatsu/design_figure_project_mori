@@ -1,0 +1,32 @@
+name: Sync with Upstream
+
+on:
+  workflow_dispatch: # GitHub上で手動実行するボタンを有効化
+  # schedule:
+  #   - cron: '0 0 * * *' # 毎日自動実行したい場合はコメントアウトを外す
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync from upstream
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # 元のリポジトリをupstreamとして追加
+          git remote add upstream https://github.com/deltafiber000-crypto/design_figure_project.git
+          
+          # 更新を取得
+          git fetch upstream
+          
+          # mainブランチにマージ（ブランチ名がmasterの場合は書き換えてください）
+          git merge upstream/main --allow-unrelated-histories
+          
+          # 自分のリポジトリにPush
+          git push origin main
