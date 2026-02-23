@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Services\DslEngine;
+use App\Services\QuoteCalcHistoryService;
 use App\Services\SnapshotPdfService;
 use App\Services\SvgRenderer;
+use App\Support\RoleHelper;
 use Illuminate\Support\Facades\DB;
 
 final class ChangeRequestController extends Controller
@@ -86,6 +88,10 @@ final class ChangeRequestController extends Controller
         $quoteSummaryContext = $entityType === 'quote'
             ? $this->buildQuoteSummaryContext((int)$req->entity_id)
             : [];
+        $canExpandCalcRuns = RoleHelper::currentHasRole(['admin', 'sales']);
+        $calcHistory = ($entityType === 'quote' && (int)$req->entity_id > 0)
+            ? app(QuoteCalcHistoryService::class)->getDrawerData((int)$req->entity_id, $canExpandCalcRuns)
+            : ['important_runs' => [], 'all_runs' => []];
 
         return view('work.change-requests.show', [
             'req' => $req,
@@ -115,6 +121,11 @@ final class ChangeRequestController extends Controller
             'compareSnapshotPdfUrl' => route('work.change-requests.snapshot-compare.pdf', $req->id),
             'memoUpdateUrl' => route('work.change-requests.memo.update', $req->id),
             'quoteSummaryContext' => $quoteSummaryContext,
+            'calcHistoryImportantRuns' => $calcHistory['important_runs'] ?? [],
+            'calcHistoryAllRuns' => $calcHistory['all_runs'] ?? [],
+            'canExpandCalcRuns' => $canExpandCalcRuns,
+            'calcHistoryHighlightSourceType' => 'change_request',
+            'calcHistoryHighlightSourceId' => (int)$req->id,
         ]);
     }
 
@@ -212,7 +223,7 @@ final class ChangeRequestController extends Controller
         );
 
         return $pdfService->downloadSnapshotBundleUi([
-            'title' => '編集承認リクエスト スナップショット',
+            'title' => '編集承認変更申請 スナップショット',
             'panelTitle' => '申請内容（新しい版）',
             'summaryItems' => [
                 ['label' => '対象', 'value' => $req->entity_type . ' #' . $req->entity_id],
@@ -331,7 +342,7 @@ final class ChangeRequestController extends Controller
         );
 
         return $pdfService->downloadSnapshotBundleUi([
-            'title' => '編集承認リクエスト 初版スナップショット',
+            'title' => '編集承認変更申請 初版スナップショット',
             'panelTitle' => '初版（申請時点の現行版）',
             'summaryItems' => [
                 ['label' => '対象', 'value' => $req->entity_type . ' #' . $req->entity_id],
@@ -503,7 +514,7 @@ final class ChangeRequestController extends Controller
             'updated_at' => now(),
         ]);
 
-        return redirect()->route('work.change-requests.show', $id)->with('status', 'リクエストメモを更新しました');
+        return redirect()->route('work.change-requests.show', $id)->with('status', '変更申請メモを更新しました');
     }
 
     private function augmentDerivedForRender(array $config, array $derived): array

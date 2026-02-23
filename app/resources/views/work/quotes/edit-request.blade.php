@@ -1,7 +1,7 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>見積 編集承認リクエスト</h1>
+    <h1>見積 編集承認変更申請</h1>
     <div class="muted">ID: {{ $quote->id }}</div>
 
     <form method="POST" action="{{ route('work.quotes.edit-request.store', $quote->id) }}">
@@ -32,7 +32,7 @@
             <textarea name="comment">{{ old('comment') }}</textarea>
         </div>
         <div style="margin-top:12px;">
-            <button type="submit">承認リクエスト送信</button>
+            <button type="submit">承認変更申請送信</button>
             <a href="{{ route('work.quotes.show', $quote->id) }}">戻る</a>
         </div>
     </form>

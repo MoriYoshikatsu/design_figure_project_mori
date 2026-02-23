@@ -20,7 +20,7 @@ final class Configurator extends Component
         'account_user_name' => 'users.name',
         'assignee_name' => '担当者',
         'customer_emails' => '登録メールアドレス',
-        'request_count' => '承認リクエスト件数',
+        'request_count' => '承認変更申請件数',
         'template_version_id' => 'ルールテンプレ',
         'price_book_id' => '納品物価格表',
         'subtotal' => '小計',
@@ -62,9 +62,20 @@ final class Configurator extends Component
     public ?string $initialMemo = null;
     public ?array $initialSummaryFields = null;
     public ?array $initialSummaryFieldOptions = null;
+    public ?array $initialPricingInput = null;
     public array $summaryFields = [];
     public array $summaryFieldOptions = [];
     public ?string $memo = null;
+    public mixed $orderQty = 1;
+    public mixed $fixedCost = null;
+    public mixed $managementFactor = null;
+    public mixed $qtyDiscountFactor = null;
+    public mixed $customerFactor = null;
+    public mixed $freightAmount = null;
+    public mixed $manualDiscountAmount = 0;
+    public string $tradeScope = 'DOMESTIC';
+    public mixed $taxRate = null;
+    public mixed $pricingPolicyId = null;
     public bool $isSaving = false;      // 保存中フラグ
     public ?string $saveError = null;   // 保存失敗メッセージ（なければnull）
     public bool $dirty = false;       // 未保存フラグ
@@ -79,7 +90,8 @@ final class Configurator extends Component
         ?int $initialTemplateVersionId = null,
         ?string $initialMemo = null,
         ?array $initialSummaryFields = null,
-        ?array $summaryFieldOptions = null
+        ?array $summaryFieldOptions = null,
+        ?array $initialPricingInput = null
     ): void
     {
         if ($quoteEditId) {
@@ -102,6 +114,9 @@ final class Configurator extends Component
         }
         if (is_array($summaryFieldOptions)) {
             $this->initialSummaryFieldOptions = $summaryFieldOptions;
+        }
+        if (is_array($initialPricingInput)) {
+            $this->initialPricingInput = $initialPricingInput;
         }
 
         $this->summaryFieldOptions = is_array($this->initialSummaryFieldOptions) && !empty($this->initialSummaryFieldOptions)
@@ -126,6 +141,14 @@ final class Configurator extends Component
             $this->skuOptions = $this->buildSkuOptions();
             $this->skuNameMap = $this->buildSkuNameMap();
             $this->skuSvgMap = $this->buildSkuSvgMap();
+            $defaultPricingInput = app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount(
+                (int)($this->quoteAccountId ?: $this->resolveAccountId())
+            );
+            $this->applyPricingInput(
+                is_array($this->initialPricingInput) && !empty($this->initialPricingInput)
+                    ? array_merge($defaultPricingInput, $this->initialPricingInput)
+                    : $defaultPricingInput
+            );
             $this->dirty = false;
             $this->saveError = null;
             $this->saveStatus = '';
@@ -212,6 +235,11 @@ final class Configurator extends Component
         $this->skuOptions = $this->buildSkuOptions();
         $this->skuNameMap = $this->buildSkuNameMap();
         $this->skuSvgMap = $this->buildSkuSvgMap();
+        $this->applyPricingInput(
+            app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount(
+                (int)$session->account_id
+            )
+        );
 
         $this->recompute(true); // SVGも更新
     }
@@ -592,6 +620,7 @@ final class Configurator extends Component
     public function issueQuote(): mixed
     {
         if (!$this->sessionId) return null;
+        $this->saveError = null;
 
         $ok = $this->persistToDb();
         if (!$ok) {
@@ -602,7 +631,12 @@ final class Configurator extends Component
         /** @var \App\Services\QuoteService $quoteService */
         $quoteService = app(\App\Services\QuoteService::class);
         try {
-            $quoteId = $quoteService->createFromSession($this->sessionId, auth()->id(), false);
+            $quoteId = $quoteService->createFromSession(
+                $this->sessionId,
+                auth()->id(),
+                false,
+                $this->exportPricingInput()
+            );
         } catch (\Throwable $e) {
             report($e);
             $this->saveError = '見積発行に失敗しました。ログイン状態とアカウント紐付けを確認してください。';
@@ -616,6 +650,7 @@ final class Configurator extends Component
     public function requestQuoteEdit(): void
     {
         if (!$this->quoteEditId) return;
+        $this->saveError = null;
 
         $this->recompute(true);
 
@@ -634,6 +669,24 @@ final class Configurator extends Component
         /** @var \App\Services\PricingService $pricing */
         $pricing = app(\App\Services\PricingService::class);
         $pricingResult = $pricing->price($accountId, $bom);
+        /** @var \App\Services\QuoteCalculationEngine $quoteCalculationEngine */
+        $quoteCalculationEngine = app(\App\Services\QuoteCalculationEngine::class);
+        try {
+            $calculation = $quoteCalculationEngine->calculate(
+                $accountId,
+                $bom,
+                is_array($pricingResult['items'] ?? null) ? $pricingResult['items'] : [],
+                array_merge(
+                    $this->exportPricingInput(),
+                    ['currency' => (string)($pricingResult['currency'] ?? 'JPY')]
+                )
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            $this->saveError = '見積変更申請に失敗しました。値引きは0以下で入力してください。';
+            $this->saveStatus = '見積変更申請失敗(TOKYO): ' . now()->format('H:i:s');
+            return;
+        }
 
         $snapshot = [
             'template_version_id' => (int)$this->templateVersionId,
@@ -644,11 +697,10 @@ final class Configurator extends Component
             'memo' => $this->normalizeMemo($this->memo),
             'bom' => $bom,
             'pricing' => $pricingResult['items'] ?? [],
-            'totals' => [
-                'subtotal' => (float)($pricingResult['subtotal'] ?? 0),
-                'tax' => (float)($pricingResult['tax'] ?? 0),
-                'total' => (float)($pricingResult['total'] ?? 0),
-            ],
+            'pricing_input' => $calculation['pricing_input'] ?? [],
+            'pricing_steps' => $calculation['pricing_steps'] ?? [],
+            'pricing_output' => $calculation['pricing_output'] ?? [],
+            'totals' => $calculation['totals'] ?? [],
         ];
 
         $quoteRow = DB::table('quotes')
@@ -668,8 +720,11 @@ final class Configurator extends Component
         $baseSnapshot['summary_card_fields'] = $baseSummaryFields;
         unset($snapshot['account_display_name_source'], $baseSnapshot['account_display_name_source']);
         $baseSnapshot['memo'] = $this->normalizeMemo((string)($quoteRow?->memo ?? ''));
+        if (is_array($baseSnapshot['pricing_input'] ?? null)) {
+            $baseSnapshot['pricing_input'] = $this->normalizePricingInputArray($baseSnapshot['pricing_input']);
+        }
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $requestId = app(WorkChangeRequestService::class)->queueUpdate(
             'quote',
             (int)$this->quoteEditId,
             [
@@ -681,6 +736,19 @@ final class Configurator extends Component
             ],
             (int)auth()->id(),
             'Configuratorからの変更申請'
+        );
+
+        /** @var \App\Services\QuoteCalcRunRecorder $runRecorder */
+        $runRecorder = app(\App\Services\QuoteCalcRunRecorder::class);
+        $runRecorder->recordFromCalculation(
+            (int)$this->quoteEditId,
+            'EDIT_REQUEST_SUBMIT',
+            $calculation,
+            (int)auth()->id(),
+            true,
+            'change_request',
+            (int)$requestId,
+            ['channel' => 'configurator']
         );
 
         $this->saveStatus = '見積変更申請(TOKYO): ' . now()->format('H:i:s');
@@ -885,6 +953,119 @@ final class Configurator extends Component
     {
         $v = trim((string)$memo);
         return $v === '' ? null : $v;
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     */
+    private function applyPricingInput(array $input): void
+    {
+        $normalized = $this->normalizePricingInputArray($input);
+        $this->orderQty = $normalized['order_qty'];
+        $this->fixedCost = $normalized['fixed_cost'];
+        $this->managementFactor = $normalized['management_factor'];
+        $this->qtyDiscountFactor = $normalized['qty_discount_factor'];
+        $this->customerFactor = $normalized['customer_factor'];
+        $this->freightAmount = $normalized['freight_amount'];
+        $this->manualDiscountAmount = $normalized['manual_discount_amount'];
+        $this->tradeScope = (string)$normalized['trade_scope'];
+        $this->taxRate = $normalized['tax_rate'];
+        $this->pricingPolicyId = $normalized['pricing_policy_id'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function exportPricingInput(): array
+    {
+        // /work/quotes/{id}/edit では従業員向けに全項目編集可。
+        if ($this->quoteEditId) {
+            return $this->normalizePricingInputArray([
+                'order_qty' => $this->orderQty,
+                'fixed_cost' => $this->fixedCost,
+                'management_factor' => $this->managementFactor,
+                'qty_discount_factor' => $this->qtyDiscountFactor,
+                'customer_factor' => $this->customerFactor,
+                'freight_amount' => $this->freightAmount,
+                'manual_discount_amount' => $this->manualDiscountAmount,
+                'trade_scope' => $this->tradeScope,
+                'tax_rate' => $this->taxRate,
+                'pricing_policy_id' => $this->pricingPolicyId,
+            ]);
+        }
+
+        // /configurator など顧客向け画面では注文数量のみ入力可。
+        $defaults = $this->resolvePricingInputDefaults();
+        $orderQty = is_numeric($this->orderQty) ? (int)$this->orderQty : 1;
+        if ($orderQty < 1) {
+            $orderQty = 1;
+        }
+
+        return $this->normalizePricingInputArray(array_merge($defaults, [
+            'order_qty' => $orderQty,
+        ]));
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function normalizePricingInputArray(array $input): array
+    {
+        $orderQty = is_numeric($input['order_qty'] ?? null) ? (int)$input['order_qty'] : 1;
+        if ($orderQty < 1) {
+            $orderQty = 1;
+        }
+
+        $tradeScope = strtoupper(trim((string)($input['trade_scope'] ?? 'DOMESTIC')));
+        if ($tradeScope !== 'OVERSEAS') {
+            $tradeScope = 'DOMESTIC';
+        }
+
+        return [
+            'order_qty' => $orderQty,
+            'fixed_cost' => is_numeric($input['fixed_cost'] ?? null) ? (float)$input['fixed_cost'] : null,
+            'management_factor' => is_numeric($input['management_factor'] ?? null) ? (float)$input['management_factor'] : null,
+            'qty_discount_factor' => is_numeric($input['qty_discount_factor'] ?? null) ? (float)$input['qty_discount_factor'] : null,
+            'customer_factor' => is_numeric($input['customer_factor'] ?? null) ? (float)$input['customer_factor'] : null,
+            'freight_amount' => is_numeric($input['freight_amount'] ?? null) ? (float)$input['freight_amount'] : null,
+            'manual_discount_amount' => is_numeric($input['manual_discount_amount'] ?? null) ? (float)$input['manual_discount_amount'] : 0.0,
+            'trade_scope' => $tradeScope,
+            'tax_rate' => is_numeric($input['tax_rate'] ?? null) ? (float)$input['tax_rate'] : null,
+            'pricing_policy_id' => is_numeric($input['pricing_policy_id'] ?? null) ? (int)$input['pricing_policy_id'] : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolvePricingInputDefaults(): array
+    {
+        $accountId = 0;
+        $currency = 'JPY';
+
+        if ($this->quoteEditId && $this->quoteAccountId) {
+            $accountId = (int)$this->quoteAccountId;
+            $quoteCurrency = DB::table('quotes')->where('id', (int)$this->quoteEditId)->value('currency');
+            if (is_string($quoteCurrency) && trim($quoteCurrency) !== '') {
+                $currency = trim($quoteCurrency);
+            }
+        } elseif ($this->sessionId) {
+            $session = DB::table('configurator_sessions')
+                ->where('id', (int)$this->sessionId)
+                ->first(['account_id']);
+            if ($session) {
+                $accountId = (int)$session->account_id;
+            }
+        }
+
+        if ($accountId <= 0) {
+            $accountId = $this->resolveAccountId();
+        }
+
+        /** @var \App\Services\QuoteCalculationEngine $engine */
+        $engine = app(\App\Services\QuoteCalculationEngine::class);
+        return $engine->defaultInputsForAccount($accountId, $currency);
     }
 
     private function applyToleranceDefaultsToFibers(): void
@@ -1215,6 +1396,9 @@ final class Configurator extends Component
         $this->config = $session->config;
         $this->derived = [];
         $this->errors = [];
+        $this->applyPricingInput(
+            app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount((int)$session->account_id)
+        );
 
         Cookie::queue(
             Cookie::make($cookieName, (string)$session->id, 60 * 24 * 30)

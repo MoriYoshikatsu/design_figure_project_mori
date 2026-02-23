@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="utf-8">
-    <title>編集承認リクエスト #{{ $req->id ?? '' }} 比較</title>
+    <title>編集承認変更申請 #{{ $req->id ?? '' }} 比較</title>
     @php
         $fontSrc = !empty($fontPath ?? null) && str_starts_with((string)$fontPath, '/')
             ? 'file://' . $fontPath
@@ -79,7 +79,7 @@
         }
     @endphp
 
-    <h1>編集承認リクエスト #{{ $req->id ?? '' }} 比較</h1>
+    <h1>編集承認変更申請 #{{ $req->id ?? '' }} 比較</h1>
 
     <div class="section">
         <h2>承認結果</h2>

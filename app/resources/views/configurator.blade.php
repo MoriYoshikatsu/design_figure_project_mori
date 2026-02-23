@@ -123,9 +123,61 @@
                 </div>
             @endif
 
+            <hr style="margin:12px 0;">
+            <h2 style="font-weight:700;">希望注文数量</h2>
+            <input type="number" min="1" step="1" wire:model.live.debounce.300ms="orderQty" style="width:100%;">
+
+            @if($quoteEditId)
+                <hr style="margin:12px 0;">
+                <h2 style="font-weight:700;">見積計算入力（従業員向け）</h2>
+                <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
+                    <div style="display:grid; gap:8px;">
+                        <div>
+                            <label>固定性経費</label>
+                            <input type="number" step="1" wire:model.live.debounce.300ms="fixedCost" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>管理費係数</label>
+                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="managementFactor" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>数量ディスカウント係数</label>
+                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="qtyDiscountFactor" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>顧客別仕切</label>
+                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="customerFactor" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>荷造運賃</label>
+                            <input type="number" step="1" wire:model.live.debounce.300ms="freightAmount" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>任意の値引き（0以下）</label>
+                            <input type="number" step="1" max="0" wire:model.live.debounce.300ms="manualDiscountAmount" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>取引区分</label>
+                            <select wire:model.live.debounce.300ms="tradeScope" style="width:100%;">
+                                <option value="DOMESTIC">DOMESTIC</option>
+                                <option value="OVERSEAS">OVERSEAS</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>税率（上書き可）</label>
+                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="taxRate" style="width:100%;">
+                        </div>
+                        <div>
+                            <label>価格ポリシーID</label>
+                            <input type="number" step="1" min="1" wire:model.live.debounce.300ms="pricingPolicyId" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             <h2 style="font-weight:700;">メモ</h2>
             <div style="margin-top:12px;">
-                <label>詳細な希望仕様など</label>
+                <label>詳細な希望仕様、送付先住所など</label>
                 <textarea wire:model.live.debounce.600ms="memo" rows="4" style="width:100%;"></textarea>
             </div>
         </div>
@@ -155,7 +207,7 @@
                 @else
                     {{-- 通常 --}}
                     <span>
-                        状態：{{ $dirty ? '未保存' : '保存済み' }}
+                        {{ $dirty ? '未保存' : '保存済み' }}
                         @if($saveStatus)（{{ $saveStatus }}）@endif
                     </span>
                 @endif

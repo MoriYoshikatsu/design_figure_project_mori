@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Services\CatalogIndexService;
 use App\Services\WorkChangeRequestService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,186 +11,12 @@ use Illuminate\Support\Facades\Schema;
 
 final class PriceBookController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, CatalogIndexService $catalogIndexService)
     {
-        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+        $filters = $catalogIndexService->resolvePriceBookFilters($request, true);
+        $panel = $catalogIndexService->buildPriceBookIndexData($filters);
 
-        $q = trim((string)$request->input('q', ''));
-        $currency = (string)$request->input('currency', '');
-        $period = (string)$request->input('period', '');
-        $versionMin = (string)$request->input('version_min', '');
-        $versionMax = (string)$request->input('version_max', '');
-        $hasMemo = (string)$request->input('has_memo', '');
-        $validFromFrom = (string)$request->input('valid_from_from', '');
-        $validFromTo = (string)$request->input('valid_from_to', '');
-        $validToFrom = (string)$request->input('valid_to_from', '');
-        $validToTo = (string)$request->input('valid_to_to', '');
-        $createdFrom = (string)$request->input('created_from', '');
-        $createdTo = (string)$request->input('created_to', '');
-        $updatedFrom = (string)$request->input('updated_from', '');
-        $updatedTo = (string)$request->input('updated_to', '');
-
-        $query = DB::table('price_books')->whereNull('deleted_at');
-
-        if ($q !== '') {
-            $query->where(function ($sub) use ($q) {
-                $sub->whereRaw('cast(id as text) ilike ?', ["%{$q}%"])
-                    ->orWhere('name', 'ilike', "%{$q}%")
-                    ->orWhereRaw('cast(version as text) ilike ?', ["%{$q}%"])
-                    ->orWhere('currency', 'ilike', "%{$q}%")
-                    ->orWhere('memo', 'ilike', "%{$q}%");
-            });
-        }
-        if ($currency !== '') {
-            $query->where('currency', $currency);
-        }
-        if ($versionMin !== '' && is_numeric($versionMin)) {
-            $query->where('version', '>=', (int)$versionMin);
-        }
-        if ($versionMax !== '' && is_numeric($versionMax)) {
-            $query->where('version', '<=', (int)$versionMax);
-        }
-        if ($hasMemo === 'with') {
-            $query->whereNotNull('memo')->where('memo', '<>', '');
-        } elseif ($hasMemo === 'without') {
-            $query->where(function ($sub) {
-                $sub->whereNull('memo')->orWhere('memo', '');
-            });
-        }
-        if ($validFromFrom !== '' && $isDate($validFromFrom)) {
-            $query->whereDate('valid_from', '>=', $validFromFrom);
-        }
-        if ($validFromTo !== '' && $isDate($validFromTo)) {
-            $query->whereDate('valid_from', '<=', $validFromTo);
-        }
-        if ($validToFrom !== '' && $isDate($validToFrom)) {
-            $query->whereDate('valid_to', '>=', $validToFrom);
-        }
-        if ($validToTo !== '' && $isDate($validToTo)) {
-            $query->whereDate('valid_to', '<=', $validToTo);
-        }
-        if ($createdFrom !== '' && $isDate($createdFrom)) {
-            $query->whereDate('created_at', '>=', $createdFrom);
-        }
-        if ($createdTo !== '' && $isDate($createdTo)) {
-            $query->whereDate('created_at', '<=', $createdTo);
-        }
-        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
-            $query->whereDate('updated_at', '>=', $updatedFrom);
-        }
-        if ($updatedTo !== '' && $isDate($updatedTo)) {
-            $query->whereDate('updated_at', '<=', $updatedTo);
-        }
-
-        $today = now()->toDateString();
-        if ($period === 'active') {
-            $query->where(function ($sub) use ($today) {
-                $sub->whereNull('valid_from')->orWhereDate('valid_from', '<=', $today);
-            })->where(function ($sub) use ($today) {
-                $sub->whereNull('valid_to')->orWhereDate('valid_to', '>=', $today);
-            });
-        } elseif ($period === 'upcoming') {
-            $query->whereNotNull('valid_from')->whereDate('valid_from', '>', $today);
-        } elseif ($period === 'expired') {
-            $query->whereNotNull('valid_to')->whereDate('valid_to', '<', $today);
-        } elseif ($period === 'no_limit') {
-            $query->whereNull('valid_from')->whereNull('valid_to');
-        }
-
-        $books = $query->orderBy('id', 'desc')->limit(200)->get();
-
-        $pendingCreates = DB::table('change_requests')
-            ->where('entity_type', 'price_book')
-            ->where('operation', 'CREATE')
-            ->where('status', 'PENDING')
-            ->orderBy('id', 'desc')
-            ->limit(50)
-            ->get(['id', 'proposed_json', 'created_at']);
-
-        foreach ($pendingCreates as $req) {
-            $payload = app(WorkChangeRequestService::class)->decodePayload($req->proposed_json);
-            $after = is_array($payload['after'] ?? null) ? $payload['after'] : [];
-            $virtual = (object)[
-                'id' => 'REQ-' . $req->id,
-                'name' => (string)($after['name'] ?? ''),
-                'version' => (int)($after['version'] ?? 0),
-                'currency' => (string)($after['currency'] ?? ''),
-                'valid_from' => $after['valid_from'] ?? null,
-                'valid_to' => $after['valid_to'] ?? null,
-                'memo' => (string)($after['memo'] ?? ''),
-                'created_at' => $req->created_at,
-                'updated_at' => $req->created_at,
-                'is_pending_create' => true,
-                'pending_request_id' => (int)$req->id,
-                'pending_operation' => 'CREATE',
-            ];
-            $books->prepend($virtual);
-        }
-
-        $bookIds = $books
-            ->filter(fn ($book) => is_numeric((string)$book->id))
-            ->pluck('id')
-            ->map(fn ($v) => (int)$v)
-            ->all();
-        if (!empty($bookIds)) {
-            $pendingByBook = DB::table('change_requests')
-                ->where('entity_type', 'price_book')
-                ->where('status', 'PENDING')
-                ->whereIn('operation', ['UPDATE', 'DELETE'])
-                ->whereIn('entity_id', $bookIds)
-                ->orderByDesc('id')
-                ->get(['entity_id', 'operation'])
-                ->groupBy('entity_id');
-            foreach ($books as $book) {
-                if (!is_numeric((string)$book->id)) {
-                    continue;
-                }
-                $rows = $pendingByBook->get((int)$book->id);
-                if ($rows && !$rows->isEmpty()) {
-                    $book->pending_operation = (string)$rows->first()->operation;
-                }
-            }
-        }
-
-        $currencyOptions = DB::table('price_books')
-            ->whereNull('deleted_at')
-            ->whereNotNull('currency')
-            ->where('currency', '<>', '')
-            ->distinct()
-            ->orderBy('currency')
-            ->pluck('currency')
-            ->all();
-
-        return view('work.price-books.index', [
-            'books' => $books,
-            'filters' => [
-                'q' => $q,
-                'currency' => $currency,
-                'period' => $period,
-                'version_min' => $versionMin,
-                'version_max' => $versionMax,
-                'has_memo' => $hasMemo,
-                'valid_from_from' => $validFromFrom,
-                'valid_from_to' => $validFromTo,
-                'valid_to_from' => $validToFrom,
-                'valid_to_to' => $validToTo,
-                'created_from' => $createdFrom,
-                'created_to' => $createdTo,
-                'updated_from' => $updatedFrom,
-                'updated_to' => $updatedTo,
-            ],
-            'currencyOptions' => $currencyOptions,
-            'periodOptions' => [
-                'active' => '有効期間内',
-                'upcoming' => '開始前',
-                'expired' => '期限切れ',
-                'no_limit' => '期間指定なし',
-            ],
-            'presenceOptions' => [
-                'with' => 'あり',
-                'without' => 'なし',
-            ],
-        ]);
+        return view('work.price-books.index', $panel);
     }
 
     public function create()
@@ -197,10 +24,29 @@ final class PriceBookController extends Controller
         return view('work.price-books.create');
     }
 
-    public function show(int $id)
+    public function show(Request $request, int $id)
     {
+        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+
         $book = DB::table('price_books')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$book) abort(404);
+
+        $itemQ = trim((string)$request->input('item_q', ''));
+        $pricingModel = strtoupper((string)$request->input('pricing_model', ''));
+        if ($pricingModel === 'PER_MM') {
+            $pricingModel = 'PER_M';
+        }
+        $skuId = (string)$request->input('sku_id', '');
+        $hasMemo = (string)$request->input('item_has_memo', '');
+        $minQtyMin = (string)$request->input('min_qty_min', '');
+        $minQtyMax = (string)$request->input('min_qty_max', '');
+        $unitPriceBand = (string)$request->input('unit_price_band', '');
+        $unitPriceMin = (string)$request->input('unit_price_min', '');
+        $unitPriceMax = (string)$request->input('unit_price_max', '');
+        $pricePerMMin = (string)$request->input('price_per_m_min', $request->input('price_per_mm_min', ''));
+        $pricePerMMax = (string)$request->input('price_per_m_max', $request->input('price_per_mm_max', ''));
+        $updatedFrom = (string)$request->input('item_updated_from', '');
+        $updatedTo = (string)$request->input('item_updated_to', '');
 
         $bookPendingOperation = DB::table('change_requests')
             ->where('entity_type', 'price_book')
@@ -215,7 +61,7 @@ final class PriceBookController extends Controller
             ? 'p.price_per_m as price_per_m'
             : '(p.price_per_mm * 1000) as price_per_m';
 
-        $items = DB::table('price_book_items as p')
+        $itemsQuery = DB::table('price_book_items as p')
             ->join('skus as s', 's.id', '=', 'p.sku_id')
             ->where('p.price_book_id', $id)
             ->whereNull('p.deleted_at')
@@ -232,10 +78,76 @@ final class PriceBookController extends Controller
                 'p.sku_id',
                 's.sku_code',
                 's.name as sku_name',
-            ])
-            ->orderBy('p.id')
-            ->limit(300)
-            ->get();
+            ]);
+
+        if ($itemQ !== '') {
+            $itemsQuery->where(function ($sub) use ($itemQ, $pricePerColumn) {
+                $sub->whereRaw('cast(p.id as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhere('s.sku_code', 'ilike', "%{$itemQ}%")
+                    ->orWhere('s.name', 'ilike', "%{$itemQ}%")
+                    ->orWhere('p.pricing_model', 'ilike', "%{$itemQ}%")
+                    ->orWhereRaw('cast(p.min_qty as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhereRaw('cast(p.unit_price as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhereRaw('cast(p.' . $pricePerColumn . ' as text) ilike ?', ["%{$itemQ}%"])
+                    ->orWhere('p.memo', 'ilike', "%{$itemQ}%")
+                    ->orWhereRaw('cast(p.formula as text) ilike ?', ["%{$itemQ}%"]);
+            });
+        }
+        if ($pricingModel !== '') {
+            if ($pricingModel === 'PER_M') {
+                $itemsQuery->whereIn('p.pricing_model', ['PER_M', 'PER_MM']);
+            } else {
+                $itemsQuery->where('p.pricing_model', $pricingModel);
+            }
+        }
+        if ($skuId !== '' && is_numeric($skuId)) {
+            $itemsQuery->where('p.sku_id', (int)$skuId);
+        }
+        if ($hasMemo === 'with') {
+            $itemsQuery->whereNotNull('p.memo')->where('p.memo', '<>', '');
+        } elseif ($hasMemo === 'without') {
+            $itemsQuery->where(function ($sub) {
+                $sub->whereNull('p.memo')->orWhere('p.memo', '');
+            });
+        }
+        if ($minQtyMin !== '' && is_numeric($minQtyMin)) {
+            $itemsQuery->where('p.min_qty', '>=', (float)$minQtyMin);
+        }
+        if ($minQtyMax !== '' && is_numeric($minQtyMax)) {
+            $itemsQuery->where('p.min_qty', '<=', (float)$minQtyMax);
+        }
+        if ($unitPriceBand !== '') {
+            if ($unitPriceBand === '0_1000') {
+                $itemsQuery->where('p.unit_price', '>=', 0)->where('p.unit_price', '<=', 1000);
+            } elseif ($unitPriceBand === '1001_5000') {
+                $itemsQuery->where('p.unit_price', '>=', 1001)->where('p.unit_price', '<=', 5000);
+            } elseif ($unitPriceBand === '5001_10000') {
+                $itemsQuery->where('p.unit_price', '>=', 5001)->where('p.unit_price', '<=', 10000);
+            } elseif ($unitPriceBand === '10000_up') {
+                $itemsQuery->where('p.unit_price', '>=', 10000);
+            }
+        } else {
+            if ($unitPriceMin !== '' && is_numeric($unitPriceMin)) {
+                $itemsQuery->where('p.unit_price', '>=', (float)$unitPriceMin);
+            }
+            if ($unitPriceMax !== '' && is_numeric($unitPriceMax)) {
+                $itemsQuery->where('p.unit_price', '<=', (float)$unitPriceMax);
+            }
+        }
+        if ($pricePerMMin !== '' && is_numeric($pricePerMMin)) {
+            $itemsQuery->where('p.' . $pricePerColumn, '>=', (float)$pricePerMMin / ($pricePerColumn === 'price_per_m' ? 1.0 : 1000.0));
+        }
+        if ($pricePerMMax !== '' && is_numeric($pricePerMMax)) {
+            $itemsQuery->where('p.' . $pricePerColumn, '<=', (float)$pricePerMMax / ($pricePerColumn === 'price_per_m' ? 1.0 : 1000.0));
+        }
+        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
+            $itemsQuery->whereDate('p.updated_at', '>=', $updatedFrom);
+        }
+        if ($updatedTo !== '' && $isDate($updatedTo)) {
+            $itemsQuery->whereDate('p.updated_at', '<=', $updatedTo);
+        }
+
+        $items = $itemsQuery->orderBy('p.id')->limit(300)->get();
 
         foreach ($items as $item) {
             if (($item->pricing_model ?? null) === 'PER_MM') {
@@ -261,10 +173,42 @@ final class PriceBookController extends Controller
             }
         }
 
+        $skus = DB::table('skus')
+            ->whereNull('deleted_at')
+            ->orderBy('sku_code')
+            ->get(['id', 'sku_code', 'name']);
+
         return view('work.price-books.show', [
             'book' => $book,
             'items' => $items,
             'bookPendingOperation' => $bookPendingOperation,
+            'skus' => $skus,
+            'itemFilters' => [
+                'item_q' => $itemQ,
+                'pricing_model' => $pricingModel,
+                'sku_id' => $skuId,
+                'item_has_memo' => $hasMemo,
+                'min_qty_min' => $minQtyMin,
+                'min_qty_max' => $minQtyMax,
+                'unit_price_band' => $unitPriceBand,
+                'unit_price_min' => $unitPriceMin,
+                'unit_price_max' => $unitPriceMax,
+                'price_per_m_min' => $pricePerMMin,
+                'price_per_m_max' => $pricePerMMax,
+                'item_updated_from' => $updatedFrom,
+                'item_updated_to' => $updatedTo,
+            ],
+            'pricingModelOptions' => ['FIXED', 'PER_M', 'FORMULA'],
+            'unitPriceBandOptions' => [
+                '0_1000' => '0 ~ 1000',
+                '1001_5000' => '1001 ~ 5000',
+                '5001_10000' => '5001 ~ 10000',
+                '10000_up' => '10000 ~',
+            ],
+            'presenceOptions' => [
+                'with' => 'あり',
+                'without' => 'なし',
+            ],
         ]);
     }
 
@@ -589,6 +533,11 @@ final class PriceBookController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.index')->with('status', '価格表の削除申請を送信しました');
+        $tab = (string)$request->input('tab', 'price_books');
+        if (!in_array($tab, ['skus', 'price_books'], true)) {
+            $tab = 'price_books';
+        }
+
+        return redirect()->route('work.price-books.index', ['tab' => $tab])->with('status', '価格表の削除申請を送信しました');
     }
 }
