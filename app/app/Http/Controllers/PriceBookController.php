@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Services\CatalogIndexService;
 use App\Services\WorkChangeRequestService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,186 +11,12 @@ use Illuminate\Support\Facades\Schema;
 
 final class PriceBookController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, CatalogIndexService $catalogIndexService)
     {
-        $isDate = static fn (string $v): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $v);
+        $filters = $catalogIndexService->resolvePriceBookFilters($request, true);
+        $panel = $catalogIndexService->buildPriceBookIndexData($filters);
 
-        $q = trim((string)$request->input('q', ''));
-        $currency = (string)$request->input('currency', '');
-        $period = (string)$request->input('period', '');
-        $versionMin = (string)$request->input('version_min', '');
-        $versionMax = (string)$request->input('version_max', '');
-        $hasMemo = (string)$request->input('has_memo', '');
-        $validFromFrom = (string)$request->input('valid_from_from', '');
-        $validFromTo = (string)$request->input('valid_from_to', '');
-        $validToFrom = (string)$request->input('valid_to_from', '');
-        $validToTo = (string)$request->input('valid_to_to', '');
-        $createdFrom = (string)$request->input('created_from', '');
-        $createdTo = (string)$request->input('created_to', '');
-        $updatedFrom = (string)$request->input('updated_from', '');
-        $updatedTo = (string)$request->input('updated_to', '');
-
-        $query = DB::table('price_books')->whereNull('deleted_at');
-
-        if ($q !== '') {
-            $query->where(function ($sub) use ($q) {
-                $sub->whereRaw('cast(id as text) ilike ?', ["%{$q}%"])
-                    ->orWhere('name', 'ilike', "%{$q}%")
-                    ->orWhereRaw('cast(version as text) ilike ?', ["%{$q}%"])
-                    ->orWhere('currency', 'ilike', "%{$q}%")
-                    ->orWhere('memo', 'ilike', "%{$q}%");
-            });
-        }
-        if ($currency !== '') {
-            $query->where('currency', $currency);
-        }
-        if ($versionMin !== '' && is_numeric($versionMin)) {
-            $query->where('version', '>=', (int)$versionMin);
-        }
-        if ($versionMax !== '' && is_numeric($versionMax)) {
-            $query->where('version', '<=', (int)$versionMax);
-        }
-        if ($hasMemo === 'with') {
-            $query->whereNotNull('memo')->where('memo', '<>', '');
-        } elseif ($hasMemo === 'without') {
-            $query->where(function ($sub) {
-                $sub->whereNull('memo')->orWhere('memo', '');
-            });
-        }
-        if ($validFromFrom !== '' && $isDate($validFromFrom)) {
-            $query->whereDate('valid_from', '>=', $validFromFrom);
-        }
-        if ($validFromTo !== '' && $isDate($validFromTo)) {
-            $query->whereDate('valid_from', '<=', $validFromTo);
-        }
-        if ($validToFrom !== '' && $isDate($validToFrom)) {
-            $query->whereDate('valid_to', '>=', $validToFrom);
-        }
-        if ($validToTo !== '' && $isDate($validToTo)) {
-            $query->whereDate('valid_to', '<=', $validToTo);
-        }
-        if ($createdFrom !== '' && $isDate($createdFrom)) {
-            $query->whereDate('created_at', '>=', $createdFrom);
-        }
-        if ($createdTo !== '' && $isDate($createdTo)) {
-            $query->whereDate('created_at', '<=', $createdTo);
-        }
-        if ($updatedFrom !== '' && $isDate($updatedFrom)) {
-            $query->whereDate('updated_at', '>=', $updatedFrom);
-        }
-        if ($updatedTo !== '' && $isDate($updatedTo)) {
-            $query->whereDate('updated_at', '<=', $updatedTo);
-        }
-
-        $today = now()->toDateString();
-        if ($period === 'active') {
-            $query->where(function ($sub) use ($today) {
-                $sub->whereNull('valid_from')->orWhereDate('valid_from', '<=', $today);
-            })->where(function ($sub) use ($today) {
-                $sub->whereNull('valid_to')->orWhereDate('valid_to', '>=', $today);
-            });
-        } elseif ($period === 'upcoming') {
-            $query->whereNotNull('valid_from')->whereDate('valid_from', '>', $today);
-        } elseif ($period === 'expired') {
-            $query->whereNotNull('valid_to')->whereDate('valid_to', '<', $today);
-        } elseif ($period === 'no_limit') {
-            $query->whereNull('valid_from')->whereNull('valid_to');
-        }
-
-        $books = $query->orderBy('id', 'desc')->limit(200)->get();
-
-        $pendingCreates = DB::table('change_requests')
-            ->where('entity_type', 'price_book')
-            ->where('operation', 'CREATE')
-            ->where('status', 'PENDING')
-            ->orderBy('id', 'desc')
-            ->limit(50)
-            ->get(['id', 'proposed_json', 'created_at']);
-
-        foreach ($pendingCreates as $req) {
-            $payload = app(WorkChangeRequestService::class)->decodePayload($req->proposed_json);
-            $after = is_array($payload['after'] ?? null) ? $payload['after'] : [];
-            $virtual = (object)[
-                'id' => 'REQ-' . $req->id,
-                'name' => (string)($after['name'] ?? ''),
-                'version' => (int)($after['version'] ?? 0),
-                'currency' => (string)($after['currency'] ?? ''),
-                'valid_from' => $after['valid_from'] ?? null,
-                'valid_to' => $after['valid_to'] ?? null,
-                'memo' => (string)($after['memo'] ?? ''),
-                'created_at' => $req->created_at,
-                'updated_at' => $req->created_at,
-                'is_pending_create' => true,
-                'pending_request_id' => (int)$req->id,
-                'pending_operation' => 'CREATE',
-            ];
-            $books->prepend($virtual);
-        }
-
-        $bookIds = $books
-            ->filter(fn ($book) => is_numeric((string)$book->id))
-            ->pluck('id')
-            ->map(fn ($v) => (int)$v)
-            ->all();
-        if (!empty($bookIds)) {
-            $pendingByBook = DB::table('change_requests')
-                ->where('entity_type', 'price_book')
-                ->where('status', 'PENDING')
-                ->whereIn('operation', ['UPDATE', 'DELETE'])
-                ->whereIn('entity_id', $bookIds)
-                ->orderByDesc('id')
-                ->get(['entity_id', 'operation'])
-                ->groupBy('entity_id');
-            foreach ($books as $book) {
-                if (!is_numeric((string)$book->id)) {
-                    continue;
-                }
-                $rows = $pendingByBook->get((int)$book->id);
-                if ($rows && !$rows->isEmpty()) {
-                    $book->pending_operation = (string)$rows->first()->operation;
-                }
-            }
-        }
-
-        $currencyOptions = DB::table('price_books')
-            ->whereNull('deleted_at')
-            ->whereNotNull('currency')
-            ->where('currency', '<>', '')
-            ->distinct()
-            ->orderBy('currency')
-            ->pluck('currency')
-            ->all();
-
-        return view('work.price-books.index', [
-            'books' => $books,
-            'filters' => [
-                'q' => $q,
-                'currency' => $currency,
-                'period' => $period,
-                'version_min' => $versionMin,
-                'version_max' => $versionMax,
-                'has_memo' => $hasMemo,
-                'valid_from_from' => $validFromFrom,
-                'valid_from_to' => $validFromTo,
-                'valid_to_from' => $validToFrom,
-                'valid_to_to' => $validToTo,
-                'created_from' => $createdFrom,
-                'created_to' => $createdTo,
-                'updated_from' => $updatedFrom,
-                'updated_to' => $updatedTo,
-            ],
-            'currencyOptions' => $currencyOptions,
-            'periodOptions' => [
-                'active' => '有効期間内',
-                'upcoming' => '開始前',
-                'expired' => '期限切れ',
-                'no_limit' => '期間指定なし',
-            ],
-            'presenceOptions' => [
-                'with' => 'あり',
-                'without' => 'なし',
-            ],
-        ]);
+        return view('work.price-books.index', $panel);
     }
 
     public function create()
@@ -706,6 +533,11 @@ final class PriceBookController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.index')->with('status', '価格表の削除申請を送信しました');
+        $tab = (string)$request->input('tab', 'price_books');
+        if (!in_array($tab, ['skus', 'price_books'], true)) {
+            $tab = 'price_books';
+        }
+
+        return redirect()->route('work.price-books.index', ['tab' => $tab])->with('status', '価格表の削除申請を送信しました');
     }
 }

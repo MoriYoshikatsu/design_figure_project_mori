@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Services\DslEngine;
+use App\Services\QuoteCalcRunRecorder;
 use App\Services\SnapshotPdfService;
 use App\Services\WorkChangeRequestApplier;
 use Illuminate\Http\Request;
@@ -697,6 +698,8 @@ final class ChangeRequestReviewController extends Controller
             $proposed = $this->decodeJson($req->proposed_json) ?? [];
             $operation = strtoupper((string)($req->operation ?? 'UPDATE'));
             $isStructuredPayload = array_key_exists('before', $proposed) || array_key_exists('after', $proposed);
+            $quoteSnapshotForRun = $this->extractQuoteSnapshotFromPayload($req, $proposed);
+            $resolvedQuoteId = (int)($req->entity_id ?? 0);
 
             if ($isStructuredPayload || $operation !== 'UPDATE' || !in_array((string)$req->entity_type, ['configurator_session', 'quote'], true)) {
                 $appliedEntityId = app(WorkChangeRequestApplier::class)->apply($req, $proposed, $actorId);
@@ -704,6 +707,9 @@ final class ChangeRequestReviewController extends Controller
                     DB::table('change_requests')
                         ->where('id', $id)
                         ->update(['entity_id' => $appliedEntityId, 'updated_at' => now()]);
+                    if ((string)$req->entity_type === 'quote') {
+                        $resolvedQuoteId = $appliedEntityId;
+                    }
                 }
             } elseif ($req->entity_type === 'configurator_session') {
                 $this->applySessionChange((int)$req->entity_id, $proposed, $actorId);
@@ -717,6 +723,23 @@ final class ChangeRequestReviewController extends Controller
                 'approved_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            if (
+                (string)$req->entity_type === 'quote'
+                && $resolvedQuoteId > 0
+                && !empty($quoteSnapshotForRun)
+            ) {
+                app(QuoteCalcRunRecorder::class)->recordFromSnapshot(
+                    $resolvedQuoteId,
+                    'EDIT_REQUEST_APPROVE',
+                    $quoteSnapshotForRun,
+                    $actorId,
+                    true,
+                    'change_request',
+                    (int)$req->id,
+                    ['status' => 'APPROVED']
+                );
+            }
         });
 
         return redirect()->route('work.change-requests.index')->with('status', '承認しました');
@@ -725,12 +748,41 @@ final class ChangeRequestReviewController extends Controller
     public function reject(int $id)
     {
         $actorId = (int)auth()->id();
-        DB::table('change_requests')->where('id', $id)->update([
-            'status' => 'REJECTED',
-            'approved_by' => $actorId,
-            'approved_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($id, $actorId) {
+            $req = DB::table('change_requests')
+                ->where('id', $id)
+                ->lockForUpdate()
+                ->first();
+            if (!$req) {
+                abort(404);
+            }
+            if ((string)$req->status !== 'PENDING') {
+                return;
+            }
+
+            DB::table('change_requests')->where('id', $id)->update([
+                'status' => 'REJECTED',
+                'approved_by' => $actorId,
+                'approved_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $proposed = $this->decodeJson($req->proposed_json) ?? [];
+            $quoteSnapshotForRun = $this->extractQuoteSnapshotFromPayload($req, $proposed);
+            $quoteId = (int)($req->entity_id ?? 0);
+            if ((string)$req->entity_type === 'quote' && $quoteId > 0 && !empty($quoteSnapshotForRun)) {
+                app(QuoteCalcRunRecorder::class)->recordFromSnapshot(
+                    $quoteId,
+                    'EDIT_REQUEST_REJECT',
+                    $quoteSnapshotForRun,
+                    $actorId,
+                    true,
+                    'change_request',
+                    (int)$req->id,
+                    ['status' => 'REJECTED']
+                );
+            }
+        });
 
         return redirect()->route('work.change-requests.index')->with('status', '却下しました');
     }
@@ -955,6 +1007,28 @@ final class ChangeRequestReviewController extends Controller
         if ($value === null) return null;
         $decoded = json_decode((string)$value, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * @param array<string, mixed> $proposed
+     * @return array<string, mixed>
+     */
+    private function extractQuoteSnapshotFromPayload(object $requestRow, array $proposed): array
+    {
+        if ((string)($requestRow->entity_type ?? '') !== 'quote') {
+            return [];
+        }
+
+        if (is_array($proposed['snapshot'] ?? null)) {
+            return $proposed['snapshot'];
+        }
+
+        $after = $proposed['after'] ?? null;
+        if (is_array($after) && is_array($after['snapshot'] ?? null)) {
+            return $after['snapshot'];
+        }
+
+        return [];
     }
 
     private function asNumber(mixed $v): float

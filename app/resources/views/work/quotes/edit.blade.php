@@ -21,5 +21,6 @@
         'initialMemo' => $initialMemo ?? '',
         'initialSummaryFields' => $selectedSummaryFields ?? [],
         'summaryFieldOptions' => $summaryFieldOptions ?? [],
+        'initialPricingInput' => $initialPricingInput ?? [],
     ])
 @endsection

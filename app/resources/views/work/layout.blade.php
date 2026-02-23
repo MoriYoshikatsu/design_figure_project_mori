@@ -156,6 +156,18 @@
 <body>
     @php
         $showSidebar = \App\Support\RoleHelper::currentHasRole(['admin', 'sales']);
+        $catalogMenuUrl = null;
+        if ($showSidebar && auth()->check()) {
+            $permissionService = app(\App\Services\WorkPermissionService::class);
+            $currentUserId = (int)auth()->id();
+            $canSku = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/skus', 'GET'), $currentUserId);
+            $canPriceBook = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/price-books', 'GET'), $currentUserId);
+            if ($canSku) {
+                $catalogMenuUrl = route('work.skus.index');
+            } elseif ($canPriceBook) {
+                $catalogMenuUrl = route('work.price-books.index');
+            }
+        }
     @endphp
     <div class="layout-root">
         @if($showSidebar)
@@ -173,12 +185,11 @@
                     <a href="{{ route('work.quotes.index') }}" class="sidebar-item @if(request()->routeIs('work.quotes.*')) is-active @endif" data-label="仕様書見積">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
                     </a>
-                    <a href="{{ route('work.skus.index') }}" class="sidebar-item @if(request()->routeIs('work.skus.*')) is-active @endif" data-label="パーツ(SKU)">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/></svg>
-                    </a>
-                    <a href="{{ route('work.price-books.index') }}" class="sidebar-item @if(request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ価格表">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
-                    </a>
+                    @if($catalogMenuUrl)
+                        <a href="{{ $catalogMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.skus.*') || request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ・価格">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/><rect x="4.5" y="14.5" width="15" height="5" rx="1"/></svg>
+                        </a>
+                    @endif
                     <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 4 12l4 6M16 6l4 6-4 6M13.5 4l-3 16"/></svg>
                     </a>

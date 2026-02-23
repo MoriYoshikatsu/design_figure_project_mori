@@ -3,9 +3,17 @@
 @section('content')
     <h1>見積 #{{ $quote->id ?? '' }} 詳細</h1>
     <div class="actions" style="margin:8px 0;">
-        <a href="{{ route('work.quotes.edit', $quote->id) }}">コンフィギュレータで編集</a>
+        <a href="{{ route('work.quotes.edit', $quote->id) }}">編集</a>
         <a href="{{ route('work.quotes.index') }}">一覧へ戻る</a>
     </div>
+    @include('work.quotes._calc_history_drawer', [
+        'quoteId' => (int)$quote->id,
+        'importantRuns' => $calcHistoryImportantRuns ?? [],
+        'allRuns' => $calcHistoryAllRuns ?? [],
+        'canExpandAll' => (bool)($canExpandCalcRuns ?? false),
+        'drawerSuffix' => 'quote-show',
+        'drawerTitle' => '計算履歴',
+    ])
 
     @php
         $snapshotView = is_array($snapshot ?? null) ? $snapshot : [];

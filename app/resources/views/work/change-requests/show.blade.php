@@ -218,6 +218,19 @@
     <h1>承認変更申請 #{{ $req->id ?? '' }}</h1>
     {{-- <div class="muted" style="margin:4px 0 12px;">{{ $requestHeading }}</div> --}}
 
+    @if((string)($req->entity_type ?? '') === 'quote' && (int)($req->entity_id ?? 0) > 0)
+        @include('work.quotes._calc_history_drawer', [
+            'quoteId' => (int)$req->entity_id,
+            'importantRuns' => $calcHistoryImportantRuns ?? [],
+            'allRuns' => $calcHistoryAllRuns ?? [],
+            'canExpandAll' => (bool)($canExpandCalcRuns ?? false),
+            'highlightSourceType' => $calcHistoryHighlightSourceType ?? null,
+            'highlightSourceId' => $calcHistoryHighlightSourceId ?? null,
+            'drawerSuffix' => 'change-request-show-' . (int)$req->id,
+            'drawerTitle' => '計算履歴',
+        ])
+    @endif
+
     @if($isDeleteOperation || $isAccountRelated)
         <div style="margin:8px 0 12px; padding:10px; border-radius:8px; border:1px solid @if($isDeleteOperation) #fca5a5 @else #a5b4fc @endif; background:@if($isDeleteOperation) #fef2f2 @else #eef2ff @endif;">
             @if($isDeleteOperation)

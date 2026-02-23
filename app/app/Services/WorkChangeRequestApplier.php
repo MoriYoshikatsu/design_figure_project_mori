@@ -395,14 +395,74 @@ final class WorkChangeRequestApplier
             if (!empty($snapshot)) {
                 $update['snapshot'] = json_encode($snapshot, JSON_UNESCAPED_UNICODE);
                 $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
+                $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
+                $pricingOutput = is_array($snapshot['pricing_output'] ?? null) ? $snapshot['pricing_output'] : [];
                 if (array_key_exists('subtotal', $totals)) {
                     $update['subtotal'] = (float)$totals['subtotal'];
+                } elseif (array_key_exists('adjusted_total', $pricingOutput)) {
+                    $update['subtotal'] = (float)$pricingOutput['adjusted_total'];
                 }
                 if (array_key_exists('tax', $totals)) {
                     $update['tax_total'] = (float)$totals['tax'];
+                } elseif (array_key_exists('tax_amount', $pricingOutput)) {
+                    $update['tax_total'] = (float)$pricingOutput['tax_amount'];
                 }
                 if (array_key_exists('total', $totals)) {
                     $update['total'] = (float)$totals['total'];
+                } elseif (array_key_exists('grand_total', $pricingOutput)) {
+                    $update['total'] = (float)$pricingOutput['grand_total'];
+                }
+
+                if (array_key_exists('order_qty', $pricingInput) && is_numeric($pricingInput['order_qty'])) {
+                    if ($this->hasQuoteColumn('order_qty')) {
+                        $update['order_qty'] = max(1, (int)$pricingInput['order_qty']);
+                    }
+                }
+                if (array_key_exists('fixed_cost', $pricingInput) && is_numeric($pricingInput['fixed_cost'])) {
+                    if ($this->hasQuoteColumn('fixed_cost')) {
+                        $update['fixed_cost'] = (float)$pricingInput['fixed_cost'];
+                    }
+                }
+                if (array_key_exists('management_factor', $pricingInput) && is_numeric($pricingInput['management_factor'])) {
+                    if ($this->hasQuoteColumn('management_factor')) {
+                        $update['management_factor'] = (float)$pricingInput['management_factor'];
+                    }
+                }
+                if (array_key_exists('qty_discount_factor', $pricingInput) && is_numeric($pricingInput['qty_discount_factor'])) {
+                    if ($this->hasQuoteColumn('qty_discount_factor')) {
+                        $update['qty_discount_factor'] = (float)$pricingInput['qty_discount_factor'];
+                    }
+                }
+                if (array_key_exists('customer_factor', $pricingInput) && is_numeric($pricingInput['customer_factor'])) {
+                    if ($this->hasQuoteColumn('customer_factor')) {
+                        $update['customer_factor'] = (float)$pricingInput['customer_factor'];
+                    }
+                }
+                if (array_key_exists('freight_amount', $pricingInput) && is_numeric($pricingInput['freight_amount'])) {
+                    if ($this->hasQuoteColumn('freight_amount')) {
+                        $update['freight_amount'] = (float)$pricingInput['freight_amount'];
+                    }
+                }
+                if (array_key_exists('manual_discount_amount', $pricingInput) && is_numeric($pricingInput['manual_discount_amount'])) {
+                    if ($this->hasQuoteColumn('manual_discount_amount')) {
+                        $update['manual_discount_amount'] = (float)$pricingInput['manual_discount_amount'];
+                    }
+                }
+                if (array_key_exists('trade_scope', $pricingInput)) {
+                    if ($this->hasQuoteColumn('trade_scope')) {
+                        $scope = strtoupper(trim((string)$pricingInput['trade_scope']));
+                        $update['trade_scope'] = $scope === 'OVERSEAS' ? 'OVERSEAS' : 'DOMESTIC';
+                    }
+                }
+                if (array_key_exists('tax_rate', $pricingInput) && is_numeric($pricingInput['tax_rate'])) {
+                    if ($this->hasQuoteColumn('tax_rate')) {
+                        $update['tax_rate'] = (float)$pricingInput['tax_rate'];
+                    }
+                }
+                if (array_key_exists('pricing_policy_id', $pricingInput) && is_numeric($pricingInput['pricing_policy_id'])) {
+                    if ($this->hasQuoteColumn('pricing_policy_id')) {
+                        $update['pricing_policy_id'] = (int)$pricingInput['pricing_policy_id'];
+                    }
                 }
             }
             if ($memo !== null) {
@@ -728,5 +788,15 @@ final class WorkChangeRequestApplier
             return 'source:' . $source . ';';
         }
         return 'source:' . $source . ';' . $memoValue;
+    }
+
+    private function hasQuoteColumn(string $column): bool
+    {
+        static $cache = [];
+        if (!array_key_exists($column, $cache)) {
+            $cache[$column] = Schema::hasTable('quotes') && Schema::hasColumn('quotes', $column);
+        }
+
+        return $cache[$column];
     }
 }
