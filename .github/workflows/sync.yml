@@ -28,5 +28,6 @@ jobs:
           # mainブランチにマージ（ブランチ名がmasterの場合は書き換えてください）
           git merge upstream/main --allow-unrelated-histories
           
-          # 自分のリポジトリにPush
+          # 自分のリポジトリにPush (内蔵トークンを明示してアクセス)
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git push origin main
