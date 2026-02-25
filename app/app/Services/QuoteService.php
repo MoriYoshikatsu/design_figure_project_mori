@@ -3,15 +3,21 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 final class QuoteService
 {
     /**
      * @return int quote_id
      */
-    public function createFromSession(int $sessionId, ?int $actorUserId = null, bool $lockSession = false): int
+    public function createFromSession(
+        int $sessionId,
+        ?int $actorUserId = null,
+        bool $lockSession = false,
+        array $pricingInput = []
+    ): int
     {
-        return DB::transaction(function () use ($sessionId, $actorUserId, $lockSession) {
+        return DB::transaction(function () use ($sessionId, $actorUserId, $lockSession, $pricingInput) {
             $session = DB::table('configurator_sessions')
                 ->where('id', $sessionId)
                 ->lockForUpdate()
@@ -69,16 +75,31 @@ final class QuoteService
             $pricing = app(\App\Services\PricingService::class);
             $pricingResult = $pricing->price((int)$session->account_id, $bom);
 
-            $quoteId = (int)DB::table('quotes')->insertGetId([
+            /** @var \App\Services\QuoteCalculationEngine $quoteCalculationEngine */
+            $quoteCalculationEngine = app(\App\Services\QuoteCalculationEngine::class);
+            $calculation = $quoteCalculationEngine->calculate(
+                (int)$session->account_id,
+                $bom,
+                is_array($pricingResult['items'] ?? null) ? $pricingResult['items'] : [],
+                array_merge(
+                    is_array($pricingInput) ? $pricingInput : [],
+                    ['currency' => (string)($pricingResult['currency'] ?? 'JPY')]
+                )
+            );
+            $pricingInputResolved = is_array($calculation['pricing_input'] ?? null) ? $calculation['pricing_input'] : [];
+            $pricingOutputResolved = is_array($calculation['pricing_output'] ?? null) ? $calculation['pricing_output'] : [];
+            $resolvedTotals = is_array($calculation['totals'] ?? null) ? $calculation['totals'] : [];
+
+            $insertPayload = [
                 'account_id' => (int)$session->account_id,
                 'session_id' => (int)$session->id,
                 'status' => 'ISSUED',
                 'currency' => (string)($pricingResult['currency'] ?? 'JPY'),
                 'memo' => $session->memo,
-                'subtotal' => (float)($pricingResult['subtotal'] ?? 0),
+                'subtotal' => (float)($resolvedTotals['subtotal'] ?? 0),
                 'discount_total' => 0,
-                'tax_total' => (float)($pricingResult['tax'] ?? 0),
-                'total' => (float)($pricingResult['total'] ?? 0),
+                'tax_total' => (float)($resolvedTotals['tax'] ?? 0),
+                'total' => (float)($resolvedTotals['total'] ?? 0),
                 'snapshot' => json_encode([
                     'template_version_id' => (int)$session->template_version_id,
                     'price_book_id' => $pricingResult['price_book_id'] ?? null,
@@ -101,17 +122,52 @@ final class QuoteService
                     'validation_errors' => $validationErrors,
                     'bom' => $bom,
                     'pricing' => $pricingResult['items'] ?? [],
+                    'pricing_input' => $pricingInputResolved,
+                    'pricing_steps' => $calculation['pricing_steps'] ?? [],
+                    'pricing_output' => $pricingOutputResolved,
                     'totals' => [
-                        'subtotal' => (float)($pricingResult['subtotal'] ?? 0),
-                        'tax' => (float)($pricingResult['tax'] ?? 0),
-                        'total' => (float)($pricingResult['total'] ?? 0),
+                        'subtotal' => (float)($resolvedTotals['subtotal'] ?? 0),
+                        'tax' => (float)($resolvedTotals['tax'] ?? 0),
+                        'total' => (float)($resolvedTotals['total'] ?? 0),
                     ],
                 ], JSON_UNESCAPED_UNICODE),
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+            $optionalQuoteColumns = [
+                'order_qty' => (int)($pricingInputResolved['order_qty'] ?? 1),
+                'fixed_cost' => $pricingInputResolved['fixed_cost'] ?? null,
+                'management_factor' => $pricingInputResolved['management_factor'] ?? null,
+                'qty_discount_factor' => $pricingInputResolved['qty_discount_factor'] ?? null,
+                'customer_factor' => $pricingInputResolved['customer_factor'] ?? null,
+                'freight_amount' => $pricingInputResolved['freight_amount'] ?? null,
+                'manual_discount_amount' => $pricingInputResolved['manual_discount_amount'] ?? 0,
+                'trade_scope' => $pricingInputResolved['trade_scope'] ?? 'DOMESTIC',
+                'tax_rate' => $pricingInputResolved['tax_rate'] ?? null,
+                'pricing_policy_id' => $pricingInputResolved['pricing_policy_id'] ?? null,
+            ];
+            foreach ($optionalQuoteColumns as $column => $value) {
+                if ($this->hasQuoteColumn($column)) {
+                    $insertPayload[$column] = $value;
+                }
+            }
+
+            $quoteId = (int)DB::table('quotes')->insertGetId($insertPayload);
 
             $this->insertQuoteItems($quoteId, $bom, $pricingResult['items'] ?? []);
+
+            /** @var \App\Services\QuoteCalcRunRecorder $runRecorder */
+            $runRecorder = app(\App\Services\QuoteCalcRunRecorder::class);
+            $runRecorder->recordFromCalculation(
+                $quoteId,
+                'ISSUE',
+                $calculation,
+                $actorUserId ? (int)$actorUserId : null,
+                true,
+                'quote',
+                $quoteId,
+                ['session_id' => (int)$session->id]
+            );
 
             DB::table('configurator_sessions')
                 ->where('id', $session->id)
@@ -253,5 +309,15 @@ final class QuoteService
     private function asNumber(mixed $v): float
     {
         return is_numeric($v) ? (float)$v : 0.0;
+    }
+
+    private function hasQuoteColumn(string $column): bool
+    {
+        static $cache = [];
+        if (!array_key_exists($column, $cache)) {
+            $cache[$column] = Schema::hasTable('quotes') && Schema::hasColumn('quotes', $column);
+        }
+
+        return $cache[$column];
     }
 }

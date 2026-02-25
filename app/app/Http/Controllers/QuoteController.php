@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Services\QuoteCalcHistoryService;
+use App\Services\QuoteCalcRunRecorder;
 use App\Services\SnapshotPdfService;
 use App\Services\SvgRenderer;
 use App\Services\WorkChangeRequestService;
+use App\Support\RoleHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -330,6 +333,9 @@ final class QuoteController extends Controller
             ->orderBy('change_requests.id', 'desc')
             ->get();
 
+        $canExpandCalcRuns = RoleHelper::currentHasRole(['admin', 'sales']);
+        $calcHistory = app(QuoteCalcHistoryService::class)->getDrawerData($id, $canExpandCalcRuns);
+
         return view('work.quotes.show', [
             'quote' => $quote,
             'snapshotJson' => json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
@@ -345,6 +351,9 @@ final class QuoteController extends Controller
             'summaryItems' => $summaryItems,
             'svg' => $svg,
             'requests' => $requests,
+            'calcHistoryImportantRuns' => $calcHistory['important_runs'] ?? [],
+            'calcHistoryAllRuns' => $calcHistory['all_runs'] ?? [],
+            'canExpandCalcRuns' => $canExpandCalcRuns,
         ]);
     }
 
@@ -367,6 +376,7 @@ final class QuoteController extends Controller
         $initialMemo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
         $summaryFieldOptions = self::SUMMARY_FIELD_LABELS;
         $selectedSummaryFields = $this->resolveSummaryCardFields($snapshot);
+        $initialPricingInput = $this->buildInitialPricingInput($quote, $snapshot);
 
         return view('work.quotes.edit', [
             'quote' => $quote,
@@ -375,6 +385,7 @@ final class QuoteController extends Controller
             'initialMemo' => $initialMemo,
             'summaryFieldOptions' => $summaryFieldOptions,
             'selectedSummaryFields' => $selectedSummaryFields,
+            'initialPricingInput' => $initialPricingInput,
         ]);
     }
 
@@ -441,7 +452,7 @@ final class QuoteController extends Controller
             $decoded['memo'] = $quote->memo;
         }
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $requestId = app(WorkChangeRequestService::class)->queueUpdate(
             'quote',
             $id,
             [
@@ -454,6 +465,20 @@ final class QuoteController extends Controller
             (int)$request->user()->id,
             (string)($data['comment'] ?? '')
         );
+
+        $newSnapshot = is_array($decoded['snapshot'] ?? null) ? $decoded['snapshot'] : $decoded;
+        if (is_array($newSnapshot) && !empty($newSnapshot)) {
+            app(QuoteCalcRunRecorder::class)->recordFromSnapshot(
+                $id,
+                'EDIT_REQUEST_SUBMIT',
+                $newSnapshot,
+                (int)$request->user()->id,
+                true,
+                'change_request',
+                (int)$requestId,
+                ['channel' => 'quote-controller']
+            );
+        }
 
         return redirect()->route('work.quotes.show', $id)->with('status', '承認変更申請を送信しました');
     }
@@ -578,6 +603,73 @@ final class QuoteController extends Controller
             'derived' => is_array($derived) ? $derived : [],
             'errors' => is_array($errors) ? $errors : [],
         ], $filename);
+    }
+
+    public function calcRuns(int $id)
+    {
+        $quote = DB::table('quotes as q')
+            ->join('accounts as a', 'a.id', '=', 'q.account_id')
+            ->whereNull('q.deleted_at')
+            ->whereNull('a.deleted_at')
+            ->where('q.id', $id)
+            ->select('q.id', 'q.status', 'q.account_id', 'q.currency')
+            ->addSelect('a.internal_name as account_internal_name')
+            ->first();
+        if (!$quote) {
+            abort(404);
+        }
+
+        $canExpandCalcRuns = RoleHelper::currentHasRole(['admin', 'sales']);
+        $runs = app(QuoteCalcHistoryService::class)->getRunsForPage($id, $canExpandCalcRuns);
+
+        return view('work.quotes.calc-runs.index', [
+            'quote' => $quote,
+            'runs' => $runs,
+            'canExpandCalcRuns' => $canExpandCalcRuns,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildInitialPricingInput(object $quote, array $snapshot): array
+    {
+        $snapshotInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
+        $defaults = app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount(
+            (int)($quote->account_id ?? 0),
+            (string)($quote->currency ?? 'JPY')
+        );
+
+        $merged = array_merge($defaults, $snapshotInput, [
+            'order_qty' => $quote->order_qty ?? ($snapshotInput['order_qty'] ?? ($defaults['order_qty'] ?? 1)),
+            'fixed_cost' => $quote->fixed_cost ?? ($snapshotInput['fixed_cost'] ?? ($defaults['fixed_cost'] ?? null)),
+            'management_factor' => $quote->management_factor ?? ($snapshotInput['management_factor'] ?? ($defaults['management_factor'] ?? null)),
+            'qty_discount_factor' => $quote->qty_discount_factor ?? ($snapshotInput['qty_discount_factor'] ?? ($defaults['qty_discount_factor'] ?? null)),
+            'customer_factor' => $quote->customer_factor ?? ($snapshotInput['customer_factor'] ?? ($defaults['customer_factor'] ?? null)),
+            'freight_amount' => $quote->freight_amount ?? ($snapshotInput['freight_amount'] ?? ($defaults['freight_amount'] ?? null)),
+            'manual_discount_amount' => $quote->manual_discount_amount ?? ($snapshotInput['manual_discount_amount'] ?? ($defaults['manual_discount_amount'] ?? 0)),
+            'trade_scope' => $quote->trade_scope ?? ($snapshotInput['trade_scope'] ?? ($defaults['trade_scope'] ?? 'DOMESTIC')),
+            'tax_rate' => $quote->tax_rate ?? ($snapshotInput['tax_rate'] ?? ($defaults['tax_rate'] ?? null)),
+            'pricing_policy_id' => $quote->pricing_policy_id ?? ($snapshotInput['pricing_policy_id'] ?? ($defaults['pricing_policy_id'] ?? null)),
+        ]);
+
+        $tradeScope = strtoupper(trim((string)($merged['trade_scope'] ?? 'DOMESTIC')));
+        if ($tradeScope !== 'OVERSEAS') {
+            $tradeScope = 'DOMESTIC';
+        }
+
+        return [
+            'order_qty' => max(1, (int)($merged['order_qty'] ?? 1)),
+            'fixed_cost' => is_numeric($merged['fixed_cost'] ?? null) ? (float)$merged['fixed_cost'] : null,
+            'management_factor' => is_numeric($merged['management_factor'] ?? null) ? (float)$merged['management_factor'] : null,
+            'qty_discount_factor' => is_numeric($merged['qty_discount_factor'] ?? null) ? (float)$merged['qty_discount_factor'] : null,
+            'customer_factor' => is_numeric($merged['customer_factor'] ?? null) ? (float)$merged['customer_factor'] : null,
+            'freight_amount' => is_numeric($merged['freight_amount'] ?? null) ? (float)$merged['freight_amount'] : null,
+            'manual_discount_amount' => is_numeric($merged['manual_discount_amount'] ?? null) ? (float)$merged['manual_discount_amount'] : 0.0,
+            'trade_scope' => $tradeScope,
+            'tax_rate' => is_numeric($merged['tax_rate'] ?? null) ? (float)$merged['tax_rate'] : null,
+            'pricing_policy_id' => is_numeric($merged['pricing_policy_id'] ?? null) ? (int)$merged['pricing_policy_id'] : null,
+        ];
     }
 
     private function resolveAccountDisplayNameInternalFirst(string $internalName, string $userName): string

@@ -16,6 +16,7 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\ChangeRequestController;
 use App\Http\Controllers\QuoteController;
+use App\Http\Controllers\CatalogController;
 use App\Services\GuestAccountClaimService;
 use App\Services\SnapshotPdfService;
 
@@ -277,7 +278,7 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::delete('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.destroy');
     Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/delete', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.delete');
 
-    Route::get('/skus', [SkuController::class, 'index'])->name('skus.index');
+    Route::get('/skus', [CatalogController::class, 'index'])->name('skus.index');
     Route::get('/skus/create', [SkuController::class, 'create'])->name('skus.create');
     Route::post('/skus', [SkuController::class, 'store'])->name('skus.store');
     Route::post('/skus/edit-request/create', [SkuController::class, 'store'])->name('skus.edit-request.create');
@@ -287,7 +288,7 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::delete('/skus/{id}', [SkuController::class, 'destroy'])->name('skus.destroy');
     Route::post('/skus/{id}/edit-request/delete', [SkuController::class, 'destroy'])->name('skus.edit-request.delete');
 
-    Route::get('/price-books', [PriceBookController::class, 'index'])->name('price-books.index');
+    Route::get('/price-books', [CatalogController::class, 'index'])->name('price-books.index');
     Route::get('/price-books/create', [PriceBookController::class, 'create'])->name('price-books.create');
     Route::post('/price-books', [PriceBookController::class, 'store'])->name('price-books.store');
     Route::post('/price-books/edit-request/create', [PriceBookController::class, 'store'])->name('price-books.edit-request.create');
@@ -331,6 +332,7 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
 
     Route::get('/quotes', [QuoteController::class, 'index'])->name('quotes.index');
     Route::get('/quotes/{id}', [QuoteController::class, 'show'])->name('quotes.show');
+    Route::get('/quotes/{id}/calc-runs', [QuoteController::class, 'calcRuns'])->name('quotes.calc-runs');
     Route::get('/quotes/{id}/edit', [QuoteController::class, 'edit'])->name('quotes.edit');
     Route::get('/quotes/{id}/edit-request', [QuoteController::class, 'editRequest'])->name('quotes.edit-request');
     Route::post('/quotes/{id}/edit-request/store', [QuoteController::class, 'storeEditRequest'])->name('quotes.edit-request.store');

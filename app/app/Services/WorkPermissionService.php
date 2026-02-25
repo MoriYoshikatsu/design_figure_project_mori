@@ -93,6 +93,11 @@ final class WorkPermissionService
             return false;
         }
 
+        // 管理者は /work 配下を常時許可（付与漏れ防止）
+        if ($this->userHasAdminRole($userId)) {
+            return true;
+        }
+
         $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
         $method = strtoupper($request->method());
         $pathsToMatch = [$path];
@@ -385,6 +390,18 @@ final class WorkPermissionService
         }
 
         return null;
+    }
+
+    private function userHasAdminRole(int $userId): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+
+        return DB::table('account_user')
+            ->where('user_id', $userId)
+            ->where('role', 'admin')
+            ->exists();
     }
 
     private function isWorkRoute(string $uri): bool

@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Services\DslEngine;
+use App\Services\QuoteCalcHistoryService;
 use App\Services\SnapshotPdfService;
 use App\Services\SvgRenderer;
+use App\Support\RoleHelper;
 use Illuminate\Support\Facades\DB;
 
 final class ChangeRequestController extends Controller
@@ -86,6 +88,10 @@ final class ChangeRequestController extends Controller
         $quoteSummaryContext = $entityType === 'quote'
             ? $this->buildQuoteSummaryContext((int)$req->entity_id)
             : [];
+        $canExpandCalcRuns = RoleHelper::currentHasRole(['admin', 'sales']);
+        $calcHistory = ($entityType === 'quote' && (int)$req->entity_id > 0)
+            ? app(QuoteCalcHistoryService::class)->getDrawerData((int)$req->entity_id, $canExpandCalcRuns)
+            : ['important_runs' => [], 'all_runs' => []];
 
         return view('work.change-requests.show', [
             'req' => $req,
@@ -115,6 +121,11 @@ final class ChangeRequestController extends Controller
             'compareSnapshotPdfUrl' => route('work.change-requests.snapshot-compare.pdf', $req->id),
             'memoUpdateUrl' => route('work.change-requests.memo.update', $req->id),
             'quoteSummaryContext' => $quoteSummaryContext,
+            'calcHistoryImportantRuns' => $calcHistory['important_runs'] ?? [],
+            'calcHistoryAllRuns' => $calcHistory['all_runs'] ?? [],
+            'canExpandCalcRuns' => $canExpandCalcRuns,
+            'calcHistoryHighlightSourceType' => 'change_request',
+            'calcHistoryHighlightSourceId' => (int)$req->id,
         ]);
     }
 
