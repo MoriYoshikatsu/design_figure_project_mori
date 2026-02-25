@@ -19,7 +19,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-          
+
           # 元のリポジトリをupstreamとして追加
           git remote add upstream https://${{ secrets.SOURCE_TOKEN }}@github.com/deltafiber000-crypto/design_figure_project.git          
           # 更新を取得
