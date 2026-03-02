@@ -60,4 +60,36 @@
             @endforelse
         </tbody>
     </table>
+
+    <h2 style="margin-top:14px;">各Runの計算内訳</h2>
+    @forelse($runs as $run)
+        @php
+            $runNo = $run['run_no'] ?? '-';
+            $eventLabel = $run['event_label'] ?? ($run['event_type'] ?? '-');
+            $createdAt = $run['created_at'] ?? '-';
+            $runInput = is_array($run['input'] ?? null) ? $run['input'] : [];
+            $runSteps = is_array($run['steps'] ?? null) ? $run['steps'] : [];
+            $runOutput = is_array($run['output'] ?? null) ? $run['output'] : [];
+            $runContext = is_array($run['context'] ?? null) ? $run['context'] : [];
+        @endphp
+        <details style="margin-top:8px; border:1px solid #d1d5db; border-radius:8px; background:#fff; padding:8px;" @if($loop->first) open @endif>
+            <summary>
+                Run #{{ $runNo }} / {{ $eventLabel }} / {{ $createdAt }}
+            </summary>
+
+            @include('work.quotes._pricing_breakdown', [
+                'sectionTitle' => '',
+                'pricingInput' => $runInput,
+                'pricingSteps' => $runSteps,
+                'pricingOutput' => $runOutput,
+                'context' => array_merge($runContext, [
+                    'run_id' => (int)($run['id'] ?? 0),
+                    'source_type' => $run['source_type'] ?? null,
+                    'source_id' => $run['source_id'] ?? null,
+                ]),
+            ])
+        </details>
+    @empty
+        <div class="muted" style="margin-top:8px;">表示可能な計算内訳はありません。</div>
+    @endforelse
 @endsection
