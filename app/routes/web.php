@@ -17,6 +17,7 @@ use App\Http\Controllers\SessionController;
 use App\Http\Controllers\ChangeRequestController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\LaborCostController;
 use App\Services\GuestAccountClaimService;
 use App\Services\SnapshotPdfService;
 
@@ -306,6 +307,21 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::post('/price-books/{id}/items/{item}/edit-request/update', [PriceBookItemController::class, 'update'])->name('price-books.items.edit-request.update');
     Route::delete('/price-books/{id}/items/{item}', [PriceBookItemController::class, 'destroy'])->name('price-books.items.destroy');
     Route::post('/price-books/{id}/items/{item}/edit-request/delete', [PriceBookItemController::class, 'destroy'])->name('price-books.items.edit-request.delete');
+
+    Route::get('/labor-costs', [LaborCostController::class, 'index'])->name('labor-costs.index');
+    Route::post('/labor-costs/settings/edit-request/update', [LaborCostController::class, 'updateSetting'])->name('labor-costs.settings.edit-request.update');
+
+    Route::post('/labor-costs/processes/edit-request/create', [LaborCostController::class, 'storeProcess'])->name('labor-costs.processes.edit-request.create');
+    Route::post('/labor-costs/processes/{id}/edit-request/update', [LaborCostController::class, 'updateProcess'])->name('labor-costs.processes.edit-request.update');
+    Route::post('/labor-costs/processes/{id}/edit-request/delete', [LaborCostController::class, 'destroyProcess'])->name('labor-costs.processes.edit-request.delete');
+
+    Route::post('/labor-costs/elements/edit-request/create', [LaborCostController::class, 'storeElement'])->name('labor-costs.elements.edit-request.create');
+    Route::post('/labor-costs/elements/{id}/edit-request/update', [LaborCostController::class, 'updateElement'])->name('labor-costs.elements.edit-request.update');
+    Route::post('/labor-costs/elements/{id}/edit-request/delete', [LaborCostController::class, 'destroyElement'])->name('labor-costs.elements.edit-request.delete');
+
+    Route::post('/labor-costs/rules/edit-request/create', [LaborCostController::class, 'storeRule'])->name('labor-costs.rules.edit-request.create');
+    Route::post('/labor-costs/rules/{id}/edit-request/update', [LaborCostController::class, 'updateRule'])->name('labor-costs.rules.edit-request.update');
+    Route::post('/labor-costs/rules/{id}/edit-request/delete', [LaborCostController::class, 'destroyRule'])->name('labor-costs.rules.edit-request.delete');
 
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');

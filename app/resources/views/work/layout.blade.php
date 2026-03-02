@@ -157,15 +157,20 @@
     @php
         $showSidebar = \App\Support\RoleHelper::currentHasRole(['admin', 'sales']);
         $catalogMenuUrl = null;
+        $laborCostMenuUrl = null;
         if ($showSidebar && auth()->check()) {
             $permissionService = app(\App\Services\WorkPermissionService::class);
             $currentUserId = (int)auth()->id();
             $canSku = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/skus', 'GET'), $currentUserId);
             $canPriceBook = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/price-books', 'GET'), $currentUserId);
+            $canLaborCosts = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/labor-costs', 'GET'), $currentUserId);
             if ($canSku) {
                 $catalogMenuUrl = route('work.skus.index');
             } elseif ($canPriceBook) {
                 $catalogMenuUrl = route('work.price-books.index');
+            }
+            if ($canLaborCosts) {
+                $laborCostMenuUrl = route('work.labor-costs.index');
             }
         }
     @endphp
@@ -188,6 +193,11 @@
                     @if($catalogMenuUrl)
                         <a href="{{ $catalogMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.skus.*') || request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ・価格">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/><rect x="4.5" y="14.5" width="15" height="5" rx="1"/></svg>
+                        </a>
+                    @endif
+                    @if($laborCostMenuUrl)
+                        <a href="{{ $laborCostMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.labor-costs.*')) is-active @endif" data-label="作業費マスタ">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h17v11h-17z"/><path d="M7 10h4M7 14h2M13 10h4M13 14h4"/></svg>
                         </a>
                     @endif
                     <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">

@@ -191,6 +191,65 @@ final class WorkChangeRequestApplier
             return $id;
         }
 
+        if ($entityType === 'labor_process') {
+            $id = (int)DB::table('labor_processes')->insertGetId([
+                'process_code' => strtoupper(trim((string)($after['process_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_CREATED', 'labor_process', $id, null, $after);
+            return $id;
+        }
+
+        if ($entityType === 'labor_process_element') {
+            $id = (int)DB::table('labor_process_elements')->insertGetId([
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'element_code' => strtoupper(trim((string)($after['element_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'work_minutes' => (float)($after['work_minutes'] ?? 0),
+                'activity_coeff' => (float)($after['activity_coeff'] ?? 0),
+                'batch_size' => max(1, (int)($after['batch_size'] ?? 1)),
+                'depreciation_amount' => (float)($after['depreciation_amount'] ?? 0),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_ELEMENT_CREATED', 'labor_process_element', $id, null, $after);
+            return $id;
+        }
+
+        if ($entityType === 'labor_auto_rule') {
+            $id = (int)DB::table('labor_auto_rules')->insertGetId([
+                'rule_code' => strtoupper(trim((string)($after['rule_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'priority' => (int)($after['priority'] ?? 100),
+                'include_tags_json' => json_encode($this->normalizeJsonArrayField($after['include_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode($this->normalizeJsonArrayField($after['exclude_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_categories_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_codes_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'always_apply' => (bool)($after['always_apply'] ?? false),
+                'active' => (bool)($after['active'] ?? true),
+                'memo' => $after['memo'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_AUTO_RULE_CREATED', 'labor_auto_rule', $id, null, $after);
+            return $id;
+        }
+
         if ($entityType === 'account_sales_route_permission') {
             $id = $this->applyAccountScopedPermission($after, $actorId);
             $this->auditLogger->log($actorId, 'ACCOUNT_SALES_ROUTE_PERMISSION_CREATED', 'account_sales_route_permission', $id, null, $after);
@@ -217,6 +276,21 @@ final class WorkChangeRequestApplier
                 ]);
             $this->auditLogger->log($actorId, 'ACCOUNT_UPDATED', 'account', $entityId, $before, $after);
             return $entityId;
+        }
+
+        if ($entityType === 'labor_cost_setting') {
+            $settingId = (int)($after['id'] ?? $entityId ?: 1);
+            DB::table('labor_cost_settings')->updateOrInsert(
+                ['id' => $settingId],
+                [
+                    'hourly_rate' => (float)($after['hourly_rate'] ?? 9000),
+                    'memo' => $after['memo'] ?? null,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            $this->auditLogger->log($actorId, 'LABOR_COST_SETTING_UPDATED', 'labor_cost_setting', $settingId, $before, $after);
+            return $settingId;
         }
 
         if ($entityType === 'account_user_memo') {
@@ -386,6 +460,62 @@ final class WorkChangeRequestApplier
             return $entityId;
         }
 
+        if ($entityType === 'labor_process') {
+            DB::table('labor_processes')->whereNull('deleted_at')->where('id', $entityId)->update([
+                'process_code' => strtoupper(trim((string)($after['process_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_UPDATED', 'labor_process', $entityId, $before, $after);
+            return $entityId;
+        }
+
+        if ($entityType === 'labor_process_element') {
+            DB::table('labor_process_elements')->whereNull('deleted_at')->where('id', $entityId)->update([
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'element_code' => strtoupper(trim((string)($after['element_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'work_minutes' => (float)($after['work_minutes'] ?? 0),
+                'activity_coeff' => (float)($after['activity_coeff'] ?? 0),
+                'batch_size' => max(1, (int)($after['batch_size'] ?? 1)),
+                'depreciation_amount' => (float)($after['depreciation_amount'] ?? 0),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_ELEMENT_UPDATED', 'labor_process_element', $entityId, $before, $after);
+            return $entityId;
+        }
+
+        if ($entityType === 'labor_auto_rule') {
+            DB::table('labor_auto_rules')->whereNull('deleted_at')->where('id', $entityId)->update([
+                'rule_code' => strtoupper(trim((string)($after['rule_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'priority' => (int)($after['priority'] ?? 100),
+                'include_tags_json' => json_encode($this->normalizeJsonArrayField($after['include_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode($this->normalizeJsonArrayField($after['exclude_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_categories_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_codes_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'always_apply' => (bool)($after['always_apply'] ?? false),
+                'active' => (bool)($after['active'] ?? true),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_AUTO_RULE_UPDATED', 'labor_auto_rule', $entityId, $before, $after);
+            return $entityId;
+        }
+
         if ($entityType === 'quote') {
             $snapshot = is_array($after['snapshot'] ?? null) ? $after['snapshot'] : [];
             $memo = array_key_exists('memo', $after) ? $after['memo'] : null;
@@ -523,6 +653,9 @@ final class WorkChangeRequestApplier
             'product_template_version' => 'product_template_versions',
             'quote' => 'quotes',
             'account' => 'accounts',
+            'labor_process' => 'labor_processes',
+            'labor_process_element' => 'labor_process_elements',
+            'labor_auto_rule' => 'labor_auto_rules',
         ];
 
         $table = $map[$entityType] ?? null;
@@ -581,6 +714,33 @@ final class WorkChangeRequestApplier
 
         $perM = $this->resolvePricePerM($row);
         return $perM !== null ? ($perM / 1000) : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function normalizeJsonArrayField(mixed $value): array
+    {
+        $rows = [];
+        if (is_array($value)) {
+            $rows = $value;
+        } else {
+            $decoded = json_decode((string)$value, true);
+            if (is_array($decoded)) {
+                $rows = $decoded;
+            }
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $v = trim((string)$row);
+            if ($v === '') {
+                continue;
+            }
+            $result[$v] = true;
+        }
+
+        return array_keys($result);
     }
 
     private function applyAccountScopedPermission(array $after, int $actorId): int

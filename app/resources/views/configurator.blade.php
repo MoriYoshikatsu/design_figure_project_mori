@@ -173,6 +173,79 @@
                         </div>
                     </div>
                 </div>
+
+                <hr style="margin:12px 0;">
+                <h2 style="font-weight:700;">作業費歩留まり上書き（見積編集）</h2>
+                <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
+                    <div class="muted" style="margin-bottom:8px;">
+                        工程に入力がある場合は要素入力より工程入力を優先します。工程/要素ともに「注文数量」「実投入数」を両方入力した場合、良品率は 注文数量÷実投入数 を採用します。
+                    </div>
+
+                    @if(empty($laborOverrideRows))
+                        <div class="muted">自動選択された工程がありません。</div>
+                    @else
+                        @foreach($laborOverrideRows as $process)
+                            @php
+                                $processCode = (string)($process['process_code'] ?? '');
+                                $processName = (string)($process['process_name'] ?? '');
+                                $processDefaultYield = $process['yield_rate_default'] ?? null;
+                                $elements = is_array($process['elements'] ?? null) ? $process['elements'] : [];
+                            @endphp
+                            <div style="border:1px solid #e5e7eb; border-radius:6px; padding:8px; margin-bottom:10px;">
+                                <div style="font-weight:700; margin-bottom:6px;">{{ $processName }}（{{ $processCode }}）</div>
+                                <div class="muted" style="font-size:12px; margin-bottom:8px;">
+                                    工程初期良品率: {{ $processDefaultYield !== null ? $processDefaultYield : '-' }}
+                                </div>
+                                <div style="display:grid; gap:8px; grid-template-columns:1fr 1fr 1fr;">
+                                    <div>
+                                        <label>工程良品率（直入力）</label>
+                                        <input type="number" step="0.000001" min="0.000001" wire:model.live.debounce.300ms="laborOverrides.processes.{{ $processCode }}.yield_rate" style="width:100%;">
+                                    </div>
+                                    <div>
+                                        <label>工程 注文数量</label>
+                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.processes.{{ $processCode }}.order_qty" style="width:100%;">
+                                    </div>
+                                    <div>
+                                        <label>工程 実投入数</label>
+                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.processes.{{ $processCode }}.actual_input_qty" style="width:100%;">
+                                    </div>
+                                </div>
+
+                                @if(!empty($elements))
+                                    <div style="margin-top:10px; border-top:1px solid #f0f0f0; padding-top:8px;">
+                                        @foreach($elements as $element)
+                                            @php
+                                                $elementCode = (string)($element['element_code'] ?? '');
+                                                $elementName = (string)($element['element_name'] ?? '');
+                                                $elementDefaultYield = $element['yield_rate_default'] ?? null;
+                                            @endphp
+                                            <div style="border:1px dashed #d1d5db; border-radius:6px; padding:6px; margin-bottom:8px;">
+                                                <div style="font-size:12px; font-weight:700;">{{ $elementName }}（{{ $elementCode }}）</div>
+                                                <div class="muted" style="font-size:11px; margin-bottom:6px;">
+                                                    要素初期良品率: {{ $elementDefaultYield !== null ? $elementDefaultYield : '-' }}
+                                                </div>
+                                                <div style="display:grid; gap:8px; grid-template-columns:1fr 1fr 1fr;">
+                                                    <div>
+                                                        <label>要素良品率（直入力）</label>
+                                                        <input type="number" step="0.000001" min="0.000001" wire:model.live.debounce.300ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.yield_rate" style="width:100%;">
+                                                    </div>
+                                                    <div>
+                                                        <label>要素 注文数量</label>
+                                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.order_qty" style="width:100%;">
+                                                    </div>
+                                                    <div>
+                                                        <label>要素 実投入数</label>
+                                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.actual_input_qty" style="width:100%;">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+                        @endforeach
+                    @endif
+                </div>
             @endif
 
             <h2 style="font-weight:700;">メモ</h2>

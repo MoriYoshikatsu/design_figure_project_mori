@@ -651,6 +651,9 @@ final class QuoteController extends Controller
             'trade_scope' => $quote->trade_scope ?? ($snapshotInput['trade_scope'] ?? ($defaults['trade_scope'] ?? 'DOMESTIC')),
             'tax_rate' => $quote->tax_rate ?? ($snapshotInput['tax_rate'] ?? ($defaults['tax_rate'] ?? null)),
             'pricing_policy_id' => $quote->pricing_policy_id ?? ($snapshotInput['pricing_policy_id'] ?? ($defaults['pricing_policy_id'] ?? null)),
+            'labor_overrides' => is_array($snapshotInput['labor_overrides'] ?? null)
+                ? $snapshotInput['labor_overrides']
+                : ($defaults['labor_overrides'] ?? []),
         ]);
 
         $tradeScope = strtoupper(trim((string)($merged['trade_scope'] ?? 'DOMESTIC')));
@@ -669,6 +672,69 @@ final class QuoteController extends Controller
             'trade_scope' => $tradeScope,
             'tax_rate' => is_numeric($merged['tax_rate'] ?? null) ? (float)$merged['tax_rate'] : null,
             'pricing_policy_id' => is_numeric($merged['pricing_policy_id'] ?? null) ? (int)$merged['pricing_policy_id'] : null,
+            'labor_overrides' => $this->normalizeLaborOverrides($merged['labor_overrides'] ?? []),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeLaborOverrides(mixed $raw): array
+    {
+        $result = [
+            'processes' => [],
+            'elements' => [],
+        ];
+        if (!is_array($raw)) {
+            return $result;
+        }
+
+        $processes = is_array($raw['processes'] ?? null) ? $raw['processes'] : [];
+        foreach ($processes as $processCode => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $normalizedCode = strtoupper(trim((string)$processCode));
+            if ($normalizedCode === '') {
+                continue;
+            }
+            $result['processes'][$normalizedCode] = $this->normalizeLaborYieldInputRow($row);
+        }
+
+        $elements = is_array($raw['elements'] ?? null) ? $raw['elements'] : [];
+        foreach ($elements as $processCode => $elementRows) {
+            if (!is_array($elementRows)) {
+                continue;
+            }
+            $normalizedProcessCode = strtoupper(trim((string)$processCode));
+            if ($normalizedProcessCode === '') {
+                continue;
+            }
+            foreach ($elementRows as $elementCode => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $normalizedElementCode = strtoupper(trim((string)$elementCode));
+                if ($normalizedElementCode === '') {
+                    continue;
+                }
+                $result['elements'][$normalizedProcessCode][$normalizedElementCode] = $this->normalizeLaborYieldInputRow($row);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, float|null>
+     */
+    private function normalizeLaborYieldInputRow(array $row): array
+    {
+        return [
+            'yield_rate' => is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null,
+            'order_qty' => is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null,
+            'actual_input_qty' => is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null,
         ];
     }
 
