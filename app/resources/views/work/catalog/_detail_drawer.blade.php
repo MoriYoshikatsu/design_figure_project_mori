@@ -1,4 +1,4 @@
-３２<div id="catalog-detail-backdrop" class="catalog-detail-backdrop" hidden></div>
+<div id="catalog-detail-backdrop" class="catalog-detail-backdrop" hidden></div>
 <aside id="catalog-detail-drawer" class="catalog-detail-drawer" hidden>
     <div class="catalog-detail-header">
         <div>
