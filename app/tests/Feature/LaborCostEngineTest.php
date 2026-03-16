@@ -284,6 +284,185 @@ final class LaborCostEngineTest extends TestCase
         );
     }
 
+    public function test_infers_missing_tags_from_sku_code_and_attributes_for_rule_matching(): void
+    {
+        DB::table('labor_cost_settings')->insert([
+            'id' => 1,
+            'hourly_rate' => 9000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $tecHpProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'TEC20_HP',
+            'name' => 'TEC20_HP',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('labor_process_elements')->insert([
+            'process_id' => $tecHpProcessId,
+            'element_code' => 'TEC20_HP',
+            'name' => 'TEC20_HP',
+            'work_minutes' => 20,
+            'activity_coeff' => 1,
+            'batch_size' => 1,
+            'depreciation_amount' => 0,
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $connPmApcProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'CONN_PM_APC',
+            'name' => 'CONN_PM_APC',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 20,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('labor_process_elements')->insert([
+            'process_id' => $connPmApcProcessId,
+            'element_code' => 'PM_APC_POLISH',
+            'name' => 'PM_APC_POLISH',
+            'work_minutes' => 20,
+            'activity_coeff' => 1,
+            'batch_size' => 1,
+            'depreciation_amount' => 0,
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('labor_auto_rules')->insert([
+            [
+                'rule_code' => 'RULE_TEC20_HP',
+                'name' => 'TEC20_HP',
+                'process_id' => $tecHpProcessId,
+                'priority' => 10,
+                'include_tags_json' => json_encode(['tec20', 'high_precision'], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'rule_code' => 'RULE_CONN_PM_APC',
+                'name' => 'CONN_PM_APC',
+                'process_id' => $connPmApcProcessId,
+                'priority' => 20,
+                'include_tags_json' => json_encode(['connector', 'pm', 'apc'], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        // process_tags を持たないSKUでも、sku_code/category/polish から推論してルール一致させる
+        DB::table('skus')->insert([
+            [
+                'sku_code' => 'PROC_TEC20_HP',
+                'category' => 'PROC',
+                'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'sku_code' => 'FIBER_PMF',
+                'category' => 'FIBER',
+                'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'sku_code' => 'CONN_SC_APC',
+                'category' => 'CONNECTOR',
+                'attributes' => json_encode(['polish' => 'APC'], JSON_UNESCAPED_UNICODE),
+            ],
+        ]);
+
+        $result = app(LaborCostEngine::class)->calculate([
+            ['sku_code' => 'PROC_TEC20_HP', 'quantity' => 1, 'sort_order' => 0],
+            ['sku_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 1],
+            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 2],
+        ], 2, []);
+
+        $matchedCodes = is_array($result['matched_process_codes'] ?? null) ? $result['matched_process_codes'] : [];
+        $this->assertContains('TEC20_HP', $matchedCodes);
+        $this->assertContains('CONN_PM_APC', $matchedCodes);
+    }
+
+    public function test_infers_fusion_tag_from_sleeve_category(): void
+    {
+        DB::table('labor_cost_settings')->insert([
+            'id' => 1,
+            'hourly_rate' => 9000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $fusionProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'FUSION',
+            'name' => 'FUSION',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('labor_process_elements')->insert([
+            'process_id' => $fusionProcessId,
+            'element_code' => 'FUSION',
+            'name' => 'FUSION',
+            'work_minutes' => 5,
+            'activity_coeff' => 1,
+            'batch_size' => 1,
+            'depreciation_amount' => 0,
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('labor_auto_rules')->insert([
+            'rule_code' => 'RULE_FUSION',
+            'name' => 'FUSION',
+            'process_id' => $fusionProcessId,
+            'priority' => 10,
+            'include_tags_json' => json_encode(['fusion'], JSON_UNESCAPED_UNICODE),
+            'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'always_apply' => false,
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('skus')->insert([
+            'sku_code' => 'SLEEVE_RECOTE',
+            'category' => 'SLEEVE',
+            'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $result = app(LaborCostEngine::class)->calculate([
+            ['sku_code' => 'SLEEVE_RECOTE', 'quantity' => 1, 'sort_order' => 0],
+        ], 1, []);
+
+        $matchedCodes = is_array($result['matched_process_codes'] ?? null) ? $result['matched_process_codes'] : [];
+        $this->assertContains('FUSION', $matchedCodes);
+    }
+
     private function prepareTables(): void
     {
         Schema::dropIfExists('labor_auto_rules');

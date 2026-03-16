@@ -183,9 +183,14 @@ final class RealDataSeeder extends Seeder
         // だいたい 2件×5カテゴリ + α
         $rows = [
             // PROC（工程）
-            $this->skuRow('PROC_MFD', 'MFD変換', 'PROC', ['kind' => 'mfd']),
+            $this->skuRow('PROC_MFD', 'MFD変換', 'PROC', ['kind' => 'mfd', 'process_tags' => ['mfd']]),
+            $this->skuRow('PROC_MFD_CONVERSION', 'MFD変換(構成)', 'PROC', ['kind' => 'mfd', 'process_tags' => ['mfd']]),
             $this->skuRow('PROC_FBG',  'FBGセンサ', 'PROC', ['kind' => 'fbg']),
-            $this->skuRow('PROC_TEC', 'TEC加工', 'PROC', ['kind' => 'tec']),
+            $this->skuRow('PROC_TEC', 'TEC加工', 'PROC', ['kind' => 'tec', 'process_tags' => ['tec20', 'tec30']]),
+            $this->skuRow('PROC_TEC20', 'TEC20加工', 'PROC', ['kind' => 'tec20', 'process_tags' => ['tec20']]),
+            $this->skuRow('PROC_TEC30', 'TEC30加工', 'PROC', ['kind' => 'tec30', 'process_tags' => ['tec30']]),
+            $this->skuRow('PROC_TEC20_HP', 'TEC20高精度加工', 'PROC', ['kind' => 'tec20_hp', 'process_tags' => ['tec20', 'high_precision']]),
+            $this->skuRow('PROC_TEC30_HP', 'TEC30高精度加工', 'PROC', ['kind' => 'tec30_hp', 'process_tags' => ['tec30', 'high_precision']]),
 
             // SLEEVE（補強）
             $this->skuRow('SLEEVE_RECOTE', 'リコート', 'SLEEVE', ['material' => 'polymer']),
@@ -227,6 +232,7 @@ final class RealDataSeeder extends Seeder
 
     private function skuRow(string $code, string $name, string $category, array $attrs): array
     {
+        $attrs = $this->augmentProcessTags($code, $name, $category, $attrs);
         return [
             'sku_code' => $code,
             'name' => $name,
@@ -236,6 +242,104 @@ final class RealDataSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $attrs
+     * @return array<string, mixed>
+     */
+    private function augmentProcessTags(string $code, string $name, string $category, array $attrs): array
+    {
+        $codeUpper = strtoupper(trim($code));
+        $nameUpper = strtoupper(trim($name));
+        $categoryUpper = strtoupper(trim($category));
+        $kind = strtolower(trim((string)($attrs['kind'] ?? '')));
+        $polish = strtoupper(trim((string)($attrs['polish'] ?? '')));
+
+        $tags = [];
+        foreach ($this->normalizeProcessTags($attrs['process_tags'] ?? []) as $tag) {
+            $tags[$tag] = true;
+        }
+
+        $tags[strtolower($codeUpper)] = true;
+        if ($categoryUpper !== '') {
+            $tags[strtolower($categoryUpper)] = true;
+        }
+        if ($categoryUpper === 'CONNECTOR' || str_starts_with($codeUpper, 'CONN_')) {
+            $tags['connector'] = true;
+        }
+        if ($categoryUpper === 'FIBER' || str_starts_with($codeUpper, 'FIBER_')) {
+            $tags['fiber'] = true;
+        }
+        if ($categoryUpper === 'TUBE' || str_starts_with($codeUpper, 'TUBE_')) {
+            $tags['tube'] = true;
+        }
+        if ($categoryUpper === 'SLEEVE' || str_starts_with($codeUpper, 'SLEEVE_')) {
+            $tags['sleeve'] = true;
+            $tags['fusion'] = true;
+        }
+        if (str_contains($codeUpper, 'MFD') || str_contains($kind, 'mfd')) {
+            $tags['mfd'] = true;
+        }
+        if (str_contains($codeUpper, 'TEC20') || str_contains($kind, 'tec20')) {
+            $tags['tec20'] = true;
+        }
+        if (str_contains($codeUpper, 'TEC30') || str_contains($kind, 'tec30')) {
+            $tags['tec30'] = true;
+        }
+        if (str_contains($codeUpper, '_HP') || str_contains($kind, 'high_precision') || str_contains($kind, '_hp')) {
+            $tags['high_precision'] = true;
+        }
+        if (str_contains($codeUpper, 'PM') || str_contains($kind, 'pm') || str_contains($nameUpper, 'PM')) {
+            $tags['pm'] = true;
+        }
+        if ($polish === 'APC' || str_contains($codeUpper, '_APC')) {
+            $tags['apc'] = true;
+        }
+        if ($polish === 'ARCOAT' || str_contains($codeUpper, 'ARCOAT')) {
+            $tags['arcoat'] = true;
+        }
+        if ($polish === 'PC' || str_contains($codeUpper, '_PC')) {
+            $tags['pc'] = true;
+        }
+        if (str_starts_with($codeUpper, 'CONN_SC_')) {
+            $tags['conn_sc'] = true;
+        } elseif (str_starts_with($codeUpper, 'CONN_FC_')) {
+            $tags['conn_fc'] = true;
+        } elseif (str_starts_with($codeUpper, 'CONN_LC_')) {
+            $tags['conn_lc'] = true;
+        } elseif (str_starts_with($codeUpper, 'CONN_FERRULE_')) {
+            $tags['conn_ferrule'] = true;
+        }
+
+        $normalized = array_keys($tags);
+        sort($normalized);
+        $attrs['process_tags'] = $normalized;
+        return $attrs;
+    }
+
+    /**
+     * @param mixed $raw
+     * @return array<int, string>
+     */
+    private function normalizeProcessTags(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $tags = [];
+        foreach ($raw as $tag) {
+            $value = strtolower(trim((string)$tag));
+            if ($value === '') {
+                continue;
+            }
+            $tags[$value] = true;
+        }
+
+        $result = array_keys($tags);
+        sort($result);
+        return $result;
     }
 
     // -------------------------
@@ -370,6 +474,7 @@ final class RealDataSeeder extends Seeder
                         'mfdCount' => ['min' => 1, 'max' => 10],
                         'note' => 'demo dsl',
                         'default_config' => [
+                            'processType' => 'MFD',
                             'mfdCount' => ($i % 5) + 1,
                             'tubeCount' => $i % 3,
                         ],

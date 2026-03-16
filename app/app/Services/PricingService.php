@@ -116,14 +116,17 @@ final class PricingService
             default => ['STANDARD'],
         };
 
+        $validAsOf = static function ($query) use ($asOf): void {
+            $query->where(function ($q) use ($asOf) {
+                $q->whereNull('valid_from')->orWhere('valid_from', '<=', $asOf);
+            })->where(function ($q) use ($asOf) {
+                $q->whereNull('valid_to')->orWhere('valid_to', '>=', $asOf);
+            });
+        };
+
         $candidates = DB::table('price_books')
             ->whereIn('name', $priority)
-            ->where(function ($q) use ($asOf) {
-                $q->whereNull('valid_from')->orWhere('valid_from', '<=', $asOf);
-            })
-            ->where(function ($q) use ($asOf) {
-                $q->whereNull('valid_to')->orWhere('valid_to', '>=', $asOf);
-            })
+            ->where($validAsOf)
             ->orderBy('valid_from', 'desc')
             ->orderBy('version', 'desc')
             ->get(['id', 'name', 'currency'])
@@ -137,9 +140,19 @@ final class PricingService
             }
         }
 
-        $row = $candidates[0] ?? null;
-        if (!$row) return null;
-        return ['id' => (int)$row->id, 'currency' => (string)$row->currency];
+        // 既定名の価格表が無い環境（例: MFD 名のみ）でも、
+        // 有効期間内の最新価格表を使って部材価格を算出する。
+        $fallbackRow = DB::table('price_books')
+            ->where($validAsOf)
+            ->orderBy('valid_from', 'desc')
+            ->orderBy('version', 'desc')
+            ->orderBy('id', 'desc')
+            ->first(['id', 'name', 'currency']);
+        if (!$fallbackRow) {
+            return null;
+        }
+
+        return ['id' => (int)$fallbackRow->id, 'currency' => (string)$fallbackRow->currency];
     }
 
     private function calcUnitPrice(?string $model, array $pbi, array $options): ?float

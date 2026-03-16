@@ -59,13 +59,13 @@
                     @endforeach
                 </select>
             </div> --}}
-            <div class="col">
-                <label>作成日（開始）</label>
-                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>作成日（終了）</label>
-                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
+            <div class="col range-field">
+                <label>作成日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+                </div>
             </div>
             <div class="actions" style="margin-top:13px;">
                 <button type="submit">絞り込み</button>

@@ -106,6 +106,7 @@ final class QuoteService
                     'summary_card_fields' => [
                         'quote_id',
                         'status',
+                        'order_qty',
                         'account_internal_name',
                         'account_user_name',
                         'assignee_name',

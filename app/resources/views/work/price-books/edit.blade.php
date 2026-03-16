@@ -109,13 +109,13 @@
             </div>
         </div>
         <div class="row" style="margin-top:8px;"> --}}
-            <div class="col">
-                <label>明細更新日（開始）</label>
-                <input type="date" name="item_updated_from" value="{{ $itemFilters['item_updated_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>明細更新日（終了）</label>
-                <input type="date" name="item_updated_to" value="{{ $itemFilters['item_updated_to'] ?? '' }}">
+            <div class="col range-field">
+                <label>明細更新日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="item_updated_from" value="{{ $itemFilters['item_updated_from'] ?? '' }}" aria-label="明細更新日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="item_updated_to" value="{{ $itemFilters['item_updated_to'] ?? '' }}" aria-label="明細更新日 終点">
+                </div>
             </div>
             <div class="actions" style="margin-top:8px;">
                 <button type="submit">絞り込み</button>
@@ -145,8 +145,8 @@
                     <td>{{ $it->id }}</td>
                     <td>{{ $it->sku_name }}</td>
                     <td>{{ $it->pricing_model }}</td>
-                    <td>{{ $it->unit_price }}</td>
-                    <td>{{ $it->price_per_m }}</td>
+                    <td>{{ format_amount($it->unit_price) }}</td>
+                    <td>{{ format_amount($it->price_per_m) }}</td>
                     <td><span class="muted">{{ $it->formula }}</span></td>
                     <td>{{ $it->min_qty }}</td>
                     <td>{{ $it->memo ?? '-' }}</td>

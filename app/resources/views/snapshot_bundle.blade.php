@@ -77,15 +77,47 @@
         }
         return (string)($skuNameByCode[$code] ?? '');
     };
+    $summaryMoneyLabels = [
+        '小計' => true,
+        '税' => true,
+        '合計' => true,
+        'Subtotal' => true,
+        'Tax' => true,
+        'Total' => true,
+        'subtotal' => true,
+        'tax' => true,
+        'total' => true,
+    ];
+    $toSummaryValueText = static function (array $item) use ($summaryMoneyLabels): string {
+        $label = trim((string)($item['label'] ?? ''));
+        $value = $item['value'] ?? null;
+        if ($value === null || $value === '') {
+            return '-';
+        }
+        if (isset($summaryMoneyLabels[$label])) {
+            return format_amount($value);
+        }
+        return (string)$value;
+    };
+    $toMoneyText = static function (mixed $value, string $empty = ''): string {
+        return format_amount($value, $empty);
+    };
 
     $sleeves = is_array($config['sleeves'] ?? null) ? $config['sleeves'] : [];
     $fibers = is_array($config['fibers'] ?? null) ? $config['fibers'] : [];
     $tubes = is_array($config['tubes'] ?? null) ? $config['tubes'] : [];
     $connectors = is_array($config['connectors'] ?? null) ? $config['connectors'] : [];
+    $processType = strtoupper((string)($config['processType'] ?? 'MFD'));
+    if (!in_array($processType, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+        $processType = 'MFD';
+    }
+    $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
 
     $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
     $bom = is_array($snapshot['bom'] ?? null) ? $snapshot['bom'] : [];
     $pricing = is_array($snapshot['pricing'] ?? null) ? $snapshot['pricing'] : [];
+    $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
+    $orderQtySummary = $pricingInput['order_qty'] ?? ($snapshot['order_qty'] ?? null);
 
     $pricingBySort = [];
     foreach ($pricing as $p) {
@@ -95,7 +127,15 @@
 
     $bomByPath = [];
     $bomFirstBySku = [];
-    $mfdBom = null;
+    $processSkuCodeByType = [
+        'MFD' => 'PROC_MFD_CONVERSION',
+        'TEC20' => 'PROC_TEC20',
+        'TEC30' => 'PROC_TEC30',
+        'TEC20_HP' => 'PROC_TEC20_HP',
+        'TEC30_HP' => 'PROC_TEC30_HP',
+    ];
+    $selectedProcessSkuCode = (string)($processSkuCodeByType[$processType] ?? 'PROC_MFD_CONVERSION');
+    $processBom = null;
     foreach ($bom as $b) {
         if (!is_array($b)) continue;
         $sortKey = (int)($b['sort_order'] ?? 0);
@@ -109,8 +149,10 @@
             'unit_price' => $priceRow['unit_price'] ?? '',
             'line_total' => $priceRow['line_total'] ?? '',
         ];
-        if ($skuCode === 'PROC_MFD_CONVERSION' && $mfdBom === null) {
-            $mfdBom = $row;
+        if ($processBom === null && ($path === '$.processType' || $skuCode === $selectedProcessSkuCode)) {
+            $processBom = $row;
+        } elseif ($processBom === null && $processType === 'MFD' && $skuCode === 'PROC_MFD_CONVERSION') {
+            $processBom = $row;
         }
         if ($path !== '') {
             $bomByPath[$path] = $row;
@@ -121,48 +163,69 @@
     }
 
     $mfdCount = (int)($config['mfdCount'] ?? 0);
-    $mfdQty = is_numeric($mfdBom['quantity'] ?? null) ? (float)$mfdBom['quantity'] : 0.0;
-    $mfdLineTotal = is_numeric($mfdBom['line_total'] ?? null) ? (float)$mfdBom['line_total'] : 0.0;
+    $mfdQty = is_numeric($processBom['quantity'] ?? null) ? (float)$processBom['quantity'] : 0.0;
+    $mfdLineTotal = is_numeric($processBom['line_total'] ?? null) ? (float)$processBom['line_total'] : 0.0;
     $mfdLineEach = $mfdQty > 0 ? ($mfdLineTotal / $mfdQty) : 0.0;
 
     $rows = [];
-    for ($i = 0; $i < $mfdCount; $i++) {
-        $mfdSkuCode = (string)($mfdBom['sku_code'] ?? '');
+    if ($isTecMode) {
+        $processSelectedSku = $selectedProcessSkuCode;
+        $processPricedSku = (string)($processBom['sku_code'] ?? '');
         $rows[] = [
-            'type' => 'MFD変換',
-            'index' => '['.$i.']',
-            'sku_code' => $mfdSkuCode,
-            'priced_sku_code' => $mfdSkuCode,
-            'sku_name' => $toSkuName($mfdSkuCode),
-            'priced_sku_name' => $toSkuName($mfdSkuCode),
-            'source_path' => $mfdBom['source_path'] ?? '',
-            'range' => '-',
+            'type' => 'TEC工程',
+            'index' => '',
+            'sku_code' => $processSelectedSku,
+            'priced_sku_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
+            'sku_name' => $toSkuName($processSelectedSku),
+            'priced_sku_name' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $toSkuName($processPricedSku) : '',
+            'source_path' => $processBom['source_path'] ?? '$.processType',
+            'range' => $processType,
             'tolerance' => '-',
-            'quantity' => '1',
-            'unit_price' => $mfdBom['unit_price'] ?? '',
-            'line_total' => $mfdQty > 0 ? number_format($mfdLineEach, 2, '.', '') : '',
+            'quantity' => $processBom['quantity'] ?? '1',
+            'unit_price' => $processBom['unit_price'] ?? '',
+            'line_total' => $processBom['line_total'] ?? '',
         ];
+    } else {
+        for ($i = 0; $i < $mfdCount; $i++) {
+            $mfdSkuCode = (string)($processBom['sku_code'] ?? '');
+            $rows[] = [
+                'type' => 'MFD変換',
+                'index' => '['.$i.']',
+                'sku_code' => $mfdSkuCode,
+                'priced_sku_code' => $mfdSkuCode,
+                'sku_name' => $toSkuName($mfdSkuCode),
+                'priced_sku_name' => $toSkuName($mfdSkuCode),
+                'source_path' => $processBom['source_path'] ?? '$.processType',
+                'range' => '-',
+                'tolerance' => '-',
+                'quantity' => '1',
+                'unit_price' => $processBom['unit_price'] ?? '',
+                'line_total' => $mfdQty > 0 ? number_format($mfdLineEach, 2, '.', '') : '',
+            ];
+        }
     }
 
-    foreach ($sleeves as $i => $s) {
-        $path = '$.sleeves['.$i.']';
-        $r = $bomByPath[$path] ?? null;
-        $selectedSku = (string)($s['skuCode'] ?? '');
-        $pricedSku = (string)($r['sku_code'] ?? '');
-        $rows[] = [
-            'type' => 'スリーブ(MFD)',
-            'index' => '['.$i.']',
-            'sku_code' => $selectedSku,
-            'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
-            'sku_name' => $toSkuName($selectedSku),
-            'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
-            'source_path' => $r['source_path'] ?? $path,
-            'range' => '-',
-            'tolerance' => '-',
-            'quantity' => $r['quantity'] ?? '',
-            'unit_price' => $r['unit_price'] ?? '',
-            'line_total' => $r['line_total'] ?? '',
-        ];
+    if (!$isTecMode) {
+        foreach ($sleeves as $i => $s) {
+            $path = '$.sleeves['.$i.']';
+            $r = $bomByPath[$path] ?? null;
+            $selectedSku = (string)($s['skuCode'] ?? '');
+            $pricedSku = (string)($r['sku_code'] ?? '');
+            $rows[] = [
+                'type' => 'スリーブ(MFD)',
+                'index' => '['.$i.']',
+                'sku_code' => $selectedSku,
+                'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+                'sku_name' => $toSkuName($selectedSku),
+                'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
+                'source_path' => $r['source_path'] ?? $path,
+                'range' => '-',
+                'tolerance' => '-',
+                'quantity' => $r['quantity'] ?? '',
+                'unit_price' => $r['unit_price'] ?? '',
+                'line_total' => $r['line_total'] ?? '',
+            ];
+        }
     }
 
     foreach ($fibers as $i => $f) {
@@ -296,7 +359,9 @@
     $summaryAuto = [
         ['label' => 'ルールテンプレ', 'value' => $snapshot['template_version_id'] ?? ''],
         ['label' => '納品物価格表', 'value' => $snapshot['price_book_id'] ?? ''],
-        ['label' => 'MFD数', 'value' => $config['mfdCount'] ?? ''],
+        ['label' => '注文数量', 'value' => $orderQtySummary],
+        ['label' => '工程種別', 'value' => $processType],
+        ['label' => 'MFD数', 'value' => $isTecMode ? '-' : ($config['mfdCount'] ?? '')],
         ['label' => 'チューブ数', 'value' => $config['tubeCount'] ?? ''],
         ['label' => 'エラー件数', 'value' => is_array($errors) ? count($errors) : 0],
         ['label' => 'BOM件数', 'value' => count($bom)],
@@ -389,8 +454,7 @@
                                             @php
                                                 $item = $cell['item'] ?? [];
                                                 $label = (string)($item['label'] ?? '');
-                                                $value = $item['value'] ?? null;
-                                                $valueText = ($value === null || $value === '') ? '-' : (string)$value;
+                                                $valueText = $toSummaryValueText($item);
                                             @endphp
                                             <div style="{{ $summaryCardBaseStyle }}">
                                                 <div class="muted">{{ $label }}</div>
@@ -430,8 +494,7 @@
                         @foreach($summary as $item)
                             @php
                                 $label = (string)($item['label'] ?? '');
-                                $value = $item['value'] ?? null;
-                                $valueText = ($value === null || $value === '') ? '-' : (string)$value;
+                                $valueText = $toSummaryValueText($item);
                             @endphp
                             <div style="{{ $summaryCardStyle }}">
                                 <div class="muted">{{ $label }}</div>
@@ -557,8 +620,8 @@
                                     <td>{{ $r['quantity'] ?? '' }}</td>
                                 @endif
                                 @if($showPriceColumns)
-                                    <td>{{ $r['unit_price'] ?? '' }}</td>
-                                    <td>{{ $r['line_total'] ?? '' }}</td>
+                                    <td>{{ $toMoneyText($r['unit_price'] ?? null, '') }}</td>
+                                    <td>{{ $toMoneyText($r['line_total'] ?? null, '') }}</td>
                                 @endif
                             </tr>
                         @endforeach

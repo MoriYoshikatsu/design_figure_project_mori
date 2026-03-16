@@ -45,6 +45,34 @@
             padding: 8px;
             margin-bottom: 10px;
         }
+        .labor-card-toggle {
+            padding: 0;
+            overflow: hidden;
+        }
+        .labor-card-toggle > summary {
+            cursor: pointer;
+            list-style: none;
+            margin: 0;
+            padding: 8px;
+        }
+        .labor-card-toggle > summary::-webkit-details-marker {
+            display: none;
+        }
+        .labor-card-toggle > summary::before {
+            content: "▶";
+            margin-right: 6px;
+            font-size: 10px;
+            display: inline-block;
+            transition: transform 0.12s ease;
+            color: #6b7280;
+        }
+        .labor-card-toggle[open] > summary::before {
+            transform: rotate(90deg);
+        }
+        .labor-card-toggle-body {
+            border-top: 1px solid #e5e7eb;
+            padding: 8px;
+        }
         .labor-card h3 {
             margin-top: 0;
         }
@@ -101,8 +129,21 @@
         .labor-inline-form {
             display: grid;
             gap: 6px;
-            align-items: center;
+            align-items: start;
             min-width: 980px;
+        }
+        .labor-field {
+            display: grid;
+            gap: 2px;
+            min-width: 0;
+        }
+        .labor-field-label {
+            font-size: 11px;
+            line-height: 1.2;
+            color: #4b5563;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .labor-inline-form--process {
             grid-template-columns: 120px 170px 110px 90px 70px 1fr auto;
@@ -139,6 +180,7 @@
             gap: 4px;
             white-space: nowrap;
             font-size: 12px;
+            margin-top: 18px;
         }
         .labor-subsection {
             margin-top: 8px;

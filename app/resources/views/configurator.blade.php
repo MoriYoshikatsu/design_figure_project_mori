@@ -1,36 +1,64 @@
 <div>
-    <div style="display:flex; gap:16px; padding:16px; align-items:flex-start;">
-        <div style="width: 250px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 8px;">
-            <h1 style="font-weight:700;">MFD変換</h1>
+    @php
+        $processType = strtoupper((string)($config['processType'] ?? 'MFD'));
+        $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+        $isMfdMode = !$isTecMode;
+    @endphp
+    <div style="display:flex; gap:0; padding:16px; align-items:flex-start;">
+        <div
+            id="configurator-left-panel"
+            wire:ignore.self
+            style="width: 280px; min-width: 220px; max-width: calc(100vw - 280px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; padding-right: 8px; flex: 0 0 auto;"
+        >
+            <h1 style="font-weight:700;">コンフィグレーター</h1>
             <div style="margin-top:12px;">
-                <label>MFD変換の数（1 ~ 2）</label>
-                <input type="number" min="1" max="2" wire:model.live.debounce.200ms="config.mfdCount" style="width:100%;">
+                <label>工程種別</label>
+                <select wire:model.live.debounce.200ms="config.processType" style="width:100%;">
+                    <option value="MFD">MFD</option>
+                    <option value="TEC20">TEC20</option>
+                    <option value="TEC30">TEC30</option>
+                    <option value="TEC20_HP">TEC20_HP</option>
+                    <option value="TEC30_HP">TEC30_HP</option>
+                </select>
             </div>
 
-            <div style="margin-top:12px;">
-                <label>チューブの数（0 ~ ファイバ数）</label>
-                {{-- <label>(ファイバーの数 = MFD変換の数 + 1)</label> --}}
-                <input type="number" min="0" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
-            </div>
+            @if($isMfdMode)
+                <div style="margin-top:12px;">
+                    <label>MFD変換の数（1 ~ 10）</label>
+                    <input type="number" min="1" max="10" wire:model.live.debounce.200ms="config.mfdCount" style="width:100%;">
+                </div>
+            @endif
 
             <div style="margin-top:12px;">
-                <label>スリーブ（MFDごと）</label>
-                @foreach(($config['sleeves'] ?? []) as $k => $s)
-                    <div style="margin-top:6px;">
-                        <div style="font-size:12px;">MFD[{{ $k }}]</div>
-                        <select wire:model.live.debounce.500ms="config.sleeves.{{ $k }}.skuCode" style="width:100%;">
-                            <option value="">（未選択）</option>
-                            @foreach(($skuOptions['sleeve'] ?? []) as $opt)
-                                <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                @endforeach
+                @if($isTecMode)
+                    <label>チューブの数（0 または 1）</label>
+                    <input type="number" min="0" max="1" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
+                @else
+                    <label>チューブの数（0 ~ ファイバ数）</label>
+                    <input type="number" min="0" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
+                @endif
             </div>
 
-            <hr style="margin:12px 0;">
+            @if($isMfdMode)
+                <div style="margin-top:12px;">
+                    <label>スリーブ（MFDごと）</label>
+                    @foreach(($config['sleeves'] ?? []) as $k => $s)
+                        <div style="margin-top:6px;">
+                            <div style="font-size:12px;">MFD[{{ $k }}]</div>
+                            <select wire:model.live.debounce.500ms="config.sleeves.{{ $k }}.skuCode" style="width:100%;">
+                                <option value="">（未選択）</option>
+                                @foreach(($skuOptions['sleeve'] ?? []) as $opt)
+                                    <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endforeach
+                </div>
 
-            <h2 style="font-weight:700;">各ファイバ</h2>
+                <hr style="margin:12px 0;">
+            @endif
+
+            <h2 style="font-weight:700;">{{ $isTecMode ? 'ファイバ（最大1件）' : '各ファイバ' }}</h2>
             @foreach(($config['fibers'] ?? []) as $i => $f)
                 <div wire:key="fiber-row-{{ $f['key'] ?? $i }}" style="border:1px solid #ddd; padding:8px; margin-top:8px;">
                     <div>ファイバ[{{ $i }}]</div>
@@ -49,7 +77,7 @@
 
             <hr style="margin:12px 0;">
 
-            <h2 style="font-weight:700;">各チューブ</h2>
+            <h2 style="font-weight:700;">{{ $isTecMode ? 'チューブ（最大1件）' : '各チューブ' }}</h2>
             @foreach(($config['tubes'] ?? []) as $j => $t)
                 <div wire:key="tube-row-{{ $t['key'] ?? $j }}" style="border:1px solid #ddd; padding:8px; margin-top:8px;">
                     <div>チューブ[{{ $j }}]</div>
@@ -87,7 +115,9 @@
                     <option value="none">なし</option>
                     <option value="left">全体の左端</option>
                     <option value="right">全体の右端</option>
-                    <option value="both">全体の両端</option>
+                    @if($isMfdMode)
+                        <option value="both">全体の両端</option>
+                    @endif
                 </select>
 
                 <label>全体の左端</label>
@@ -107,146 +137,9 @@
                 </select>
             </div>
 
-            @if($quoteEditId)
-                <hr style="margin:12px 0;">
-
-                <h2 style="font-weight:700;">概要カード表示項目</h2>
-                <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                    <div style="display:grid; grid-template-columns:1fr; gap:4px;">
-                        @foreach(($summaryFieldOptions ?? []) as $key => $label)
-                            <label style="display:flex; align-items:center; gap:6px;">
-                                <input type="checkbox" wire:model="summaryFields" value="{{ $key }}">
-                                <span>{{ $label }}</span>
-                            </label>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
-
             <hr style="margin:12px 0;">
             <h2 style="font-weight:700;">希望注文数量</h2>
             <input type="number" min="1" step="1" wire:model.live.debounce.300ms="orderQty" style="width:100%;">
-
-            @if($quoteEditId)
-                <hr style="margin:12px 0;">
-                <h2 style="font-weight:700;">見積計算入力（従業員向け）</h2>
-                <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                    <div style="display:grid; gap:8px;">
-                        <div>
-                            <label>固定性経費</label>
-                            <input type="number" step="1" wire:model.live.debounce.300ms="fixedCost" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>管理費係数</label>
-                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="managementFactor" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>数量ディスカウント係数</label>
-                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="qtyDiscountFactor" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>顧客別仕切</label>
-                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="customerFactor" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>荷造運賃</label>
-                            <input type="number" step="1" wire:model.live.debounce.300ms="freightAmount" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>任意の値引き（0以下）</label>
-                            <input type="number" step="1" max="0" wire:model.live.debounce.300ms="manualDiscountAmount" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>取引区分</label>
-                            <select wire:model.live.debounce.300ms="tradeScope" style="width:100%;">
-                                <option value="DOMESTIC">DOMESTIC</option>
-                                <option value="OVERSEAS">OVERSEAS</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label>税率（上書き可）</label>
-                            <input type="number" step="0.0001" wire:model.live.debounce.300ms="taxRate" style="width:100%;">
-                        </div>
-                        <div>
-                            <label>価格ポリシーID</label>
-                            <input type="number" step="1" min="1" wire:model.live.debounce.300ms="pricingPolicyId" style="width:100%;">
-                        </div>
-                    </div>
-                </div>
-
-                <hr style="margin:12px 0;">
-                <h2 style="font-weight:700;">作業費歩留まり上書き（見積編集）</h2>
-                <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                    <div class="muted" style="margin-bottom:8px;">
-                        工程に入力がある場合は要素入力より工程入力を優先します。工程/要素ともに「注文数量」「実投入数」を両方入力した場合、良品率は 注文数量÷実投入数 を採用します。
-                    </div>
-
-                    @if(empty($laborOverrideRows))
-                        <div class="muted">自動選択された工程がありません。</div>
-                    @else
-                        @foreach($laborOverrideRows as $process)
-                            @php
-                                $processCode = (string)($process['process_code'] ?? '');
-                                $processName = (string)($process['process_name'] ?? '');
-                                $processDefaultYield = $process['yield_rate_default'] ?? null;
-                                $elements = is_array($process['elements'] ?? null) ? $process['elements'] : [];
-                            @endphp
-                            <div style="border:1px solid #e5e7eb; border-radius:6px; padding:8px; margin-bottom:10px;">
-                                <div style="font-weight:700; margin-bottom:6px;">{{ $processName }}（{{ $processCode }}）</div>
-                                <div class="muted" style="font-size:12px; margin-bottom:8px;">
-                                    工程初期良品率: {{ $processDefaultYield !== null ? $processDefaultYield : '-' }}
-                                </div>
-                                <div style="display:grid; gap:8px; grid-template-columns:1fr 1fr 1fr;">
-                                    <div>
-                                        <label>工程良品率（直入力）</label>
-                                        <input type="number" step="0.000001" min="0.000001" wire:model.live.debounce.300ms="laborOverrides.processes.{{ $processCode }}.yield_rate" style="width:100%;">
-                                    </div>
-                                    <div>
-                                        <label>工程 注文数量</label>
-                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.processes.{{ $processCode }}.order_qty" style="width:100%;">
-                                    </div>
-                                    <div>
-                                        <label>工程 実投入数</label>
-                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.processes.{{ $processCode }}.actual_input_qty" style="width:100%;">
-                                    </div>
-                                </div>
-
-                                @if(!empty($elements))
-                                    <div style="margin-top:10px; border-top:1px solid #f0f0f0; padding-top:8px;">
-                                        @foreach($elements as $element)
-                                            @php
-                                                $elementCode = (string)($element['element_code'] ?? '');
-                                                $elementName = (string)($element['element_name'] ?? '');
-                                                $elementDefaultYield = $element['yield_rate_default'] ?? null;
-                                            @endphp
-                                            <div style="border:1px dashed #d1d5db; border-radius:6px; padding:6px; margin-bottom:8px;">
-                                                <div style="font-size:12px; font-weight:700;">{{ $elementName }}（{{ $elementCode }}）</div>
-                                                <div class="muted" style="font-size:11px; margin-bottom:6px;">
-                                                    要素初期良品率: {{ $elementDefaultYield !== null ? $elementDefaultYield : '-' }}
-                                                </div>
-                                                <div style="display:grid; gap:8px; grid-template-columns:1fr 1fr 1fr;">
-                                                    <div>
-                                                        <label>要素良品率（直入力）</label>
-                                                        <input type="number" step="0.000001" min="0.000001" wire:model.live.debounce.300ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.yield_rate" style="width:100%;">
-                                                    </div>
-                                                    <div>
-                                                        <label>要素 注文数量</label>
-                                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.order_qty" style="width:100%;">
-                                                    </div>
-                                                    <div>
-                                                        <label>要素 実投入数</label>
-                                                        <input type="number" step="1" min="1" wire:model.live.debounce.300ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.actual_input_qty" style="width:100%;">
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </div>
-                        @endforeach
-                    @endif
-                </div>
-            @endif
 
             <h2 style="font-weight:700;">メモ</h2>
             <div style="margin-top:12px;">
@@ -255,13 +148,21 @@
             </div>
         </div>
 
-        <div style="flex:1;">
+        <button
+            id="configurator-panel-resizer"
+            type="button"
+            aria-label="左パネル幅を調整"
+            title="ドラッグして左パネルの幅を調整"
+            style="width:10px; min-width:10px; height: calc(100vh - 32px); margin:0 8px; padding:0; border:0; border-radius:999px; cursor:col-resize; background:#d1d5db; flex:0 0 auto;"
+        ></button>
+
+        <div style="flex:1; min-width:0;">
             @if(!$quoteEditId)
                 <button wire:click="newSession" type="button">新規ファイバ作成（新規セッション）</button>
             @endif
             @if($quoteEditId)
                 <button type="button" wire:click="requestQuoteEdit">
-                    見積変更申請を送信
+                    見積変更を申請
                 </button>
             @else
                 <button type="button" wire:click="issueQuote">
@@ -286,6 +187,197 @@
                 @endif
             @endif
 
+            @if($quoteEditId)
+                <div style="margin-top:12px; border:1px solid #d1d5db; border-radius:8px; padding:12px; background:#f8fafc;">
+                    <h2 style="font-weight:700; margin:0;">見積編集用設定</h2>
+                    <div style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
+                        <label style="display:block; font-weight:700; margin-bottom:4px;">編集した理由・背景のコメント（必須）</label>
+                        <textarea
+                            wire:model.live.debounce.180000ms="editComment"
+                            rows="1"
+                            required
+                            placeholder="例）顧客要望により仕様変更、金額調整"
+                            style="width:100%;"
+                        ></textarea>
+                        @php
+                            $editCommentErrorMessage = method_exists($this, 'getErrorBag')
+                                ? $this->getErrorBag()->first('editComment')
+                                : null;
+                        @endphp
+                        @if($editCommentErrorMessage)
+                            <div style="color:#dc2626; font-size:12px; margin-top:4px;">{{ $editCommentErrorMessage }}</div>
+                        @endif
+                    </div>
+
+                    @if($isMfdMode && !empty($config['mfdAdjustments'] ?? []))
+                        <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
+                            <summary style="cursor:pointer; font-weight:700;">MFDごとの工程微調整</summary>
+                            <div style="margin-top:8px;">
+                                <div class="muted" style="font-size:12px; margin-bottom:8px;">
+                                    注文数量と実投入数を両方入力した行が1件以上ある場合、合算比率でMFD工程歩留まりへ反映します。
+                                </div>
+                                @foreach(($config['mfdAdjustments'] ?? []) as $i => $adj)
+                                    <div wire:key="mfd-adjust-row-main-{{ $adj['key'] ?? $i }}" style="border:1px dashed #d1d5db; border-radius:6px; padding:8px; margin-bottom:8px;">
+                                        <div style="font-size:12px; font-weight:700; margin-bottom:6px;">MFD[{{ $i }}]</div>
+                                        <div style="display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));">
+                                            <div>
+                                                <label>良品率（直入力）</label>
+                                                <input type="number" min="0.000001" step="0.000001" wire:model.live.debounce.180000ms="config.mfdAdjustments.{{ $i }}.yield_rate" style="width:100%;">
+                                            </div>
+                                            <div>
+                                                <label>注文数量</label>
+                                                <input type="number" min="1" step="1" wire:model.live.debounce.180000ms="config.mfdAdjustments.{{ $i }}.order_qty" style="width:100%;">
+                                            </div>
+                                            <div>
+                                                <label>実投入数</label>
+                                                <input type="number" min="1" step="1" wire:model.live.debounce.180000ms="config.mfdAdjustments.{{ $i }}.actual_input_qty" style="width:100%;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </details>
+                    @endif
+
+                    <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
+                        <summary style="cursor:pointer; font-weight:700;">概要カード表示項目</summary>
+                        <div style="margin-top:8px; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:6px;">
+                            @foreach(($summaryFieldOptions ?? []) as $key => $label)
+                                <label style="display:flex; align-items:center; gap:6px;">
+                                    <input type="checkbox" wire:model="summaryFields" value="{{ $key }}">
+                                    <span>{{ $label }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </details>
+
+                    <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
+                        <summary style="cursor:pointer; font-weight:700;">見積計算入力（従業員向け）</summary>
+                        <div style="margin-top:8px; display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+                            <div>
+                                <label>固定性経費</label>
+                                <input type="number" step="1" wire:model.live.debounce.180000ms="fixedCost" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>管理費係数</label>
+                                <input type="number" step="0.0001" wire:model.live.debounce.180000ms="managementFactor" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>数量ディスカウント係数</label>
+                                <input type="number" step="0.0001" wire:model.live.debounce.180000ms="qtyDiscountFactor" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>顧客別仕切</label>
+                                <input type="number" step="0.0001" wire:model.live.debounce.180000ms="customerFactor" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>荷造運賃</label>
+                                <input type="number" step="1" wire:model.live.debounce.180000ms="freightAmount" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>任意の値引き（0以下）</label>
+                                <input type="number" step="1" max="0" wire:model.live.debounce.180000ms="manualDiscountAmount" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>取引区分</label>
+                                <select wire:model.live.debounce.180000ms="tradeScope" style="width:100%;">
+                                    <option value="DOMESTIC">DOMESTIC</option>
+                                    <option value="OVERSEAS">OVERSEAS</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>税率（上書き可）</label>
+                                <input type="number" step="0.0001" wire:model.live.debounce.180000ms="taxRate" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>価格ポリシーID</label>
+                                <input type="number" step="1" min="1" wire:model.live.debounce.180000ms="pricingPolicyId" style="width:100%;">
+                            </div>
+                        </div>
+                    </details>
+
+                    <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px;">
+                        <summary style="cursor:pointer; font-weight:700;">作業費歩留まり上書き（見積編集）</summary>
+                        <div style="margin-top:8px;">
+                            <div class="muted" style="margin-bottom:8px;">
+                                工程に入力がある場合は要素入力より工程入力を優先します。工程/要素ともに「注文数量」「実投入数」を両方入力した場合、良品率は 注文数量÷実投入数 を採用します。
+                            </div>
+                            @php
+                                $visibleLaborOverrideRows = array_values(array_filter(
+                                    $laborOverrideRows ?? [],
+                                    static fn($row) => strtoupper((string)($row['process_code'] ?? '')) !== 'MFD'
+                                ));
+                            @endphp
+
+                            @if(empty($visibleLaborOverrideRows))
+                                <div class="muted">自動選択された工程がありません。</div>
+                            @else
+                                @foreach($visibleLaborOverrideRows as $process)
+                                    @php
+                                        $processCode = (string)($process['process_code'] ?? '');
+                                        $processName = (string)($process['process_name'] ?? '');
+                                        $processDefaultYield = $process['yield_rate_default'] ?? null;
+                                        $elements = is_array($process['elements'] ?? null) ? $process['elements'] : [];
+                                    @endphp
+                                    <div style="border:1px solid #e5e7eb; border-radius:6px; padding:8px; margin-bottom:10px;">
+                                        <div style="font-weight:700; margin-bottom:6px;">{{ $processName }}（{{ $processCode }}）</div>
+                                        <div class="muted" style="font-size:12px; margin-bottom:8px;">
+                                            工程初期良品率: {{ $processDefaultYield !== null ? $processDefaultYield : '-' }}
+                                        </div>
+                                        <div style="display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));">
+                                            <div>
+                                                <label>工程良品率（直入力）</label>
+                                                <input type="number" step="0.000001" min="0.000001" wire:model.live.debounce.180000ms="laborOverrides.processes.{{ $processCode }}.yield_rate" style="width:100%;">
+                                            </div>
+                                            <div>
+                                                <label>工程 注文数量</label>
+                                                <input type="number" step="1" min="1" wire:model.live.debounce.180000ms="laborOverrides.processes.{{ $processCode }}.order_qty" style="width:100%;">
+                                            </div>
+                                            <div>
+                                                <label>工程 実投入数</label>
+                                                <input type="number" step="1" min="1" wire:model.live.debounce.180000ms="laborOverrides.processes.{{ $processCode }}.actual_input_qty" style="width:100%;">
+                                            </div>
+                                        </div>
+
+                                        @if(!empty($elements))
+                                            <div style="margin-top:10px; border-top:1px solid #f0f0f0; padding-top:8px;">
+                                                @foreach($elements as $element)
+                                                    @php
+                                                        $elementCode = (string)($element['element_code'] ?? '');
+                                                        $elementName = (string)($element['element_name'] ?? '');
+                                                        $elementDefaultYield = $element['yield_rate_default'] ?? null;
+                                                    @endphp
+                                                    <div style="border:1px dashed #d1d5db; border-radius:6px; padding:6px; margin-bottom:8px;">
+                                                        <div style="font-size:12px; font-weight:700;">{{ $elementName }}（{{ $elementCode }}）</div>
+                                                        <div class="muted" style="font-size:11px; margin-bottom:6px;">
+                                                            要素初期良品率: {{ $elementDefaultYield !== null ? $elementDefaultYield : '-' }}
+                                                        </div>
+                                                        <div style="display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));">
+                                                            <div>
+                                                                <label>要素良品率（直入力）</label>
+                                                                <input type="number" step="0.000001" min="0.000001" wire:model.live.debounce.180000ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.yield_rate" style="width:100%;">
+                                                            </div>
+                                                            <div>
+                                                                <label>要素 注文数量</label>
+                                                                <input type="number" step="1" min="1" wire:model.live.debounce.180000ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.order_qty" style="width:100%;">
+                                                            </div>
+                                                            <div>
+                                                                <label>要素 実投入数</label>
+                                                                <input type="number" step="1" min="1" wire:model.live.debounce.180000ms="laborOverrides.elements.{{ $processCode }}.{{ $elementCode }}.actual_input_qty" style="width:100%;">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            @endif
+                        </div>
+                    </details>
+                </div>
+            @endif
+
             <h2 style="font-weight:700;">プレビュー</h2>
             <div style="border:1px solid #ddd; padding:12px;">
                 {!! $svg !!}
@@ -307,12 +399,122 @@ document.addEventListener('livewire:init', () => {
     const autosaveUrl = @json(route('configurator.autosave'));
     const csrfToken = @json(csrf_token());
     const componentId = @json($this->getId());
+    const panelStorageKey = 'configurator.left_panel_width.v1';
+    const panelMinWidth = 220;
+    const panelViewportPadding = 280;
+    const resizerState = window.__configuratorPanelResizerState || (window.__configuratorPanelResizerState = {
+        initialized: false,
+        resizeBound: false,
+    });
 
     const getComponent = () => {
         if (window.Livewire && typeof window.Livewire.find === 'function') {
             return window.Livewire.find(componentId);
         }
         return null;
+    };
+
+    const getPanelWidthMax = () => {
+        return Math.max(panelMinWidth, window.innerWidth - panelViewportPadding);
+    };
+
+    const clampPanelWidth = (value) => {
+        const width = Number(value);
+        if (!Number.isFinite(width)) return panelMinWidth;
+        return Math.max(panelMinWidth, Math.min(getPanelWidthMax(), Math.round(width)));
+    };
+
+    const persistPanelWidth = (value) => {
+        try {
+            window.localStorage.setItem(panelStorageKey, String(value));
+        } catch (e) {
+            // ignore storage errors
+        }
+    };
+
+    const restorePanelWidth = () => {
+        try {
+            const raw = window.localStorage.getItem(panelStorageKey);
+            if (raw === null) return null;
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? parsed : null;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const applyPanelWidth = (panel, width) => {
+        if (!panel) return;
+        const clamped = clampPanelWidth(width);
+        panel.style.width = `${clamped}px`;
+        persistPanelWidth(clamped);
+    };
+
+    const initPanelResizer = () => {
+        const panel = document.getElementById('configurator-left-panel');
+        const resizer = document.getElementById('configurator-panel-resizer');
+        if (!panel || !resizer || resizer.dataset.initialized === '1') return;
+
+        const saved = restorePanelWidth();
+        if (saved !== null) {
+            applyPanelWidth(panel, saved);
+        } else {
+            applyPanelWidth(panel, panel.getBoundingClientRect().width || 280);
+        }
+
+        let dragging = false;
+        let pointerId = null;
+
+        const start = (event) => {
+            dragging = true;
+            pointerId = event.pointerId;
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'col-resize';
+            if (typeof resizer.setPointerCapture === 'function') {
+                try {
+                    resizer.setPointerCapture(pointerId);
+                } catch (e) {
+                    // ignore unsupported states
+                }
+            }
+        };
+
+        const move = (event) => {
+            if (!dragging) return;
+            const panelLeft = panel.getBoundingClientRect().left;
+            applyPanelWidth(panel, event.clientX - panelLeft);
+        };
+
+        const stop = () => {
+            if (!dragging) return;
+            dragging = false;
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+            if (pointerId !== null && typeof resizer.releasePointerCapture === 'function') {
+                try {
+                    resizer.releasePointerCapture(pointerId);
+                } catch (e) {
+                    // ignore unsupported states
+                }
+            }
+            pointerId = null;
+        };
+
+        resizer.addEventListener('pointerdown', start);
+        resizer.addEventListener('pointermove', move);
+        resizer.addEventListener('pointerup', stop);
+        resizer.addEventListener('pointercancel', stop);
+        resizer.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            const currentWidth = panel.getBoundingClientRect().width;
+            const delta = event.shiftKey ? 40 : 16;
+            const next = event.key === 'ArrowLeft' ? currentWidth - delta : currentWidth + delta;
+            applyPanelWidth(panel, next);
+        });
+
+        resizer.dataset.initialized = '1';
+        resizerState.initialized = true;
     };
 
     // ページ離脱（beforeunload：離脱検知）
@@ -360,5 +562,16 @@ document.addEventListener('livewire:init', () => {
 
         navigator.sendBeacon(autosaveUrl, fd);
     });
+
+    if (!resizerState.resizeBound) {
+        window.addEventListener('resize', () => {
+            const panel = document.getElementById('configurator-left-panel');
+            if (!panel) return;
+            applyPanelWidth(panel, panel.getBoundingClientRect().width);
+        });
+        resizerState.resizeBound = true;
+    }
+
+    initPanelResizer();
 });
 </script>

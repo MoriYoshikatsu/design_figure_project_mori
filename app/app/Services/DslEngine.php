@@ -11,18 +11,34 @@ final class DslEngine
     {
         $errors = [];
 
+        $processType = $this->normalizeProcessType($config['processType'] ?? 'MFD');
+        if ($processType === null) {
+            $errors[] = ['path' => 'processType', 'message' => 'processTypeは MFD / TEC20 / TEC30 / TEC20_HP / TEC30_HP のいずれかです'];
+            $processType = 'MFD';
+        }
+        $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+
         $mfdCount = (int)($config['mfdCount'] ?? 1);
-        $fiberCount = $mfdCount + 1;
+        $fiberCount = $isTecMode ? 1 : ($mfdCount + 1);
 
         $this->validateRange('mfdCount', $config['mfdCount'] ?? null, $dsl['mfdCount'] ?? null, $errors, 'mfdCount');
-        $this->validateRange('tubeCount', $config['tubeCount'] ?? null, $dsl['tubeCount'] ?? null, $errors, 'tubeCount');
+        if (!$isTecMode) {
+            $this->validateRange('tubeCount', $config['tubeCount'] ?? null, $dsl['tubeCount'] ?? null, $errors, 'tubeCount');
+        }
 
         $this->validateFiberCount($config, $fiberCount, $errors);
-        $this->validateTubesStartPosition($config, $errors);
+        $this->validateTubeCount($config, $fiberCount, $isTecMode, $errors);
+        $this->validateConnectors($config, $isTecMode, $errors);
+        if ($isTecMode) {
+            $this->validateTecSleeves($config, $errors);
+            $this->validateTecTubeArraySize($config, $errors);
+        }
+        $this->validateTubesStartPosition($config, $fiberCount, $mfdCount, $isTecMode, $errors);
 
         return [
             'derived' => [
                 'fiberCount' => $fiberCount,
+                'processType' => $processType,
             ],
             'errors' => $errors,
         ];
@@ -53,15 +69,84 @@ final class DslEngine
         }
     }
 
+    private function validateTubeCount(array $config, int $fiberCount, bool $isTecMode, array &$errors): void
+    {
+        $tubeCountRaw = $config['tubeCount'] ?? null;
+        if (!is_numeric($tubeCountRaw)) {
+            return;
+        }
+
+        $tubeCount = (int)$tubeCountRaw;
+        if ($isTecMode) {
+            if ($tubeCount < 0 || $tubeCount > 1) {
+                $errors[] = ['path' => 'tubeCount', 'message' => 'TECモードのtubeCountは0または1です'];
+            }
+            return;
+        }
+
+        if ($tubeCount < 0 || $tubeCount > $fiberCount) {
+            $errors[] = ['path' => 'tubeCount', 'message' => "tubeCountは0〜{$fiberCount}です"];
+        }
+    }
+
+    private function validateConnectors(array $config, bool $isTecMode, array &$errors): void
+    {
+        $connectors = $config['connectors'] ?? [];
+        if (!is_array($connectors)) {
+            return;
+        }
+        $mode = strtolower(trim((string)($connectors['mode'] ?? 'none')));
+        $allowed = $isTecMode ? ['none', 'left', 'right'] : ['none', 'left', 'right', 'both'];
+        if (!in_array($mode, $allowed, true)) {
+            $errors[] = ['path' => 'connectors.mode', 'message' => $isTecMode
+                ? 'TECモードのconnectors.modeは none / left / right のみです'
+                : 'connectors.modeが不正です'];
+            return;
+        }
+        if ($isTecMode && $mode === 'both') {
+            $errors[] = ['path' => 'connectors.mode', 'message' => 'TECモードではconnectors.mode=bothは選択できません'];
+        }
+    }
+
+    private function validateTecSleeves(array $config, array &$errors): void
+    {
+        $sleeves = $config['sleeves'] ?? [];
+        if (!is_array($sleeves)) {
+            return;
+        }
+        if (count($sleeves) > 0) {
+            $errors[] = ['path' => 'sleeves', 'message' => 'TECモードではsleevesを設定できません'];
+        }
+    }
+
+    private function validateTecTubeArraySize(array $config, array &$errors): void
+    {
+        $tubes = $config['tubes'] ?? [];
+        if (!is_array($tubes)) {
+            return;
+        }
+        if (count($tubes) > 1) {
+            $errors[] = ['path' => 'tubes', 'message' => 'TECモードではtubesは最大1件です'];
+        }
+    }
+
+    private function normalizeProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (in_array($value, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+            return $value;
+        }
+
+        return null;
+    }
+
     /**
      * チューブ開始位置のエラー判定（path設計を含む）
      * @return array<int, array{path:string,message:string}>
      */
-    private function validateTubesStartPosition(array $config, array &$errors): void
+    private function validateTubesStartPosition(array $config, int $fiberCount, int $mfdCount, bool $isTecMode, array &$errors): void
     {
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
         $mfdCount = max(1, min(10, $mfdCount));
-        $fiberCount = $mfdCount + 1;
 
         // fiber長さ（未入力に備えた暫定値）
         $fallbackPerSeg = 0.1;
@@ -90,16 +175,19 @@ final class DslEngine
             if (!is_array($tube)) {
                 continue;
             }
-            // 1) anchor.index（MFD番号）
-            $aIdx = $tube['anchor']['index'] ?? null;
-            if (!is_numeric($aIdx)) {
-                $errors[] = ['path' => "tubes.$j.anchor.index", 'message' => 'anchor.index（MFD番号）が数値ではありません'];
-                continue;
-            }
-            $aIdx = (int)$aIdx;
-            if ($aIdx < 0 || $aIdx > $mfdCount - 1) {
-                $errors[] = ['path' => "tubes.$j.anchor.index", 'message' => "anchor.indexは0〜".($mfdCount-1)."です"];
-                continue;
+            $aIdx = 0;
+            if (!$isTecMode) {
+                // 1) anchor.index（MFD番号）
+                $aIdx = $tube['anchor']['index'] ?? null;
+                if (!is_numeric($aIdx)) {
+                    $errors[] = ['path' => "tubes.$j.anchor.index", 'message' => 'anchor.index（MFD番号）が数値ではありません'];
+                    continue;
+                }
+                $aIdx = (int)$aIdx;
+                if ($aIdx < 0 || $aIdx > $mfdCount - 1) {
+                    $errors[] = ['path' => "tubes.$j.anchor.index", 'message' => "anchor.indexは0〜".($mfdCount-1)."です"];
+                    continue;
+                }
             }
 
             // 2) startOffsetM（±m）
@@ -196,6 +284,16 @@ final class DslEngine
                     }
                     continue;
                 }
+            }
+
+            if ($isTecMode) {
+                $segLen = $segLens[0] ?? $fallbackPerSeg;
+                $startM = max(0.0, min($segLen, $offset));
+                $endM = $startM + $lenM;
+                if ($endM < 0 || $endM > $segLen) {
+                    $errors[] = ['path' => "tubes.$j.lengthM", 'message' => "終了位置が範囲外です（0〜{$segLen}m）"];
+                }
+                continue;
             }
 
             // 開始・終了（m）: anchor（MFD）基準（targetFiberIndexが不正な場合のみ）

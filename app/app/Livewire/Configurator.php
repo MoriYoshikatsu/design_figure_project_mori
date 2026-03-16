@@ -16,6 +16,7 @@ final class Configurator extends Component
     private const SUMMARY_FIELD_LABELS = [
         'quote_id' => '見積ID',
         'status' => 'ステータス',
+        'order_qty' => '注文数量',
         'account_internal_name' => 'accounts.internal_name',
         'account_user_name' => 'users.name',
         'assignee_name' => '担当者',
@@ -31,6 +32,7 @@ final class Configurator extends Component
     private const SUMMARY_DEFAULT_FIELDS = [
         'quote_id',
         'status',
+        'order_qty',
         'account_internal_name',
         'account_user_name',
         'assignee_name',
@@ -41,6 +43,19 @@ final class Configurator extends Component
         'subtotal',
         'tax',
         'total',
+    ];
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC20 = 'TEC20';
+    private const PROCESS_TYPE_TEC30 = 'TEC30';
+    private const PROCESS_TYPE_TEC20_HP = 'TEC20_HP';
+    private const PROCESS_TYPE_TEC30_HP = 'TEC30_HP';
+    /** @var array<int, string> */
+    private const PROCESS_TYPES = [
+        self::PROCESS_TYPE_MFD,
+        self::PROCESS_TYPE_TEC20,
+        self::PROCESS_TYPE_TEC30,
+        self::PROCESS_TYPE_TEC20_HP,
+        self::PROCESS_TYPE_TEC30_HP,
     ];
 
     public array $config = [];
@@ -66,6 +81,7 @@ final class Configurator extends Component
     public array $summaryFields = [];
     public array $summaryFieldOptions = [];
     public ?string $memo = null;
+    public ?string $editComment = null;
     public mixed $orderQty = 1;
     public mixed $fixedCost = null;
     public mixed $managementFactor = null;
@@ -272,7 +288,12 @@ final class Configurator extends Component
     private function defaultConfig(): array
     {
         return [
+            'processType' => self::PROCESS_TYPE_MFD,
             'mfdCount' => 2,
+            'mfdAdjustments' => [
+                ['yield_rate' => null, 'order_qty' => null, 'actual_input_qty' => null],
+                ['yield_rate' => null, 'order_qty' => null, 'actual_input_qty' => null],
+            ],
             'sleeves' => [
                 ['skuCode' => 'SLEEVE_RECOTE'],
                 ['skuCode' => 'SLEEVE_RECOTE'],
@@ -588,6 +609,12 @@ final class Configurator extends Component
             }
             return;
         }
+        if ($name === 'editComment') {
+            if (trim((string)$value) !== '') {
+                $this->resetErrorBag('editComment');
+            }
+            return;
+        }
 
         if ($this->quoteEditId && ($name === 'orderQty' || str_starts_with($name, 'laborOverrides.'))) {
             $this->recompute(false);
@@ -600,7 +627,7 @@ final class Configurator extends Component
             $this->markToleranceAutoByPath($name, $value);
         }
 
-        $resizeArrays = in_array($name, ['config.mfdCount', 'config.tubeCount'], true);
+        $resizeArrays = in_array($name, ['config.processType', 'config.mfdCount', 'config.tubeCount'], true);
         $this->recompute($resizeArrays);
 
         // ついでに「一定間隔で自動保存」もここで（次章）
@@ -658,6 +685,14 @@ final class Configurator extends Component
     {
         if (!$this->quoteEditId) return;
         $this->saveError = null;
+        $editComment = trim((string)$this->editComment);
+        if ($editComment === '') {
+            $this->addError('editComment', '編集した背景・理由を入力してください。');
+            $this->saveError = '見積変更申請には編集コメント（背景・理由）の入力が必須です。';
+            $this->saveStatus = '見積変更申請失敗(TOKYO): ' . now()->format('H:i:s');
+            return;
+        }
+        $this->resetErrorBag('editComment');
 
         $this->recompute(true);
 
@@ -742,7 +777,7 @@ final class Configurator extends Component
                 'snapshot' => $snapshot,
             ],
             (int)auth()->id(),
-            'Configuratorからの変更申請'
+            $editComment
         );
 
         /** @var \App\Services\QuoteCalcRunRecorder $runRecorder */
@@ -782,43 +817,60 @@ final class Configurator extends Component
     {
         $this->normalizeConfigUnitsToM();
 
-        // 1) derived（導出）
-        $mfdCount = (int)($this->config['mfdCount'] ?? 1);
-        $mfdCount = max(1, min(10, $mfdCount));      // 1..10 に丸める
-        $this->config['mfdCount'] = $mfdCount;
-
-        $fiberCount = $mfdCount + 1;
-
-        // 2) counts変更時のみ arrays（配列）調整
         if ($resizeArrays) {
-            // sleeves（MFD点ごと）
-            $this->ensureArraySize('sleeves', $mfdCount, ['skuCode'=>null]);
-
-            $this->ensureArraySize('fibers', $fiberCount, ['skuCode'=>null,'lengthM'=>null,'toleranceM'=>null,'toleranceAuto'=>true]);
-
-            $tubeCount = (int)($this->config['tubeCount'] ?? 0);
-            $tubeCount = max(0, min($tubeCount, $fiberCount));   // 0..fiberCount
-            $this->config['tubeCount'] = $tubeCount;
-
-            $this->ensureArraySize('tubes', $tubeCount, [
-                'skuCode'=>null,
-                'anchor'=>['type'=>'MFD','index'=>0],
-                'targetFiberIndex'=>0,
-                'startFiberIndex'=>0,
-                'endFiberIndex'=>0,
-                'startOffsetM'=>0,
-                'endOffsetM'=>null,
-                'lengthM'=>null,
-                'toleranceM'=>null,
-                'toleranceAuto'=>true,
-            ]);
+            // mode切替/件数入力時に再計算へ即反映するため、引数互換として残す
         }
 
-        // 2.4) 旧フィールド互換（sleeveSkuCode → sleeves）
-        if (empty($this->config['sleeves']) && !empty($this->config['sleeveSkuCode'])) {
+        $processType = $this->normalizeProcessType($this->config['processType'] ?? self::PROCESS_TYPE_MFD);
+        $this->config['processType'] = $processType;
+        $isTecMode = $this->isTecProcessType($processType);
+
+        $mfdCount = (int)($this->config['mfdCount'] ?? 1);
+        $mfdCount = max(1, min(10, $mfdCount));
+        $this->config['mfdCount'] = $mfdCount;
+
+        $fiberCount = $isTecMode ? 1 : ($mfdCount + 1);
+        $this->ensureArraySize('fibers', $fiberCount, $this->defaultFiberRow());
+
+        if (!$isTecMode && empty($this->config['sleeves']) && !empty($this->config['sleeveSkuCode'])) {
             $code = (string)$this->config['sleeveSkuCode'];
             $this->config['sleeves'] = array_fill(0, $mfdCount, ['skuCode' => $code]);
         }
+
+        if ($isTecMode) {
+            $tubeCount = (int)($this->config['tubeCount'] ?? 0);
+            $tubeCount = max(0, min(1, $tubeCount));
+            $this->config['tubeCount'] = $tubeCount;
+            $this->ensureArraySize('tubes', $tubeCount, $this->defaultTubeRow());
+            $this->config['sleeves'] = [];
+            $this->config['mfdAdjustments'] = [];
+        } else {
+            $tubeCount = (int)($this->config['tubeCount'] ?? 0);
+            $tubeCount = max(0, min($tubeCount, $fiberCount));
+            $this->config['tubeCount'] = $tubeCount;
+            $this->ensureArraySize('tubes', $tubeCount, $this->defaultTubeRow());
+            $this->ensureArraySize('sleeves', $mfdCount, ['skuCode' => null]);
+            $this->ensureArraySize('mfdAdjustments', $mfdCount, $this->defaultMfdAdjustmentRow());
+            $this->normalizeMfdAdjustmentsRows();
+        }
+
+        $connectors = is_array($this->config['connectors'] ?? null) ? $this->config['connectors'] : [];
+        $connectors['mode'] = $this->normalizeConnectorMode($connectors['mode'] ?? ($isTecMode ? 'none' : 'both'), !$isTecMode);
+        if ($connectors['mode'] === 'none') {
+            $connectors['leftSkuCode'] = null;
+            $connectors['rightSkuCode'] = null;
+        } elseif ($connectors['mode'] === 'left') {
+            $connectors['rightSkuCode'] = null;
+        } elseif ($connectors['mode'] === 'right') {
+            $connectors['leftSkuCode'] = null;
+        }
+        if (!array_key_exists('leftSkuCode', $connectors)) {
+            $connectors['leftSkuCode'] = null;
+        }
+        if (!array_key_exists('rightSkuCode', $connectors)) {
+            $connectors['rightSkuCode'] = null;
+        }
+        $this->config['connectors'] = $connectors;
 
         // 2.5) ±誤差の自動算出（未入力なら自動埋め）
         $this->applyToleranceDefaultsToFibers();
@@ -882,10 +934,11 @@ final class Configurator extends Component
             }
             /** @var \App\Services\LaborCostEngine $laborCostEngine */
             $laborCostEngine = app(\App\Services\LaborCostEngine::class);
+            $effectiveLaborOverrides = $this->buildEffectiveLaborOverrides();
             $laborPreview = $laborCostEngine->calculate(
                 is_array($this->derived['bom'] ?? null) ? $this->derived['bom'] : [],
                 $orderQty,
-                $this->normalizeLaborOverridesArray($this->laborOverrides)
+                $effectiveLaborOverrides
             );
             $this->derived['labor_preview'] = $laborPreview;
             $this->laborOverrideRows = is_array($laborPreview['processes'] ?? null) ? $laborPreview['processes'] : [];
@@ -915,6 +968,103 @@ final class Configurator extends Component
         //     ]);
         //     $this->lastSavedAt = $now;
         // }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultFiberRow(): array
+    {
+        return [
+            'skuCode' => null,
+            'lengthM' => null,
+            'toleranceM' => null,
+            'toleranceAuto' => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultTubeRow(): array
+    {
+        return [
+            'skuCode' => null,
+            'anchor' => ['type' => 'MFD', 'index' => 0],
+            'targetFiberIndex' => 0,
+            'startFiberIndex' => 0,
+            'endFiberIndex' => 0,
+            'startOffsetM' => 0,
+            'endOffsetM' => null,
+            'lengthM' => null,
+            'toleranceM' => null,
+            'toleranceAuto' => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultMfdAdjustmentRow(): array
+    {
+        return [
+            'yield_rate' => null,
+            'order_qty' => null,
+            'actual_input_qty' => null,
+        ];
+    }
+
+    private function normalizeMfdAdjustmentsRows(): void
+    {
+        $rows = $this->config['mfdAdjustments'] ?? [];
+        if (!is_array($rows)) {
+            $rows = [];
+        }
+
+        foreach ($rows as $i => $row) {
+            $row = is_array($row) ? $row : [];
+            $rows[$i] = [
+                'yield_rate' => is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null,
+                'order_qty' => is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null,
+                'actual_input_qty' => is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null,
+                'key' => !empty($row['key']) ? (string)$row['key'] : (string)Str::uuid(),
+            ];
+        }
+
+        $this->config['mfdAdjustments'] = $rows;
+    }
+
+    private function normalizeProcessType(mixed $raw): string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::PROCESS_TYPES, true)) {
+            return self::PROCESS_TYPE_MFD;
+        }
+
+        return $value;
+    }
+
+    private function isTecProcessType(string $processType): bool
+    {
+        return in_array($processType, [
+            self::PROCESS_TYPE_TEC20,
+            self::PROCESS_TYPE_TEC30,
+            self::PROCESS_TYPE_TEC20_HP,
+            self::PROCESS_TYPE_TEC30_HP,
+        ], true);
+    }
+
+    private function normalizeConnectorMode(mixed $rawMode, bool $allowBoth): string
+    {
+        $mode = strtolower(trim((string)$rawMode));
+        $allowed = $allowBoth
+            ? ['none', 'left', 'right', 'both']
+            : ['none', 'left', 'right'];
+        if (!in_array($mode, $allowed, true)) {
+            return $allowBoth ? 'both' : 'none';
+        }
+
+        return $mode;
     }
 
     private function ensureArraySize(string $key, int $size, array $fill): void
@@ -1006,6 +1156,8 @@ final class Configurator extends Component
      */
     private function exportPricingInput(): array
     {
+        $effectiveLaborOverrides = $this->buildEffectiveLaborOverrides();
+
         // /work/quotes/{id}/edit では従業員向けに全項目編集可。
         if ($this->quoteEditId) {
             return $this->normalizePricingInputArray([
@@ -1019,11 +1171,11 @@ final class Configurator extends Component
                 'trade_scope' => $this->tradeScope,
                 'tax_rate' => $this->taxRate,
                 'pricing_policy_id' => $this->pricingPolicyId,
-                'labor_overrides' => $this->laborOverrides,
+                'labor_overrides' => $effectiveLaborOverrides,
             ]);
         }
 
-        // /configurator など顧客向け画面では注文数量のみ入力可。
+        // /configurator など顧客向け画面では注文数量のみ入力可（作業歩留まりはconfig依存で反映）。
         $defaults = $this->resolvePricingInputDefaults();
         $orderQty = is_numeric($this->orderQty) ? (int)$this->orderQty : 1;
         if ($orderQty < 1) {
@@ -1032,6 +1184,7 @@ final class Configurator extends Component
 
         return $this->normalizePricingInputArray(array_merge($defaults, [
             'order_qty' => $orderQty,
+            'labor_overrides' => $effectiveLaborOverrides,
         ]));
     }
 
@@ -1114,6 +1267,89 @@ final class Configurator extends Component
         }
 
         return $result;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildEffectiveLaborOverrides(): array
+    {
+        $normalized = $this->normalizeLaborOverridesArray($this->laborOverrides);
+        $mfdOverride = $this->buildMfdAdjustmentProcessOverride();
+        if (is_array($mfdOverride)) {
+            $existing = is_array($normalized['processes']['MFD'] ?? null)
+                ? $normalized['processes']['MFD']
+                : ['yield_rate' => null, 'order_qty' => null, 'actual_input_qty' => null];
+            $normalized['processes']['MFD'] = array_merge($existing, $mfdOverride);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array<string, float|null>|null
+     */
+    private function buildMfdAdjustmentProcessOverride(): ?array
+    {
+        // /configurator ではMFD個別微調整を適用しない（見積編集時のみ有効）
+        if (!$this->quoteEditId) {
+            return null;
+        }
+
+        $processType = $this->normalizeProcessType($this->config['processType'] ?? self::PROCESS_TYPE_MFD);
+        if ($this->isTecProcessType($processType)) {
+            return null;
+        }
+
+        $rows = $this->config['mfdAdjustments'] ?? [];
+        if (!is_array($rows) || count($rows) === 0) {
+            return null;
+        }
+
+        $ratioOrderSum = 0.0;
+        $ratioActualSum = 0.0;
+        $ratioCount = 0;
+        $yieldSum = 0.0;
+        $yieldCount = 0;
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $orderQty = is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null;
+            $actualInputQty = is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null;
+            if ($orderQty !== null && $actualInputQty !== null && $orderQty > 0 && $actualInputQty > 0) {
+                $ratioOrderSum += $orderQty;
+                $ratioActualSum += $actualInputQty;
+                $ratioCount++;
+                continue;
+            }
+
+            $yieldRate = is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null;
+            if ($yieldRate !== null && $yieldRate > 0) {
+                $yieldSum += $yieldRate;
+                $yieldCount++;
+            }
+        }
+
+        if ($ratioCount > 0 && $ratioActualSum > 0) {
+            $ratio = $ratioOrderSum / $ratioActualSum;
+            return [
+                'yield_rate' => $ratio,
+                'order_qty' => $ratioOrderSum,
+                'actual_input_qty' => $ratioActualSum,
+            ];
+        }
+
+        if ($yieldCount > 0) {
+            return [
+                'yield_rate' => ($yieldSum / $yieldCount),
+                'order_qty' => null,
+                'actual_input_qty' => null,
+            ];
+        }
+
+        return null;
     }
 
     /**
@@ -1457,7 +1693,17 @@ final class Configurator extends Component
             }
         }
 
-        return empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        $resolved = empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        if (!in_array('order_qty', $resolved, true)) {
+            $statusIndex = array_search('status', $resolved, true);
+            if ($statusIndex === false) {
+                array_unshift($resolved, 'order_qty');
+            } else {
+                array_splice($resolved, $statusIndex + 1, 0, ['order_qty']);
+            }
+        }
+
+        return $resolved;
     }
 
     public function newSession(): void

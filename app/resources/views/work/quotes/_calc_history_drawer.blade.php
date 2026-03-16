@@ -117,9 +117,9 @@
                                 @endif
                             </td>
                             <td>{{ $run['event_label'] ?? ($run['event_type'] ?? '-') }}</td>
-                            <td>{{ $run['adjusted_total'] ?? '-' }}</td>
-                            <td>{{ $run['tax_amount'] ?? '-' }}</td>
-                            <td>{{ $run['grand_total'] ?? '-' }}</td>
+                            <td>{{ format_amount($run['adjusted_total'] ?? null) }}</td>
+                            <td>{{ format_amount($run['tax_amount'] ?? null) }}</td>
+                            <td>{{ format_amount($run['grand_total'] ?? null) }}</td>
                             <td>{{ $run['triggered_by_name'] ?? ($run['triggered_by_email'] ?? '-') }}</td>
                             <td>{{ $run['created_at'] ?? '-' }}</td>
                         </tr>
@@ -161,13 +161,13 @@
                                     <td>{{ $run['run_no'] ?? '-' }}</td>
                                     <td>{{ $run['event_label'] ?? ($run['event_type'] ?? '-') }}</td>
                                     <td>{{ ($run['context']['operation'] ?? '-') }}</td>
-                                    <td>{{ $run['subtotal_raw'] ?? '-' }}</td>
-                                    <td>{{ $run['unit_price_rounded'] ?? '-' }}</td>
-                                    <td>{{ $run['recomputed_total'] ?? '-' }}</td>
-                                    <td>{{ $run['adjusted_total'] ?? '-' }}</td>
+                                    <td>{{ format_amount($run['subtotal_raw'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['unit_price_rounded'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['recomputed_total'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['adjusted_total'] ?? null) }}</td>
                                     <td>{{ $run['tax_rate'] ?? '-' }}</td>
-                                    <td>{{ $run['tax_amount'] ?? '-' }}</td>
-                                    <td>{{ $run['grand_total'] ?? '-' }}</td>
+                                    <td>{{ format_amount($run['tax_amount'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['grand_total'] ?? null) }}</td>
                                 </tr>
                             @empty
                                 <tr><td colspan="10">履歴はありません。</td></tr>

@@ -577,6 +577,7 @@ final class ChangeRequestController extends Controller
                 'q.id',
                 'q.status',
                 'q.account_id',
+                'q.order_qty',
                 'a.internal_name as account_internal_name',
                 'a.assignee_name'
             )
@@ -624,6 +625,7 @@ final class ChangeRequestController extends Controller
         return [
             'quote_id' => (int)($quote->id ?? 0),
             'status' => (string)($quote->status ?? ''),
+            'order_qty' => $quote->order_qty ?? '',
             'account_internal_name' => $internalName !== '' ? $internalName : '-',
             'account_user_name' => $userName !== '' ? $userName : '-',
             'assignee_name' => $assignee !== '' ? $assignee : '-',

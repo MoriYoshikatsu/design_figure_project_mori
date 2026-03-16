@@ -18,6 +18,7 @@ final class QuoteController extends Controller
     private const SUMMARY_FIELD_LABELS = [
         'quote_id' => '見積ID',
         'status' => 'ステータス',
+        'order_qty' => '注文数量',
         'account_internal_name' => 'accounts.internal_name',
         'account_user_name' => 'users.name',
         'assignee_name' => '担当者',
@@ -33,6 +34,7 @@ final class QuoteController extends Controller
     private const SUMMARY_DEFAULT_FIELDS = [
         'quote_id',
         'status',
+        'order_qty',
         'account_internal_name',
         'account_user_name',
         'assignee_name',
@@ -787,7 +789,17 @@ final class QuoteController extends Controller
             }
         }
 
-        return empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        $resolved = empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        if (!in_array('order_qty', $resolved, true)) {
+            $statusIndex = array_search('status', $resolved, true);
+            if ($statusIndex === false) {
+                array_unshift($resolved, 'order_qty');
+            } else {
+                array_splice($resolved, $statusIndex + 1, 0, ['order_qty']);
+            }
+        }
+
+        return $resolved;
     }
 
     /**
@@ -797,10 +809,13 @@ final class QuoteController extends Controller
     {
         $fields = $this->resolveSummaryCardFields($snapshot);
         $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
+        $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
+        $orderQty = $quote->order_qty ?? ($pricingInput['order_qty'] ?? '');
 
         $valueMap = [
             'quote_id' => $quote->id ?? '',
             'status' => $quote->status ?? '',
+            'order_qty' => $orderQty,
             'account_internal_name' => trim((string)($quote->account_internal_name ?? '')) !== '' ? (string)$quote->account_internal_name : '-',
             'account_user_name' => trim((string)($quote->account_user_name ?? '')) !== '' ? (string)$quote->account_user_name : '-',
             'assignee_name' => $quote->assignee_name ?? '-',

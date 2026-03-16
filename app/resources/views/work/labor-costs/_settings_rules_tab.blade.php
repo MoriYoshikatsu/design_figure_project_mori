@@ -16,8 +16,14 @@
         <input type="hidden" name="_mode" value="submit">
         <div class="labor-inline-wrap">
             <div class="labor-inline-form labor-inline-form--setting">
-                <input type="number" min="0" step="0.01" name="hourly_rate" value="{{ old('hourly_rate', (float)($setting->hourly_rate ?? 9000)) }}" placeholder="時間チャージ（円/時）" aria-label="時間チャージ（円/時）">
-                <input type="text" class="labor-text-input" name="memo" value="{{ old('memo', (string)($setting->memo ?? '')) }}" placeholder="メモ" aria-label="メモ">
+                <label class="labor-field">
+                    <span class="labor-field-label">時間チャージ（円/時）</span>
+                    <input type="number" min="0" step="0.01" name="hourly_rate" value="{{ old('hourly_rate', (float)($setting->hourly_rate ?? 9000)) }}" aria-label="時間チャージ（円/時）">
+                </label>
+                <label class="labor-field">
+                    <span class="labor-field-label">メモ</span>
+                    <input type="text" class="labor-text-input" name="memo" value="{{ old('memo', (string)($setting->memo ?? '')) }}" aria-label="メモ">
+                </label>
                 <button type="submit">更新申請</button>
             </div>
         </div>
@@ -32,18 +38,42 @@
             <input type="hidden" name="_mode" value="submit">
             <div class="labor-inline-wrap">
                 <div class="labor-inline-form labor-inline-form--rule">
-                    <input type="text" name="rule_code" placeholder="ルールコード" aria-label="ルールコード">
-                    <input type="text" name="name" placeholder="ルール名" aria-label="ルール名">
-                    <select name="process_id" aria-label="対象工程">
-                        @foreach($processOptions as $processOpt)
-                            <option value="{{ $processOpt['id'] }}">{{ $processOpt['label'] }}</option>
-                        @endforeach
-                    </select>
-                    <input type="number" name="priority" value="100" placeholder="優先度" aria-label="優先度">
-                    <input type="text" name="include_tags" placeholder="include tags" aria-label="include tags">
-                    <input type="text" name="exclude_tags" placeholder="exclude tags" aria-label="exclude tags">
-                    <input type="text" name="required_sku_categories" placeholder="required categories" aria-label="required categories">
-                    <input type="text" name="required_sku_codes" placeholder="required sku codes" aria-label="required sku codes">
+                    <label class="labor-field">
+                        <span class="labor-field-label">ルールコード</span>
+                        <input type="text" name="rule_code" aria-label="ルールコード">
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">ルール名</span>
+                        <input type="text" name="name" aria-label="ルール名">
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">対象工程</span>
+                        <select name="process_id" aria-label="対象工程">
+                            @foreach($processOptions as $processOpt)
+                                <option value="{{ $processOpt['id'] }}">{{ $processOpt['label'] }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">優先度</span>
+                        <input type="number" name="priority" value="100" aria-label="優先度">
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">含めるタグ</span>
+                        <input type="text" name="include_tags" aria-label="含めるタグ">
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">除外タグ</span>
+                        <input type="text" name="exclude_tags" aria-label="除外タグ">
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">必須品目カテゴリ</span>
+                        <input type="text" name="required_sku_categories" aria-label="必須品目カテゴリ">
+                    </label>
+                    <label class="labor-field">
+                        <span class="labor-field-label">必須品目コード</span>
+                        <input type="text" name="required_sku_codes" aria-label="必須品目コード">
+                    </label>
                     <label class="labor-checkbox-inline" title="常時適用">
                         <input type="checkbox" name="always_apply" value="1">
                         常時
@@ -52,7 +82,10 @@
                         <input type="checkbox" name="active" value="1" checked>
                         有効
                     </label>
-                    <input type="text" class="labor-text-input" name="memo" placeholder="メモ" aria-label="メモ">
+                    <label class="labor-field">
+                        <span class="labor-field-label">メモ</span>
+                        <input type="text" class="labor-text-input" name="memo" aria-label="メモ">
+                    </label>
                     <button type="submit">作成申請</button>
                 </div>
             </div>
@@ -69,49 +102,78 @@
         $requiredCodes = implode(',', $rule['required_sku_codes'] ?? []);
     @endphp
 
-    <div class="labor-card labor-card--rule">
-        <div class="labor-card-head">
+    <details class="labor-card labor-card--rule labor-card-toggle">
+        <summary class="labor-card-head">
             <span class="labor-kind labor-kind--rule">ルール</span>
             <strong>{{ $rule['name'] ?? '' }}</strong>
             <span class="labor-mono">{{ $rule['rule_code'] ?? '' }}</span>
             <span class="labor-compact-note">対象工程 {{ $rule['process_name'] ?? '' }} ({{ $rule['process_code'] ?? '' }})</span>
-        </div>
+        </summary>
 
-        <form method="POST" action="{{ route('work.labor-costs.rules.edit-request.update', $ruleId) }}">
-            @csrf
-            <input type="hidden" name="_mode" value="submit">
-            <div class="labor-inline-wrap">
-                <div class="labor-inline-form labor-inline-form--rule">
-                    <input type="text" name="rule_code" value="{{ $rule['rule_code'] ?? '' }}" placeholder="ルールコード" aria-label="ルールコード">
-                    <input type="text" name="name" value="{{ $rule['name'] ?? '' }}" placeholder="ルール名" aria-label="ルール名">
-                    <select name="process_id" aria-label="対象工程">
-                        @foreach($processOptions as $processOpt)
-                            <option value="{{ $processOpt['id'] }}" @if((int)$processOpt['id'] === (int)($rule['process_id'] ?? 0)) selected @endif>{{ $processOpt['label'] }}</option>
-                        @endforeach
-                    </select>
-                    <input type="number" name="priority" value="{{ $rule['priority'] ?? 100 }}" placeholder="優先度" aria-label="優先度">
-                    <input type="text" name="include_tags" value="{{ $includeTags }}" placeholder="include tags" aria-label="include tags">
-                    <input type="text" name="exclude_tags" value="{{ $excludeTags }}" placeholder="exclude tags" aria-label="exclude tags">
-                    <input type="text" name="required_sku_categories" value="{{ $requiredCategories }}" placeholder="required categories" aria-label="required categories">
-                    <input type="text" name="required_sku_codes" value="{{ $requiredCodes }}" placeholder="required sku codes" aria-label="required sku codes">
-                    <label class="labor-checkbox-inline" title="常時適用">
-                        <input type="checkbox" name="always_apply" value="1" @if(!empty($rule['always_apply'])) checked @endif>
-                        常時
-                    </label>
-                    <label class="labor-checkbox-inline" title="有効">
-                        <input type="checkbox" name="active" value="1" @if(!empty($rule['active'])) checked @endif>
-                        有効
-                    </label>
-                    <input type="text" class="labor-text-input" name="memo" value="{{ $rule['memo'] ?? '' }}" placeholder="メモ" aria-label="メモ">
-                    <button type="submit">更新申請</button>
+        <div class="labor-card-toggle-body">
+            <form method="POST" action="{{ route('work.labor-costs.rules.edit-request.update', $ruleId) }}">
+                @csrf
+                <input type="hidden" name="_mode" value="submit">
+                <div class="labor-inline-wrap">
+                    <div class="labor-inline-form labor-inline-form--rule">
+                        <label class="labor-field">
+                            <span class="labor-field-label">ルールコード</span>
+                            <input type="text" name="rule_code" value="{{ $rule['rule_code'] ?? '' }}" aria-label="ルールコード">
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">ルール名</span>
+                            <input type="text" name="name" value="{{ $rule['name'] ?? '' }}" aria-label="ルール名">
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">対象工程</span>
+                            <select name="process_id" aria-label="対象工程">
+                                @foreach($processOptions as $processOpt)
+                                    <option value="{{ $processOpt['id'] }}" @if((int)$processOpt['id'] === (int)($rule['process_id'] ?? 0)) selected @endif>{{ $processOpt['label'] }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">優先度</span>
+                            <input type="number" name="priority" value="{{ $rule['priority'] ?? 100 }}" aria-label="優先度">
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">含めるタグ</span>
+                            <input type="text" name="include_tags" value="{{ $includeTags }}" aria-label="含めるタグ">
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">除外タグ</span>
+                            <input type="text" name="exclude_tags" value="{{ $excludeTags }}" aria-label="除外タグ">
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">必須品目カテゴリ</span>
+                            <input type="text" name="required_sku_categories" value="{{ $requiredCategories }}" aria-label="必須品目カテゴリ">
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">必須品目コード</span>
+                            <input type="text" name="required_sku_codes" value="{{ $requiredCodes }}" aria-label="必須品目コード">
+                        </label>
+                        <label class="labor-checkbox-inline" title="常時適用">
+                            <input type="checkbox" name="always_apply" value="1" @if(!empty($rule['always_apply'])) checked @endif>
+                            常時
+                        </label>
+                        <label class="labor-checkbox-inline" title="有効">
+                            <input type="checkbox" name="active" value="1" @if(!empty($rule['active'])) checked @endif>
+                            有効
+                        </label>
+                        <label class="labor-field">
+                            <span class="labor-field-label">メモ</span>
+                            <input type="text" class="labor-text-input" name="memo" value="{{ $rule['memo'] ?? '' }}" aria-label="メモ">
+                        </label>
+                        <button type="submit">更新申請</button>
+                    </div>
                 </div>
-            </div>
-        </form>
+            </form>
 
-        <form method="POST" action="{{ route('work.labor-costs.rules.edit-request.delete', $ruleId) }}" class="labor-delete-inline">
-            @csrf
-            <input type="hidden" name="_mode" value="submit">
-            <button type="submit" onclick="return confirm('このルールの削除申請を送信しますか？')">ルール削除申請</button>
-        </form>
-    </div>
+            <form method="POST" action="{{ route('work.labor-costs.rules.edit-request.delete', $ruleId) }}" class="labor-delete-inline">
+                @csrf
+                <input type="hidden" name="_mode" value="submit">
+                <button type="submit" onclick="return confirm('このルールの削除申請を送信しますか？')">ルール削除申請</button>
+            </form>
+        </div>
+    </details>
 @endforeach

@@ -185,26 +185,46 @@ final class LaborCostEngine
 
         $tags = [];
         $categories = [];
+        $skuMetaByCode = [];
         if (!empty($skuCodes) && $this->hasTable('skus')) {
             $rows = DB::table('skus')
                 ->whereIn('sku_code', array_keys($skuCodes))
                 ->get(['sku_code', 'category', 'attributes']);
             foreach ($rows as $row) {
-                $category = strtoupper(trim((string)($row->category ?? '')));
-                if ($category !== '') {
-                    $categories[$category] = true;
-                }
-                $attributes = $this->decodeJsonMap($row->attributes);
-                $tagRows = $attributes['process_tags'] ?? [];
-                if (!is_array($tagRows)) {
+                $skuCode = strtoupper(trim((string)($row->sku_code ?? '')));
+                if ($skuCode === '') {
                     continue;
                 }
+                $skuMetaByCode[$skuCode] = [
+                    'category' => strtoupper(trim((string)($row->category ?? ''))),
+                    'attributes' => $this->decodeJsonMap($row->attributes),
+                ];
+            }
+        }
+
+        foreach (array_keys($skuCodes) as $skuCode) {
+            $meta = $skuMetaByCode[$skuCode] ?? ['category' => '', 'attributes' => []];
+            $category = strtoupper(trim((string)($meta['category'] ?? '')));
+            $attributes = is_array($meta['attributes'] ?? null) ? $meta['attributes'] : [];
+            if ($category === '') {
+                $category = $this->inferCategoryFromSkuCode($skuCode);
+            }
+            if ($category !== '') {
+                $categories[$category] = true;
+            }
+
+            $tagRows = $attributes['process_tags'] ?? [];
+            if (is_array($tagRows)) {
                 foreach ($tagRows as $tag) {
                     $normalized = strtolower(trim((string)$tag));
                     if ($normalized !== '') {
                         $tags[$normalized] = true;
                     }
                 }
+            }
+
+            foreach ($this->inferTagsForSku($skuCode, $category, $attributes) as $tag) {
+                $tags[$tag] = true;
             }
         }
 
@@ -213,6 +233,101 @@ final class LaborCostEngine
             'categories' => $categories,
             'sku_codes' => $skuCodes,
         ];
+    }
+
+    private function inferCategoryFromSkuCode(string $skuCode): string
+    {
+        if (str_starts_with($skuCode, 'PROC_')) {
+            return 'PROC';
+        }
+        if (str_starts_with($skuCode, 'FIBER_')) {
+            return 'FIBER';
+        }
+        if (str_starts_with($skuCode, 'TUBE_')) {
+            return 'TUBE';
+        }
+        if (str_starts_with($skuCode, 'SLEEVE_')) {
+            return 'SLEEVE';
+        }
+        if (str_starts_with($skuCode, 'CONN_')) {
+            return 'CONNECTOR';
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     * @return array<int, string>
+     */
+    private function inferTagsForSku(string $skuCode, string $category, array $attributes): array
+    {
+        $code = strtoupper(trim($skuCode));
+        $cat = strtoupper(trim($category));
+        $kind = strtolower(trim((string)($attributes['kind'] ?? '')));
+        $polish = strtoupper(trim((string)($attributes['polish'] ?? '')));
+        $tags = [];
+
+        if ($code !== '') {
+            $tags[strtolower($code)] = true;
+        }
+
+        if ($cat !== '') {
+            $tags[strtolower($cat)] = true;
+        }
+        if ($cat === 'CONNECTOR' || str_starts_with($code, 'CONN_')) {
+            $tags['connector'] = true;
+        }
+        if ($cat === 'FIBER' || str_starts_with($code, 'FIBER_')) {
+            $tags['fiber'] = true;
+        }
+        if ($cat === 'TUBE' || str_starts_with($code, 'TUBE_')) {
+            $tags['tube'] = true;
+        }
+        if ($cat === 'SLEEVE' || str_starts_with($code, 'SLEEVE_')) {
+            $tags['sleeve'] = true;
+            $tags['fusion'] = true;
+        }
+
+        if (str_contains($code, 'MFD') || str_contains($kind, 'mfd')) {
+            $tags['mfd'] = true;
+        }
+        if (str_contains($code, 'TEC20') || str_contains($kind, 'tec20')) {
+            $tags['tec20'] = true;
+        }
+        if (str_contains($code, 'TEC30') || str_contains($kind, 'tec30')) {
+            $tags['tec30'] = true;
+        }
+        if (str_contains($code, '_HP') || str_contains($kind, 'high_precision') || str_contains($kind, '_hp')) {
+            $tags['high_precision'] = true;
+        }
+
+        if (str_contains($code, 'PM') || str_contains($kind, 'pm')) {
+            $tags['pm'] = true;
+        }
+        if ($polish === 'APC' || str_contains($code, '_APC')) {
+            $tags['apc'] = true;
+        }
+        if ($polish === 'ARCOAT' || str_contains($code, 'ARCOAT')) {
+            $tags['arcoat'] = true;
+        }
+        if ($polish === 'PC' || str_contains($code, '_PC')) {
+            $tags['pc'] = true;
+        }
+
+        if (str_starts_with($code, 'CONN_SC_')) {
+            $tags['conn_sc'] = true;
+        } elseif (str_starts_with($code, 'CONN_FC_')) {
+            $tags['conn_fc'] = true;
+        } elseif (str_starts_with($code, 'CONN_LC_')) {
+            $tags['conn_lc'] = true;
+        } elseif (str_starts_with($code, 'CONN_FERRULE_')) {
+            $tags['conn_ferrule'] = true;
+        }
+
+        $result = array_keys($tags);
+        sort($result);
+        return $result;
     }
 
     /**

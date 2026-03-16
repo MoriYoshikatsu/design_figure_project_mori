@@ -39,31 +39,30 @@
                 @endforeach
             </select>
         </div>
-        <div class="col">
-            <label>作成日（開始）</label>
-            <input type="date" name="pb[created_from]" value="{{ $filters['created_from'] ?? '' }}">
+        <div class="col range-field">
+            <label>作成日（始点 / 終点）</label>
+            <div class="range-inputs">
+                <input type="date" name="pb[created_from]" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                <span class="range-sep">〜</span>
+                <input type="date" name="pb[created_to]" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+            </div>
         </div>
-        <div class="col">
-            <label>作成日（終了）</label>
-            <input type="date" name="pb[created_to]" value="{{ $filters['created_to'] ?? '' }}">
+        <div class="col range-field">
+            <label>更新日（始点 / 終点）</label>
+            <div class="range-inputs">
+                <input type="date" name="pb[updated_from]" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                <span class="range-sep">〜</span>
+                <input type="date" name="pb[updated_to]" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+            </div>
         </div>
-        <div class="col">
-            <label>更新日（開始）</label>
-            <input type="date" name="pb[updated_from]" value="{{ $filters['updated_from'] ?? '' }}">
+        <div class="actions" style="margin-top:8px;">
+            <button type="submit">絞り込み</button>
+            <a href="{{ route($indexRouteName, ['tab' => 'price_books', 'sku' => $skuFilters]) }}">クリア</a>
+            <div class="muted" style="margin:8px 0;">{{ count($books) }}件</div>
         </div>
-        <div class="col">
-            <label>更新日（終了）</label>
-            <input type="date" name="pb[updated_to]" value="{{ $filters['updated_to'] ?? '' }}">
-        </div>
-    </div>
-
-    <div class="actions" style="margin-top:8px;">
-        <button type="submit">絞り込み</button>
-        <a href="{{ route($indexRouteName, ['tab' => 'price_books', 'sku' => $skuFilters]) }}">クリア</a>
     </div>
 </form>
 
-<div class="muted" style="margin:8px 0;">{{ count($books) }}件</div>
 
 <table>
     <thead>

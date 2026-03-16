@@ -745,10 +745,20 @@ final class ChangeRequestReviewController extends Controller
         return redirect()->route('work.change-requests.index')->with('status', '承認しました');
     }
 
-    public function reject(int $id)
+    public function reject(Request $request, int $id)
     {
+        $validated = $request->validate(
+            [
+                'reject_comment' => 'required|string|max:5000',
+            ],
+            [
+                'reject_comment.required' => '却下コメントは必須です。',
+                'reject_comment.max' => '却下コメントは5000文字以内で入力してください。',
+            ]
+        );
+        $rejectComment = trim((string)($validated['reject_comment'] ?? ''));
         $actorId = (int)auth()->id();
-        DB::transaction(function () use ($id, $actorId) {
+        DB::transaction(function () use ($id, $actorId, $rejectComment) {
             $req = DB::table('change_requests')
                 ->where('id', $id)
                 ->lockForUpdate()
@@ -764,6 +774,7 @@ final class ChangeRequestReviewController extends Controller
                 'status' => 'REJECTED',
                 'approved_by' => $actorId,
                 'approved_at' => now(),
+                'comment' => $this->mergeRejectComment((string)($req->comment ?? ''), $rejectComment),
                 'updated_at' => now(),
             ]);
 
@@ -785,6 +796,22 @@ final class ChangeRequestReviewController extends Controller
         });
 
         return redirect()->route('work.change-requests.index')->with('status', '却下しました');
+    }
+
+    private function mergeRejectComment(string $existingComment, string $rejectComment): string
+    {
+        $existingComment = trim($existingComment);
+        $rejectComment = trim($rejectComment);
+        if ($rejectComment === '') {
+            return $existingComment;
+        }
+
+        $line = '【却下コメント】 ' . $rejectComment;
+        if ($existingComment === '') {
+            return $line;
+        }
+
+        return $existingComment . "\n\n" . $line;
     }
 
     public function updateMemo(\Illuminate\Http\Request $request, int $id)

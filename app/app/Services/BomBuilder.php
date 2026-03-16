@@ -101,17 +101,26 @@ final class BomBuilder
         $items = [];
         $sort = 0;
 
+        $processType = $this->normalizeProcessType($config['processType'] ?? 'MFD');
         $mfdCount = (int)($config['mfdCount'] ?? 1);
         $totalFiberLengthM = $this->sumLengths($config['fibers'] ?? []);
-
-        $items[] = $this->normalizeItem([
-            'sku_code' => 'PROC_MFD_CONVERSION',
-            'quantity' => $mfdCount,
-            'options' => [
+        $processSkuCode = $this->resolveProcessSkuCode($processType);
+        $processQty = $processType === 'MFD'
+            ? max(1, $mfdCount)
+            : 1;
+        $processOptions = [];
+        if ($processType === 'MFD') {
+            $processOptions = [
                 'mfdCount' => $mfdCount,
                 'totalFiberLengthM' => $totalFiberLengthM,
-            ],
-            'source_path' => null,
+            ];
+        }
+
+        $items[] = $this->normalizeItem([
+            'sku_code' => $processSkuCode,
+            'quantity' => $processQty,
+            'options' => $processOptions,
+            'source_path' => '$.processType',
             'sort_order' => $sort,
         ], $config, $derived);
         $sort++;
@@ -193,6 +202,27 @@ final class BomBuilder
         }
 
         return $items;
+    }
+
+    private function normalizeProcessType(mixed $raw): string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+            return 'MFD';
+        }
+
+        return $value;
+    }
+
+    private function resolveProcessSkuCode(string $processType): string
+    {
+        return match ($processType) {
+            'TEC20' => 'PROC_TEC20',
+            'TEC30' => 'PROC_TEC30',
+            'TEC20_HP' => 'PROC_TEC20_HP',
+            'TEC30_HP' => 'PROC_TEC30_HP',
+            default => 'PROC_MFD_CONVERSION',
+        };
     }
 
     private function resolveTubeLengthM(array $tube, array $config): ?float

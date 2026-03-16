@@ -71,5 +71,6 @@
         'derived' => $derived,
         'errors' => $errors,
     ])
+    @include('partials.back_to_top')
 </body>
 </html>

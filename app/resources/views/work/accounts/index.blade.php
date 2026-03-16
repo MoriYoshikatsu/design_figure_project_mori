@@ -9,15 +9,6 @@
                 <label>フリーワード</label>
                 <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="名前/担当者/メモ など">
             </div>
-            {{-- <div class="col">
-                <label>アカウント種別</label>
-                <select name="account_type">
-                    <option value="">すべて</option>
-                    @foreach($accountTypeOptions as $opt)
-                        <option value="{{ $opt }}" @if(($filters['account_type'] ?? '') === $opt) selected @endif>{{ $opt }}</option>
-                    @endforeach
-                </select>
-            </div> --}}
             <div class="col">
                 <label>権限区分</label>
                 <select name="role">
@@ -27,25 +18,22 @@
                     @endforeach
                 </select>
             </div>
-            <div class="col">
-                <label>作成日（開始）</label>
-                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
+            <div class="col range-field">
+                <label>作成日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+                </div>
             </div>
-            <div class="col">
-                <label>作成日（終了）</label>
-                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
+            <div class="col range-field">
+                <label>更新日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+                </div>
             </div>
-        {{-- </div>
-        <div class="row" style="margin-top:8px;"> --}}
-            <div class="col">
-                <label>更新日（開始）</label>
-                <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>更新日（終了）</label>
-                <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}">
-            </div>
-        {{-- </div> --}}
             <div class="actions" style="margin-top:13px;">
                 <button type="submit">絞り込み</button>
                 <a href="{{ route('work.accounts.index') }}">クリア</a>
@@ -92,12 +80,7 @@
                         <button type="submit">登録申請を送信</button>
                     </div>
                 </div>
-                {{-- <div class="row" style="margin-top:8px;">
-                    <div class="col">
-                        <label>メモ</label>
-                        <textarea name="memo" rows="2">{{ old('memo') }}</textarea>
-                    </div>
-                </div> --}}
+
             </form>
         </details>
     @endif

@@ -15,10 +15,17 @@ final class SvgRenderer
     {
         $targets = $this->collectErrorTargets($errors);
 
+        $processType = strtoupper(trim((string)($config['processType'] ?? 'MFD')));
+        if (!in_array($processType, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+            $processType = 'MFD';
+        }
+        $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+
         $mfdCount = (int)($config['mfdCount'] ?? 1);
+        $drawMfdCount = $isTecMode ? 0 : $mfdCount;
         $fibers   = $config['fibers'] ?? [];
         $tubes    = $config['tubes'] ?? [];
-        $conns    = $config['connectors'] ?? ['mode' => 'both', 'leftSkuCode' => null, 'rightSkuCode' => null];
+        $conns    = $config['connectors'] ?? ['mode' => ($isTecMode ? 'none' : 'both'), 'leftSkuCode' => null, 'rightSkuCode' => null];
         $sleeves  = $config['sleeves'] ?? [];
         $skuNameByCode = $derived['skuNameByCode'] ?? [];
         $skuSvgByCode = $derived['skuSvgByCode'] ?? [];
@@ -93,7 +100,7 @@ final class SvgRenderer
             $segEnd[$i] = $displayEnd[$i];
 
             // MFD[k] は fiber[k] の終端（actual m）
-            if ($i < $mfdCount) {
+            if ($i < $drawMfdCount) {
                 $mfdActualPos[$i] = $actualEnd[$i];
             }
         }
@@ -111,7 +118,7 @@ final class SvgRenderer
             return $displayEnd[$fiberCount - 1] ?? 0.0;
         };
 
-        for ($k = 0; $k < $mfdCount; $k++) {
+        for ($k = 0; $k < $drawMfdCount; $k++) {
             if (!array_key_exists($k, $mfdActualPos)) continue;
             $mfdPos[$k] = $mapM((float)$mfdActualPos[$k]);
         }
@@ -148,7 +155,7 @@ final class SvgRenderer
         $labelY     = $belowLabelY2;
         $connLabelY = $belowLabelY3;
 
-        $dense = $fiberCount >= 6 || $mfdCount >= 6;
+        $dense = $fiberCount >= 6 || $drawMfdCount >= 6;
         $labelSize = $dense ? 12 : 13;
         $smallSize = $dense ? 11 : 12;
 
@@ -180,16 +187,21 @@ final class SvgRenderer
         $svg[] = '<defs></defs>';
 
         // ヘッダ（情報）
-        $sleeveNameList = [];
-        for ($k = 0; $k < $mfdCount; $k++) {
-            $code = $sleeves[$k]['skuCode'] ?? null;
-            $name = $code ? ($skuNameByCode[$code] ?? null) : null;
-            $sleeveNameList[] = $name ? ('MFD['.$k.'] '.$name) : ('MFD['.$k.'] (not set)');
+        if ($isTecMode) {
+            $svg[] = '<text x="'.$margin.'" y="28" class="label">'
+                . '工程種別: '.$esc($processType).' / ファイバーの数: '.$esc($fiberCount)
+                . '</text>';
+        } else {
+            $sleeveNameList = [];
+            for ($k = 0; $k < $drawMfdCount; $k++) {
+                $code = $sleeves[$k]['skuCode'] ?? null;
+                $name = $code ? ($skuNameByCode[$code] ?? null) : null;
+                $sleeveNameList[] = $name ? ('MFD['.$k.'] '.$name) : ('MFD['.$k.'] (not set)');
+            }
+            $svg[] = '<text x="'.$margin.'" y="28" class="label'.($targets['sleeve'] ? ' errText' : '').'">'
+                . '工程種別: '.$esc($processType).' / MFD変換の数: '.$esc($mfdCount).' / ファイバーの数: '.$esc($fiberCount)
+                . '</text>';
         }
-        $svg[] = '<text x="'.$margin.'" y="28" class="label'.($targets['sleeve'] ? ' errText' : '').'">'
-              . 'MFD変換の数: '.$esc($mfdCount).' / ファイバーの数: '.$esc($fiberCount)
-            //   . ' / Sleeves: '.$esc(implode(' / ', $sleeveNameList))
-              . '</text>';
 
         // 軸（ベースライン）
         $svg[] = '<line x1="'.$margin.'" y1="'.$axisY.'" x2="'.($width-$margin).'" y2="'.$axisY.'" stroke="#9ca3af" stroke-width="1" />';
@@ -354,7 +366,7 @@ final class SvgRenderer
         }
 
         // --- MFDマーカー
-        for ($k = 0; $k < $mfdCount; $k++) {
+        for ($k = 0; $k < $drawMfdCount; $k++) {
             $m = $mfdPos[$k] ?? null;
             if ($m === null) continue;
 
@@ -489,7 +501,7 @@ final class SvgRenderer
             if (str_starts_with($path, 'connectors.left'))  $t['connLeft'] = true;
             if (str_starts_with($path, 'connectors.right')) $t['connRight'] = true;
 
-            if (str_starts_with($path, 'sleeveSkuCode')) $t['sleeve'] = true;
+            if (str_starts_with($path, 'sleeveSkuCode') || str_starts_with($path, 'sleeves')) $t['sleeve'] = true;
         }
 
         // 重複除去

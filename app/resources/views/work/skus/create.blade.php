@@ -1,4 +1,4 @@
-@extends('work.layout')
+{{-- @extends('work.layout')
 
 @section('content')
     <h1>SKU作成</h1>
@@ -43,4 +43,4 @@
             <button type="submit">保存</button>
         </div>
     </form>
-@endsection
+@endsection --}}

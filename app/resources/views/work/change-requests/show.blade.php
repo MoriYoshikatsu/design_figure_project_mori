@@ -66,6 +66,7 @@
         $summaryFieldLabels = [
             'quote_id' => '見積ID',
             'status' => 'ステータス',
+            'order_qty' => '注文数量',
             'account_internal_name' => 'accounts.internal_name',
             'account_user_name' => 'users.name',
             'assignee_name' => '担当者',
@@ -80,6 +81,7 @@
         $summaryDefaultFields = [
             'quote_id',
             'status',
+            'order_qty',
             'account_internal_name',
             'account_user_name',
             'assignee_name',
@@ -113,12 +115,16 @@
                     $selectedSummaryFieldLabels[] = $label;
                 }
             }
+            if (!in_array($summaryFieldLabels['order_qty'], $selectedSummaryFieldLabels, true)) {
+                $selectedSummaryFieldLabels[] = $summaryFieldLabels['order_qty'];
+            }
         }
         $quoteSummaryContext = is_array($quoteSummaryContext ?? null) ? $quoteSummaryContext : [];
         $buildQuoteSummaryItems = static function (array $snapshotData, array $context, array $labels): array {
             $defaultFields = [
                 'quote_id',
                 'status',
+                'order_qty',
                 'account_internal_name',
                 'account_user_name',
                 'assignee_name',
@@ -147,11 +153,21 @@
             if (empty($fields)) {
                 $fields = $defaultFields;
             }
+            if (!in_array('order_qty', $fields, true)) {
+                $statusIndex = array_search('status', $fields, true);
+                if ($statusIndex === false) {
+                    array_unshift($fields, 'order_qty');
+                } else {
+                    array_splice($fields, $statusIndex + 1, 0, ['order_qty']);
+                }
+            }
 
             $totals = is_array($snapshotData['totals'] ?? null) ? $snapshotData['totals'] : [];
+            $pricingInput = is_array($snapshotData['pricing_input'] ?? null) ? $snapshotData['pricing_input'] : [];
             $valueMap = [
                 'quote_id' => $context['quote_id'] ?? '',
                 'status' => $context['status'] ?? '',
+                'order_qty' => $pricingInput['order_qty'] ?? ($context['order_qty'] ?? ''),
                 'account_internal_name' => $context['account_internal_name'] ?? '-',
                 'account_user_name' => $context['account_user_name'] ?? '-',
                 'assignee_name' => $context['assignee_name'] ?? '-',
@@ -215,8 +231,7 @@
         }
     </style>
 
-    <h1>承認変更申請 #{{ $req->id ?? '' }}</h1>
-    {{-- <div class="muted" style="margin:4px 0 12px;">{{ $requestHeading }}</div> --}}
+    <h1>変更申請 #{{ $req->id ?? '' }}</h1>
 
     @if((string)($req->entity_type ?? '') === 'quote' && (int)($req->entity_id ?? 0) > 0)
         @include('work.quotes._calc_history_drawer', [
@@ -245,6 +260,13 @@
     @endif
 
     @if($canApprove && $req->status === 'PENDING')
+        @php
+            $rejectCommentError = '';
+            $viewErrorBag = session('errors');
+            if ($viewErrorBag instanceof \Illuminate\Support\ViewErrorBag) {
+                $rejectCommentError = (string)$viewErrorBag->first('reject_comment');
+            }
+        @endphp
         <div class="actions" style="margin:12px 0;">
             <form method="POST" action="{{ route('work.change-requests.approve', $req->id) }}">
                 @csrf
@@ -252,12 +274,25 @@
             </form>
             <form method="POST" action="{{ route('work.change-requests.reject', $req->id) }}">
                 @csrf
+                <div style="margin-bottom:6px;">
+                    <label for="reject_comment_{{ $req->id }}" style="display:block; font-weight:700; margin-bottom:4px;">却下コメント（必須）</label>
+                    <textarea
+                        id="reject_comment_{{ $req->id }}"
+                        name="reject_comment"
+                        rows="3"
+                        required
+                        maxlength="5000"
+                        style="width:min(100%, 520px);"
+                    >{{ old('reject_comment') }}</textarea>
+                    @if($rejectCommentError !== '')
+                        <div style="margin-top:4px; color:#b91c1c;">{{ $rejectCommentError }}</div>
+                    @endif
+                </div>
                 <button type="submit">却下</button>
             </form>
         </div>
     @endif
 
-    {{-- <h3>申請概要</h3> --}}
     <table>
         <tbody>
             <tr><th>ステータス</th><td>{{ $statusDisplay }} ({{ $req->status }})</td></tr>
@@ -267,7 +302,8 @@
             <tr><th>申請対象作成者</th><td>{{ $requestAccountLabel }}</td></tr>
             <tr><th>登録メールアドレス</th><td>{{ $requestAccountEmail }}</td></tr>
             <tr><th>担当者</th><td>{{ $requestAccountAssignee }}</td></tr>
-            <tr><th>メモ</th><td>{{ $req->memo ?? '（なし）' }}</td></tr>
+            <tr><th>変更申請コメント</th><td>{{ $req->comment ?? '（なし）' }}</td></tr>
+            <tr><th>申請メモ</th><td>{{ $req->memo ?? '（なし）' }}</td></tr>
             <tr><th>申請者</th><td>{{ $requestedByLabel }}</td></tr>
             <tr><th>承認者</th><td>{{ $req->approved_by_account_display_name ?? ($req->approved_by ? 'ID: '.$req->approved_by : '-') }}</td></tr>
             @if(!empty($selectedSummaryFieldLabels))
@@ -352,10 +388,11 @@
                             <tbody>
                                 <tr><th>MFD数</th><td>{{ $baseConfigCmp['mfdCount'] ?? '-' }}</td></tr>
                                 <tr><th>チューブ数</th><td>{{ $baseConfigCmp['tubeCount'] ?? '-' }}</td></tr>
+                                <tr><th>注文数量</th><td>{{ is_array($baseSnapshotView['pricing_input'] ?? null) ? ($baseSnapshotView['pricing_input']['order_qty'] ?? '-') : '-' }}</td></tr>
                                 <tr><th>エラー件数</th><td>{{ count($baseErrorsCmp) }}</td></tr>
                                 <tr><th>BOM件数</th><td>{{ count($baseBomCmp) }}</td></tr>
                                 <tr><th>価格内訳件数</th><td>{{ count($basePricingCmp) }}</td></tr>
-                                <tr><th>合計</th><td>{{ $baseTotalsCmp['total'] ?? '-' }}</td></tr>
+                                <tr><th>合計</th><td>{{ format_amount($baseTotalsCmp['total'] ?? null) }}</td></tr>
                                 <tr><th>作成アカウント</th><td>{{ $requestAccountLabel }}</td></tr>
                                 <tr><th>担当者</th><td>{{ $requestAccountAssignee }}</td></tr>
                             </tbody>
@@ -367,10 +404,11 @@
                             <tbody>
                                 <tr><th>MFD数</th><td>{{ $newConfigCmp['mfdCount'] ?? '-' }}</td></tr>
                                 <tr><th>チューブ数</th><td>{{ $newConfigCmp['tubeCount'] ?? '-' }}</td></tr>
+                                <tr><th>注文数量</th><td>{{ is_array($snapshotView['pricing_input'] ?? null) ? ($snapshotView['pricing_input']['order_qty'] ?? '-') : '-' }}</td></tr>
                                 <tr><th>エラー件数</th><td>{{ count($newErrorsCmp) }}</td></tr>
                                 <tr><th>BOM件数</th><td>{{ count($newBomCmp) }}</td></tr>
                                 <tr><th>価格内訳件数</th><td>{{ count($newPricingCmp) }}</td></tr>
-                                <tr><th>合計</th><td>{{ $newTotalsCmp['total'] ?? '-' }}</td></tr>
+                                <tr><th>合計</th><td>{{ format_amount($newTotalsCmp['total'] ?? null) }}</td></tr>
                                 <tr><th>作成アカウント</th><td>{{ $requestAccountLabel }}</td></tr>
                                 <tr><th>担当者</th><td>{{ $requestAccountAssignee }}</td></tr>
                             </tbody>
@@ -391,9 +429,11 @@
                         ['label' => '対象', 'value' => $entityTypeDisplay . ' ' . $targetDisplay],
                         ['label' => '操作', 'value' => $operationDisplay],
                         ['label' => 'ステータス', 'value' => $statusDisplay],
+                        ['label' => '注文数量', 'value' => (is_array($baseSnapshotView['pricing_input'] ?? null) ? ($baseSnapshotView['pricing_input']['order_qty'] ?? '-') : '-')],
                         ['label' => '作成アカウント', 'value' => $requestAccountLabel],
                         ['label' => '登録メールアドレス', 'value' => $requestAccountEmail],
                         ['label' => '担当者', 'value' => $requestAccountAssignee],
+                        ['label' => '変更申請コメント', 'value' => $req->comment ?? '（なし）'],
                     ],
                 'showMemoCard' => true,
                 'memoValue' => $baseMemo,
@@ -422,9 +462,11 @@
                     ['label' => '対象', 'value' => $entityTypeDisplay . ' ' . $targetDisplay],
                     ['label' => '操作', 'value' => $operationDisplay],
                     ['label' => 'ステータス', 'value' => $statusDisplay],
+                    ['label' => '注文数量', 'value' => (is_array($snapshotView['pricing_input'] ?? null) ? ($snapshotView['pricing_input']['order_qty'] ?? '-') : '-')],
                     ['label' => '作成アカウント', 'value' => $requestAccountLabel],
                     ['label' => '登録メールアドレス', 'value' => $requestAccountEmail],
                     ['label' => '担当者', 'value' => $requestAccountAssignee],
+                    ['label' => '変更申請コメント', 'value' => $req->comment ?? '（なし）'],
                     ['label' => '申請者', 'value' => $req->requested_by_account_display_name ?? ('ID: '.$req->requested_by)],
                     ['label' => '承認者', 'value' => $req->approved_by_account_display_name ?? ($req->approved_by ? 'ID: '.$req->approved_by : '-')],
                 ],

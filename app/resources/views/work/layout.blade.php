@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? '受注販売管理システム' }}</title>
+    <title>{{ $title ?? 'Deltafiber受注販管システム' }}</title>
     @livewireStyles
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; margin: 0; }
@@ -139,6 +139,26 @@
         .col { flex: 1; }
         .muted { color: #6b7280; }
         .actions { display: flex; gap: 8px; align-items: center; }
+        .range-field {
+            min-width: 260px;
+        }
+        .range-inputs {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+        }
+        .range-inputs > input,
+        .range-inputs > select {
+            flex: 1;
+            min-width: 0;
+        }
+        .range-sep {
+            color: #6b7280;
+            font-size: 12px;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
         @media (max-width: 900px) {
             .sidebar {
                 width: 56px;
@@ -203,7 +223,7 @@
                     <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 4 12l4 6M16 6l4 6-4 6M13.5 4l-3 16"/></svg>
                     </a>
-                    <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="承認変更申請">
+                    <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="変更申請">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v11h-15z"/><path d="M8 10.5h8M8 14.5h5"/><path d="m15.5 4 1.5 2"/></svg>
                     </a>
                     <a href="{{ route('work.audit-logs.index') }}" class="sidebar-item @if(request()->routeIs('work.audit-logs.*')) is-active @endif" data-label="監査ログ">
@@ -276,6 +296,7 @@
         @endif
         </main>
     </div>
+    @include('partials.back_to_top')
     @livewireScripts
 </body>
 </html>

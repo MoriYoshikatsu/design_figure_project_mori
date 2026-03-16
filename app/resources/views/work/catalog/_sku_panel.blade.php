@@ -38,45 +38,29 @@
                 <option value="0" @if(($filters['active'] ?? '') === '0') selected @endif>無効</option>
             </select>
         </div>
-    </div>
-
-    <div class="row" style="margin-top:8px;">
-        <div class="col">
-            <label>メモ</label>
-            <select name="sku[has_memo]">
-                <option value="">すべて</option>
-                @foreach($presenceOptions as $key => $label)
-                    <option value="{{ $key }}" @if(($filters['has_memo'] ?? '') === $key) selected @endif>{{ $label }}</option>
-                @endforeach
-            </select>
+        <div class="col range-field">
+            <label>作成日（始点 / 終点）</label>
+            <div class="range-inputs">
+                <input type="date" name="sku[created_from]" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                <span class="range-sep">〜</span>
+                <input type="date" name="sku[created_to]" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+            </div>
         </div>
-        <div class="col">
-            <label>作成日（開始）</label>
-            <input type="date" name="sku[created_from]" value="{{ $filters['created_from'] ?? '' }}">
+        <div class="col range-field">
+            <label>更新日（始点 / 終点）</label>
+            <div class="range-inputs">
+                <input type="date" name="sku[updated_from]" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                <span class="range-sep">〜</span>
+                <input type="date" name="sku[updated_to]" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+            </div>
         </div>
-        <div class="col">
-            <label>作成日（終了）</label>
-            <input type="date" name="sku[created_to]" value="{{ $filters['created_to'] ?? '' }}">
+        <div class="actions" style="margin-top:8px;">
+            <button type="submit">絞り込み</button>
+            <a href="{{ route($indexRouteName, ['tab' => 'skus', 'pb' => $priceBookFilters]) }}">クリア</a>
+            <div class="muted" style="margin:8px 0;">{{ count($skus) }}件</div>
         </div>
-        <div class="col">
-            <label>更新日（開始）</label>
-            <input type="date" name="sku[updated_from]" value="{{ $filters['updated_from'] ?? '' }}">
-        </div>
-        <div class="col">
-            <label>更新日（終了）</label>
-            <input type="date" name="sku[updated_to]" value="{{ $filters['updated_to'] ?? '' }}">
-        </div>
-    </div>
-
-    <div class="actions" style="margin-top:8px;">
-        <button type="submit">絞り込み</button>
-        <a href="{{ route($indexRouteName, ['tab' => 'skus', 'pb' => $priceBookFilters]) }}">クリア</a>
     </div>
 </form>
-
-<div class="muted" style="margin:8px 0;">
-    表示件数: {{ count($skus) }}件（最大200件）
-</div>
 
 <table>
     <thead>
