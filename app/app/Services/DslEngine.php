@@ -4,6 +4,12 @@ namespace App\Services;
 
 final class DslEngine
 {
+    private const MIN_LENGTH_M = 0.2;
+    private const MAX_LENGTH_M = 2.0;
+    private const FIXED_MFD_COUNT = 1;
+    private const FIXED_FIBER_COUNT = 1;
+    private const MAX_TUBE_COUNT = 2;
+
     /**
      * @return array{derived: array, errors: array}
      */
@@ -17,21 +23,20 @@ final class DslEngine
             $processType = 'MFD';
         }
         $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
-
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
-        $fiberCount = $isTecMode ? 1 : ($mfdCount + 1);
-
-        $this->validateRange('mfdCount', $config['mfdCount'] ?? null, $dsl['mfdCount'] ?? null, $errors, 'mfdCount');
-        if (!$isTecMode) {
-            $this->validateRange('tubeCount', $config['tubeCount'] ?? null, $dsl['tubeCount'] ?? null, $errors, 'tubeCount');
+        $mfdCount = self::FIXED_MFD_COUNT;
+        $fiberCount = self::FIXED_FIBER_COUNT;
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? null);
+        if ($isTecMode && $tecSide === null) {
+            $errors[] = ['path' => 'tecSide', 'message' => 'TECモードではtecSide（left/right）の指定が必須です'];
         }
 
         $this->validateFiberCount($config, $fiberCount, $errors);
+        $this->validateFiberLengths($config, $errors);
         $this->validateTubeCount($config, $fiberCount, $isTecMode, $errors);
         $this->validateConnectors($config, $isTecMode, $errors);
+        $this->validateTubeArraySize($config, $errors);
         if ($isTecMode) {
             $this->validateTecSleeves($config, $errors);
-            $this->validateTecTubeArraySize($config, $errors);
         }
         $this->validateTubesStartPosition($config, $fiberCount, $mfdCount, $isTecMode, $errors);
 
@@ -39,6 +44,7 @@ final class DslEngine
             'derived' => [
                 'fiberCount' => $fiberCount,
                 'processType' => $processType,
+                'tecSide' => $tecSide,
             ],
             'errors' => $errors,
         ];
@@ -77,15 +83,8 @@ final class DslEngine
         }
 
         $tubeCount = (int)$tubeCountRaw;
-        if ($isTecMode) {
-            if ($tubeCount < 0 || $tubeCount > 1) {
-                $errors[] = ['path' => 'tubeCount', 'message' => 'TECモードのtubeCountは0または1です'];
-            }
-            return;
-        }
-
-        if ($tubeCount < 0 || $tubeCount > $fiberCount) {
-            $errors[] = ['path' => 'tubeCount', 'message' => "tubeCountは0〜{$fiberCount}です"];
+        if ($tubeCount < 0 || $tubeCount > self::MAX_TUBE_COUNT) {
+            $errors[] = ['path' => 'tubeCount', 'message' => 'tubeCountは0〜2です'];
         }
     }
 
@@ -96,15 +95,10 @@ final class DslEngine
             return;
         }
         $mode = strtolower(trim((string)($connectors['mode'] ?? 'none')));
-        $allowed = $isTecMode ? ['none', 'left', 'right'] : ['none', 'left', 'right', 'both'];
+        $allowed = ['none', 'left', 'right', 'both'];
         if (!in_array($mode, $allowed, true)) {
-            $errors[] = ['path' => 'connectors.mode', 'message' => $isTecMode
-                ? 'TECモードのconnectors.modeは none / left / right のみです'
-                : 'connectors.modeが不正です'];
+            $errors[] = ['path' => 'connectors.mode', 'message' => 'connectors.modeが不正です'];
             return;
-        }
-        if ($isTecMode && $mode === 'both') {
-            $errors[] = ['path' => 'connectors.mode', 'message' => 'TECモードではconnectors.mode=bothは選択できません'];
         }
     }
 
@@ -119,14 +113,37 @@ final class DslEngine
         }
     }
 
-    private function validateTecTubeArraySize(array $config, array &$errors): void
+    private function validateTubeArraySize(array $config, array &$errors): void
     {
         $tubes = $config['tubes'] ?? [];
         if (!is_array($tubes)) {
             return;
         }
-        if (count($tubes) > 1) {
-            $errors[] = ['path' => 'tubes', 'message' => 'TECモードではtubesは最大1件です'];
+        if (count($tubes) > self::MAX_TUBE_COUNT) {
+            $errors[] = ['path' => 'tubes', 'message' => 'tubesは最大2件です'];
+        }
+    }
+
+    private function validateFiberLengths(array $config, array &$errors): void
+    {
+        $fibers = $config['fibers'] ?? [];
+        if (!is_array($fibers)) {
+            return;
+        }
+
+        foreach ($fibers as $i => $fiber) {
+            if (!is_array($fiber)) {
+                continue;
+            }
+            $len = $this->extractLengthM($fiber, 'lengthM', 'lengthMm');
+            if (!is_numeric($len)) {
+                $errors[] = ['path' => "fibers.$i.lengthM", 'message' => 'ファイバ長さが数値ではありません'];
+                continue;
+            }
+            $len = (float)$len;
+            if ($len < self::MIN_LENGTH_M || $len > self::MAX_LENGTH_M) {
+                $errors[] = ['path' => "fibers.$i.lengthM", 'message' => 'ファイバ長さは0.2〜2.0mです'];
+            }
         }
     }
 
@@ -140,16 +157,26 @@ final class DslEngine
         return null;
     }
 
+    private function normalizeTecSide(mixed $raw): ?string
+    {
+        $side = strtolower(trim((string)$raw));
+        if (!in_array($side, ['left', 'right'], true)) {
+            return null;
+        }
+
+        return $side;
+    }
+
     /**
      * チューブ開始位置のエラー判定（path設計を含む）
      * @return array<int, array{path:string,message:string}>
      */
     private function validateTubesStartPosition(array $config, int $fiberCount, int $mfdCount, bool $isTecMode, array &$errors): void
     {
-        $mfdCount = max(1, min(10, $mfdCount));
+        $mfdCount = self::FIXED_MFD_COUNT;
 
         // fiber長さ（未入力に備えた暫定値）
-        $fallbackPerSeg = 0.1;
+        $fallbackPerSeg = self::MIN_LENGTH_M;
         $fibers = $config['fibers'] ?? [];
         $segLens = [];
 
@@ -254,6 +281,10 @@ final class DslEngine
                 if ($endAbs < $startAbs) {
                     $errors[] = ['path' => "tubes.$j.endOffsetM", 'message' => '終了位置が開始位置より左です'];
                 }
+                $tubeLen = $endAbs - $startAbs;
+                if ($tubeLen < self::MIN_LENGTH_M || $tubeLen > self::MAX_LENGTH_M) {
+                    $errors[] = ['path' => "tubes.$j.endOffsetM", 'message' => 'チューブ長さは0.2〜2.0mです'];
+                }
                 continue;
             }
 
@@ -264,8 +295,8 @@ final class DslEngine
                 continue;
             }
             $lenM = (float)$lenM;
-            if ($lenM <= 0) {
-                $errors[] = ['path' => "tubes.$j.lengthM", 'message' => 'チューブ長さは0より大きくしてください'];
+            if ($lenM < self::MIN_LENGTH_M || $lenM > self::MAX_LENGTH_M) {
+                $errors[] = ['path' => "tubes.$j.lengthM", 'message' => 'チューブ長さは0.2〜2.0mです'];
                 continue;
             }
 

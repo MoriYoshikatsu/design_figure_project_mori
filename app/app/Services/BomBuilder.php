@@ -102,17 +102,18 @@ final class BomBuilder
         $sort = 0;
 
         $processType = $this->normalizeProcessType($config['processType'] ?? 'MFD');
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
         $totalFiberLengthM = $this->sumLengths($config['fibers'] ?? []);
         $processSkuCode = $this->resolveProcessSkuCode($processType);
-        $processQty = $processType === 'MFD'
-            ? max(1, $mfdCount)
-            : 1;
+        $processQty = 1;
         $processOptions = [];
         if ($processType === 'MFD') {
             $processOptions = [
-                'mfdCount' => $mfdCount,
+                'mfdCount' => 1,
                 'totalFiberLengthM' => $totalFiberLengthM,
+            ];
+        } else {
+            $processOptions = [
+                'tecSide' => $this->normalizeTecSide($config['tecSide'] ?? null),
             ];
         }
 
@@ -276,7 +277,7 @@ final class BomBuilder
 
         if ($sku === 'PROC_MFD_CONVERSION') {
             $options = is_array($item['options'] ?? null) ? $item['options'] : [];
-            $options['mfdCount'] = (int)($config['mfdCount'] ?? ($options['mfdCount'] ?? 1));
+            $options['mfdCount'] = 1;
             if (!array_key_exists('totalFiberLengthM', $options) || !is_numeric($options['totalFiberLengthM'])) {
                 $legacyTotal = $options['totalFiberLengthMm'] ?? null;
                 if (is_numeric($legacyTotal)) {
@@ -287,6 +288,11 @@ final class BomBuilder
             }
             unset($options['totalFiberLengthMm']);
             $options['fiberItems'] = $options['fiberItems'] ?? $this->collectFiberItems($config['fibers'] ?? []);
+            $item['options'] = $options;
+        }
+        if ($this->isTecProcessSku($sku)) {
+            $options = is_array($item['options'] ?? null) ? $item['options'] : [];
+            $options['tecSide'] = $this->normalizeTecSide($config['tecSide'] ?? ($options['tecSide'] ?? null));
             $item['options'] = $options;
         }
 
@@ -395,5 +401,20 @@ final class BomBuilder
     private function isEmpty(mixed $value): bool
     {
         return $value === null || $value === '';
+    }
+
+    private function normalizeTecSide(mixed $raw): ?string
+    {
+        $side = strtolower(trim((string)$raw));
+        if (!in_array($side, ['left', 'right'], true)) {
+            return null;
+        }
+
+        return $side;
+    }
+
+    private function isTecProcessSku(string $skuCode): bool
+    {
+        return in_array($skuCode, ['PROC_TEC20', 'PROC_TEC30', 'PROC_TEC20_HP', 'PROC_TEC30_HP'], true);
     }
 }

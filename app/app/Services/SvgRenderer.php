@@ -20,8 +20,12 @@ final class SvgRenderer
             $processType = 'MFD';
         }
         $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+        $tecSide = strtolower(trim((string)($config['tecSide'] ?? ($derived['tecSide'] ?? ''))));
+        if (!in_array($tecSide, ['left', 'right'], true)) {
+            $tecSide = null;
+        }
 
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
+        $mfdCount = $isTecMode ? 0 : 1;
         $drawMfdCount = $isTecMode ? 0 : $mfdCount;
         $fibers   = $config['fibers'] ?? [];
         $tubes    = $config['tubes'] ?? [];
@@ -36,7 +40,7 @@ final class SvgRenderer
             $skuSvgByCode = $this->buildSkuSvgMap();
         }
 
-        $fiberCount = (int)($derived['fiberCount'] ?? ($mfdCount + 1));
+        $fiberCount = (int)($derived['fiberCount'] ?? 1);
         if ($fiberCount < 1) $fiberCount = 1;
 
         // --- fiber長さ（m）を取得（未入力はnull）
@@ -188,8 +192,9 @@ final class SvgRenderer
 
         // ヘッダ（情報）
         if ($isTecMode) {
+            $tecSideLabel = $tecSide === 'left' ? '左端' : ($tecSide === 'right' ? '右端' : '未指定');
             $svg[] = '<text x="'.$margin.'" y="28" class="label">'
-                . '工程種別: '.$esc($processType).' / ファイバーの数: '.$esc($fiberCount)
+                . '工程種別: '.$esc($processType).' / TEC位置: '.$esc($tecSideLabel).' / ファイバーの数: '.$esc($fiberCount)
                 . '</text>';
         } else {
             $sleeveNameList = [];
@@ -210,7 +215,7 @@ final class SvgRenderer
         $showLeft = in_array($connMode, ['left', 'both'], true);
         $showRight = in_array($connMode, ['right', 'both'], true);
 
-        $showFiberDims = $fiberCount <= 4;
+        $showFiberDims = false;
         $showTubeDims = true;
 
         // --- fiber区間
@@ -234,17 +239,6 @@ final class SvgRenderer
             if ($fiberSvg) {
                 // 線系SVGは比率維持だと幅が縮むため、PDFでも端まで届くようにストレッチ
                 $svg[] = '<image href="'.$esc($fiberSvg).'" x="'.$x.'" y="'.$y.'" width="'.$w.'" height="'.$fiberSvgH.'" opacity="0.9" preserveAspectRatio="none" class="fiber-img" />';
-            }
-
-            if ($showFiberDims) {
-                $dimY = $belowDimY;
-                $svg[] = '<line x1="'.$x.'" y1="'.$dimY.'" x2="'.($x+$w).'" y2="'.$dimY.'" class="dim" />';
-                $svg[] = $this->arrowHead($x, $dimY, true);
-                $svg[] = $this->arrowHead($x + $w, $dimY, false);
-                $segLen = $actualSegmentLens[$i] ?? null;
-                $tolM = $this->extractLengthM($fibers[$i] ?? [], 'toleranceM', 'toleranceMm');
-                $tolTxt = (is_numeric($tolM)) ? ' ± '.$tolM.'m' : '';
-                $svg[] = '<text x="'.($x + $w / 2).'" y="'.($dimY + 12).'" class="small" text-anchor="middle">'. $esc(($segLen !== null ? $segLen : '?').'m'.$tolTxt) .'</text>';
             }
 
             if (!empty($segmentIllustrations[$i])) {
@@ -431,6 +425,33 @@ final class SvgRenderer
             }
             $labelX = min($width - 4, $x + $connW);
             $svg[] = '<text x="'.$labelX.'" y="'.$connLabelY.'" class="small" text-anchor="end">'. $esc($rightName ?? '') .'</text>';
+        }
+
+        // ファイバ寸法は「コネクタ先端まで」を単一矢印で表示（チューブ矢印は既存のまま）
+        $fiberLeftX = $margin;
+        $fiberRightX = $margin + $totalLen * $scale;
+        $leftTipX = ($showLeft && !empty($conns['leftSkuCode'])) ? ($fiberLeftX - $connW) : $fiberLeftX;
+        $rightTipX = ($showRight && !empty($conns['rightSkuCode'])) ? ($fiberRightX + $connW) : $fiberRightX;
+        $overallDimY = $belowDimY;
+        $overallLenM = $totalLen;
+        if ($scale > 0) {
+            if ($showLeft && !empty($conns['leftSkuCode'])) {
+                $overallLenM += $connW / $scale;
+            }
+            if ($showRight && !empty($conns['rightSkuCode'])) {
+                $overallLenM += $connW / $scale;
+            }
+        }
+        $svg[] = '<line x1="'.$leftTipX.'" y1="'.$overallDimY.'" x2="'.$rightTipX.'" y2="'.$overallDimY.'" class="dim" />';
+        $svg[] = $this->arrowHead($leftTipX, $overallDimY, true);
+        $svg[] = $this->arrowHead($rightTipX, $overallDimY, false);
+        $svg[] = '<text x="'.(($leftTipX + $rightTipX) / 2).'" y="'.($overallDimY + 12).'" class="small" text-anchor="middle">'. $esc(round($overallLenM, 3).'m') .'</text>';
+
+        if ($isTecMode && $tecSide !== null) {
+            $tecX = $tecSide === 'left' ? $leftTipX : $rightTipX;
+            $tecLabel = $tecSide === 'left' ? 'TEC位置: 左端' : 'TEC位置: 右端';
+            $svg[] = '<line x1="'.$tecX.'" y1="'.($axisY - 30).'" x2="'.$tecX.'" y2="'.($axisY + 30).'" stroke="#2563eb" stroke-width="2" stroke-dasharray="3 3" />';
+            $svg[] = '<text x="'.$tecX.'" y="'.($axisY - 36).'" class="small" text-anchor="middle" fill="#1d4ed8">'.$esc($tecLabel).'</text>';
         }
 
         $svg[] = '</svg>';

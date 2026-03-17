@@ -15,7 +15,7 @@ final class BomBuilderProcessTypeTest extends TestCase
         $builder = app(BomBuilder::class);
 
         $mfdCount = 3;
-        $fiberCount = $processType === 'MFD' ? ($mfdCount + 1) : 1;
+        $fiberCount = 1;
 
         $fibers = [];
         for ($i = 0; $i < $fiberCount; $i++) {
@@ -26,11 +26,8 @@ final class BomBuilderProcessTypeTest extends TestCase
             'processType' => $processType,
             'mfdCount' => $mfdCount,
             'tubeCount' => 0,
-            'sleeves' => $processType === 'MFD' ? [
-                ['skuCode' => 'SLEEVE_RECOTE'],
-                ['skuCode' => 'SLEEVE_RECOTE'],
-                ['skuCode' => 'SLEEVE_RECOTE'],
-            ] : [],
+            'tecSide' => 'left',
+            'sleeves' => $processType === 'MFD' ? [['skuCode' => 'SLEEVE_RECOTE']] : [],
             'fibers' => $fibers,
             'tubes' => [],
             'connectors' => [
@@ -49,7 +46,10 @@ final class BomBuilderProcessTypeTest extends TestCase
 
         if ($processType === 'MFD') {
             $options = is_array($processRow['options'] ?? null) ? $processRow['options'] : [];
-            $this->assertSame($mfdCount, (int)($options['mfdCount'] ?? 0));
+            $this->assertSame(1, (int)($options['mfdCount'] ?? 0));
+        } else {
+            $options = is_array($processRow['options'] ?? null) ? $processRow['options'] : [];
+            $this->assertSame('left', (string)($options['tecSide'] ?? ''));
         }
     }
 
@@ -59,7 +59,7 @@ final class BomBuilderProcessTypeTest extends TestCase
     public static function processTypeProvider(): array
     {
         return [
-            ['MFD', 'PROC_MFD_CONVERSION', 3],
+            ['MFD', 'PROC_MFD_CONVERSION', 1],
             ['TEC20', 'PROC_TEC20', 1],
             ['TEC30', 'PROC_TEC30', 1],
             ['TEC20_HP', 'PROC_TEC20_HP', 1],

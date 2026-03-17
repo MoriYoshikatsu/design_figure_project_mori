@@ -57,6 +57,11 @@ final class Configurator extends Component
         self::PROCESS_TYPE_TEC20_HP,
         self::PROCESS_TYPE_TEC30_HP,
     ];
+    private const FIXED_MFD_COUNT = 1;
+    private const FIXED_FIBER_COUNT = 1;
+    private const MAX_TUBE_COUNT = 2;
+    private const FIBER_TOLERANCE_M = 0.1; // 公差±10cm
+    private const TUBE_TOLERANCE_M = 0.01; // 公差±1cm
 
     public array $config = [];
     public array $derived = [];
@@ -289,19 +294,14 @@ final class Configurator extends Component
     {
         return [
             'processType' => self::PROCESS_TYPE_MFD,
-            'mfdCount' => 2,
-            'mfdAdjustments' => [
-                ['yield_rate' => null, 'order_qty' => null, 'actual_input_qty' => null],
-                ['yield_rate' => null, 'order_qty' => null, 'actual_input_qty' => null],
-            ],
+            'mfdCount' => self::FIXED_MFD_COUNT,
+            'mfdAdjustments' => [],
+            'tecSide' => null,
             'sleeves' => [
-                ['skuCode' => 'SLEEVE_RECOTE'],
                 ['skuCode' => 'SLEEVE_RECOTE'],
             ],
             'fibers' => [
-                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => 0.005, 'toleranceAuto' => true],
-                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.3, 'toleranceM' => 0.003, 'toleranceAuto' => true],
-                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => 0.005, 'toleranceAuto' => true],
+                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => self::FIBER_TOLERANCE_M, 'toleranceAuto' => false],
             ],
             'tubeCount' => 1,
             'tubes' => [
@@ -311,9 +311,9 @@ final class Configurator extends Component
                     'startFiberIndex' => 0,
                     'endFiberIndex' => 0,
                     'startOffsetM' => 0,
-                    'endOffsetM' => 0.2,
-                    'toleranceM' => null,
-                    'toleranceAuto' => true,
+                    'endOffsetM' => 0.3,
+                    'toleranceM' => self::TUBE_TOLERANCE_M,
+                    'toleranceAuto' => false,
                 ],
             ],
             'connectors' => [
@@ -597,7 +597,7 @@ final class Configurator extends Component
 
     /**
      * Livewireがどのプロパティでも更新したら呼ばれる（汎用フック）
-     * $name: 更新されたプロパティ名（例: config.mfdCount）
+     * $name: 更新されたプロパティ名（例: config.tubeCount）
      */
     public function updated(string $name, mixed $value): void
     {
@@ -627,7 +627,7 @@ final class Configurator extends Component
             $this->markToleranceAutoByPath($name, $value);
         }
 
-        $resizeArrays = in_array($name, ['config.processType', 'config.mfdCount', 'config.tubeCount'], true);
+        $resizeArrays = in_array($name, ['config.processType', 'config.tubeCount'], true);
         $this->recompute($resizeArrays);
 
         // ついでに「一定間隔で自動保存」もここで（次章）
@@ -825,37 +825,47 @@ final class Configurator extends Component
         $this->config['processType'] = $processType;
         $isTecMode = $this->isTecProcessType($processType);
 
-        $mfdCount = (int)($this->config['mfdCount'] ?? 1);
-        $mfdCount = max(1, min(10, $mfdCount));
+        // MFD変換個数は仕様で常に1固定（旧データ互換のためフィールドは残す）
+        $mfdCount = self::FIXED_MFD_COUNT;
         $this->config['mfdCount'] = $mfdCount;
 
-        $fiberCount = $isTecMode ? 1 : ($mfdCount + 1);
+        $fiberCount = self::FIXED_FIBER_COUNT;
         $this->ensureArraySize('fibers', $fiberCount, $this->defaultFiberRow());
 
         if (!$isTecMode && empty($this->config['sleeves']) && !empty($this->config['sleeveSkuCode'])) {
             $code = (string)$this->config['sleeveSkuCode'];
-            $this->config['sleeves'] = array_fill(0, $mfdCount, ['skuCode' => $code]);
+            $this->config['sleeves'] = [['skuCode' => $code]];
         }
+
+        $tubeCount = (int)($this->config['tubeCount'] ?? 0);
+        $tubeCount = max(0, min(self::MAX_TUBE_COUNT, $tubeCount));
+        $this->config['tubeCount'] = $tubeCount;
+        $this->ensureArraySize('tubes', $tubeCount, $this->defaultTubeRow());
 
         if ($isTecMode) {
-            $tubeCount = (int)($this->config['tubeCount'] ?? 0);
-            $tubeCount = max(0, min(1, $tubeCount));
-            $this->config['tubeCount'] = $tubeCount;
-            $this->ensureArraySize('tubes', $tubeCount, $this->defaultTubeRow());
             $this->config['sleeves'] = [];
-            $this->config['mfdAdjustments'] = [];
         } else {
-            $tubeCount = (int)($this->config['tubeCount'] ?? 0);
-            $tubeCount = max(0, min($tubeCount, $fiberCount));
-            $this->config['tubeCount'] = $tubeCount;
-            $this->ensureArraySize('tubes', $tubeCount, $this->defaultTubeRow());
-            $this->ensureArraySize('sleeves', $mfdCount, ['skuCode' => null]);
-            $this->ensureArraySize('mfdAdjustments', $mfdCount, $this->defaultMfdAdjustmentRow());
-            $this->normalizeMfdAdjustmentsRows();
+            $this->ensureArraySize('sleeves', self::FIXED_MFD_COUNT, ['skuCode' => null]);
         }
+        $this->config['mfdAdjustments'] = [];
+        $this->config['tecSide'] = $isTecMode
+            ? $this->normalizeTecSide($this->config['tecSide'] ?? null)
+            : null;
+
+        $tubes = is_array($this->config['tubes'] ?? null) ? $this->config['tubes'] : [];
+        foreach ($tubes as $i => $tube) {
+            if (!is_array($tube)) {
+                $tube = [];
+            }
+            $tube['anchor'] = ['type' => 'MFD', 'index' => 0];
+            $tube['startFiberIndex'] = 0;
+            $tube['endFiberIndex'] = 0;
+            $tubes[$i] = $tube;
+        }
+        $this->config['tubes'] = $tubes;
 
         $connectors = is_array($this->config['connectors'] ?? null) ? $this->config['connectors'] : [];
-        $connectors['mode'] = $this->normalizeConnectorMode($connectors['mode'] ?? ($isTecMode ? 'none' : 'both'), !$isTecMode);
+        $connectors['mode'] = $this->normalizeConnectorMode($connectors['mode'] ?? ($isTecMode ? 'none' : 'both'), true);
         if ($connectors['mode'] === 'none') {
             $connectors['leftSkuCode'] = null;
             $connectors['rightSkuCode'] = null;
@@ -978,8 +988,8 @@ final class Configurator extends Component
         return [
             'skuCode' => null,
             'lengthM' => null,
-            'toleranceM' => null,
-            'toleranceAuto' => true,
+            'toleranceM' => self::FIBER_TOLERANCE_M,
+            'toleranceAuto' => false,
         ];
     }
 
@@ -997,8 +1007,8 @@ final class Configurator extends Component
             'startOffsetM' => 0,
             'endOffsetM' => null,
             'lengthM' => null,
-            'toleranceM' => null,
-            'toleranceAuto' => true,
+            'toleranceM' => self::TUBE_TOLERANCE_M,
+            'toleranceAuto' => false,
         ];
     }
 
@@ -1052,6 +1062,16 @@ final class Configurator extends Component
             self::PROCESS_TYPE_TEC20_HP,
             self::PROCESS_TYPE_TEC30_HP,
         ], true);
+    }
+
+    private function normalizeTecSide(mixed $rawSide): ?string
+    {
+        $side = strtolower(trim((string)$rawSide));
+        if (!in_array($side, ['left', 'right'], true)) {
+            return null;
+        }
+
+        return $side;
     }
 
     private function normalizeConnectorMode(mixed $rawMode, bool $allowBoth): string
@@ -1403,20 +1423,8 @@ final class Configurator extends Component
         if (!is_array($fibers)) return;
 
         foreach ($fibers as $i => $f) {
-            $tol = $f['toleranceM'] ?? null;
-            $auto = $f['toleranceAuto'] ?? true;
-
-            // 手入力で固定されていないものだけ自動更新
-            if ($auto === true) {
-                $len = $f['lengthM'] ?? null;
-                $len = is_numeric($len) ? (float)$len : null;
-
-                $computed = $this->autoTolerance($len);
-                if ($computed !== null) {
-                    $fibers[$i]['toleranceM'] = $computed;
-                    $fibers[$i]['toleranceAuto'] = true;
-                }
-            }
+            $fibers[$i]['toleranceM'] = self::FIBER_TOLERANCE_M;
+            $fibers[$i]['toleranceAuto'] = false;
         }
 
         $this->config['fibers'] = $fibers;
@@ -1428,19 +1436,8 @@ final class Configurator extends Component
         if (!is_array($tubes)) return;
 
         foreach ($tubes as $j => $t) {
-            $tol = $t['toleranceM'] ?? null;
-            $auto = $t['toleranceAuto'] ?? true;
-
-            if ($auto === true) {
-                $len = $t['lengthM'] ?? null;
-                $len = is_numeric($len) ? (float)$len : null;
-
-                $computed = $this->autoTolerance($len);
-                if ($computed !== null) {
-                    $tubes[$j]['toleranceM'] = $computed;
-                    $tubes[$j]['toleranceAuto'] = true;
-                }
-            }
+            $tubes[$j]['toleranceM'] = self::TUBE_TOLERANCE_M;
+            $tubes[$j]['toleranceAuto'] = false;
         }
 
         $this->config['tubes'] = $tubes;
@@ -1568,11 +1565,11 @@ final class Configurator extends Component
         $errors = [];
 
         $mfdCount = (int)($config['mfdCount'] ?? 1);
-        if ($mfdCount < 1 || $mfdCount > 10) {
-            $errors[] = ['path' => 'mfdCount', 'message' => 'mfdCountは1〜10です'];
+        if ($mfdCount !== self::FIXED_MFD_COUNT) {
+            $errors[] = ['path' => 'mfdCount', 'message' => 'mfdCountは1固定です'];
         }
 
-        $fiberCount = $mfdCount + 1;
+        $fiberCount = self::FIXED_FIBER_COUNT;
         $fibers = $config['fibers'] ?? [];
         if (!is_array($fibers) || count($fibers) !== $fiberCount) {
             $errors[] = ['path' => 'fibers', 'message' => 'fibers配列の個数が不正です'];
@@ -1592,9 +1589,8 @@ final class Configurator extends Component
     {
         $errors = [];
 
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
-        $mfdCount = max(1, min(10, $mfdCount));
-        $fiberCount = $mfdCount + 1;
+        $mfdCount = self::FIXED_MFD_COUNT;
+        $fiberCount = self::FIXED_FIBER_COUNT;
 
         // fiber長さ（未入力に備えた暫定値）
         $fallbackPerSeg = 0.1;

@@ -22,21 +22,20 @@
                 </select>
             </div>
 
-            @if($isMfdMode)
+            @if($isTecMode)
                 <div style="margin-top:12px;">
-                    <label>MFD変換の数（1 ~ 10）</label>
-                    <input type="number" min="1" max="10" wire:model.live.debounce.200ms="config.mfdCount" style="width:100%;">
+                    <label>TEC位置（必須）</label>
+                    <select wire:model.live.debounce.200ms="config.tecSide" style="width:100%;">
+                        <option value="">（選択してください）</option>
+                        <option value="left">左端</option>
+                        <option value="right">右端</option>
+                    </select>
                 </div>
             @endif
 
             <div style="margin-top:12px;">
-                @if($isTecMode)
-                    <label>チューブの数（0 または 1）</label>
-                    <input type="number" min="0" max="1" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
-                @else
-                    <label>チューブの数（0 ~ ファイバ数）</label>
-                    <input type="number" min="0" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
-                @endif
+                <label>チューブの数（0〜2）</label>
+                <input type="number" min="0" max="2" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
             </div>
 
             @if($isMfdMode)
@@ -58,7 +57,7 @@
                 <hr style="margin:12px 0;">
             @endif
 
-            <h2 style="font-weight:700;">{{ $isTecMode ? 'ファイバ（最大1件）' : '各ファイバ' }}</h2>
+            <h2 style="font-weight:700;">ファイバ（公差±10cm）</h2>
             @foreach(($config['fibers'] ?? []) as $i => $f)
                 <div wire:key="fiber-row-{{ $f['key'] ?? $i }}" style="border:1px solid #ddd; padding:8px; margin-top:8px;">
                     <div>ファイバ[{{ $i }}]</div>
@@ -68,16 +67,14 @@
                             <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                         @endforeach
                     </select>
-                    <label>長さ(m)</label>
-                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthM" style="width:100%;">
-                    <label>希望許容誤差(m)</label>
-                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.toleranceM" style="width:100%;">
+                    <label>長さ(m)（0.2〜2.0）</label>
+                    <input type="number" step="0.001" min="0.2" max="2.0" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthM" style="width:100%;">
                 </div>
             @endforeach
 
             <hr style="margin:12px 0;">
 
-            <h2 style="font-weight:700;">{{ $isTecMode ? 'チューブ（最大1件）' : '各チューブ' }}</h2>
+            <h2 style="font-weight:700;">チューブ（公差±1cm / 長さ0.2〜2.0m）</h2>
             @foreach(($config['tubes'] ?? []) as $j => $t)
                 <div wire:key="tube-row-{{ $t['key'] ?? $j }}" style="border:1px solid #ddd; padding:8px; margin-top:8px;">
                     <div>チューブ[{{ $j }}]</div>
@@ -90,19 +87,16 @@
                     </select>
 
                     <label>チューブ左端位置のファイバ番号</label>
-                    <input type="number" min="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startFiberIndex" style="width:100%;">
+                    <input type="number" min="0" max="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startFiberIndex" style="width:100%;">
 
                     <label>そのファイバ左端からの距離(m)</label>
                     <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startOffsetM" style="width:100%;">
 
                     <label>チューブ右端位置のファイバ番号</label>
-                    <input type="number" min="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endFiberIndex" style="width:100%;">
+                    <input type="number" min="0" max="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endFiberIndex" style="width:100%;">
 
                     <label>そのファイバ左端からの距離(m)</label>
                     <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endOffsetM" style="width:100%;">
-
-                    <label>希望許容誤差(m)</label>
-                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.toleranceM" style="width:100%;">
                 </div>
             @endforeach
 
@@ -115,9 +109,7 @@
                     <option value="none">なし</option>
                     <option value="left">全体の左端</option>
                     <option value="right">全体の右端</option>
-                    @if($isMfdMode)
-                        <option value="both">全体の両端</option>
-                    @endif
+                    <option value="both">全体の両端</option>
                 </select>
 
                 <label>全体の左端</label>
@@ -208,36 +200,6 @@
                             <div style="color:#dc2626; font-size:12px; margin-top:4px;">{{ $editCommentErrorMessage }}</div>
                         @endif
                     </div>
-
-                    @if($isMfdMode && !empty($config['mfdAdjustments'] ?? []))
-                        <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
-                            <summary style="cursor:pointer; font-weight:700;">MFDごとの工程微調整</summary>
-                            <div style="margin-top:8px;">
-                                <div class="muted" style="font-size:12px; margin-bottom:8px;">
-                                    注文数量と実投入数を両方入力した行が1件以上ある場合、合算比率でMFD工程歩留まりへ反映します。
-                                </div>
-                                @foreach(($config['mfdAdjustments'] ?? []) as $i => $adj)
-                                    <div wire:key="mfd-adjust-row-main-{{ $adj['key'] ?? $i }}" style="border:1px dashed #d1d5db; border-radius:6px; padding:8px; margin-bottom:8px;">
-                                        <div style="font-size:12px; font-weight:700; margin-bottom:6px;">MFD[{{ $i }}]</div>
-                                        <div style="display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));">
-                                            <div>
-                                                <label>良品率（直入力）</label>
-                                                <input type="number" min="0.000001" step="0.000001" wire:model.live.debounce.180000ms="config.mfdAdjustments.{{ $i }}.yield_rate" style="width:100%;">
-                                            </div>
-                                            <div>
-                                                <label>注文数量</label>
-                                                <input type="number" min="1" step="1" wire:model.live.debounce.180000ms="config.mfdAdjustments.{{ $i }}.order_qty" style="width:100%;">
-                                            </div>
-                                            <div>
-                                                <label>実投入数</label>
-                                                <input type="number" min="1" step="1" wire:model.live.debounce.180000ms="config.mfdAdjustments.{{ $i }}.actual_input_qty" style="width:100%;">
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        </details>
-                    @endif
 
                     <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
                         <summary style="cursor:pointer; font-weight:700;">概要カード表示項目</summary>

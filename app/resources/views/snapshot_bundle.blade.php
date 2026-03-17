@@ -162,7 +162,7 @@
         }
     }
 
-    $mfdCount = (int)($config['mfdCount'] ?? 0);
+    $mfdCount = $isTecMode ? 0 : 1;
     $mfdQty = is_numeric($processBom['quantity'] ?? null) ? (float)$processBom['quantity'] : 0.0;
     $mfdLineTotal = is_numeric($processBom['line_total'] ?? null) ? (float)$processBom['line_total'] : 0.0;
     $mfdLineEach = $mfdQty > 0 ? ($mfdLineTotal / $mfdQty) : 0.0;
@@ -361,7 +361,8 @@
         ['label' => '納品物価格表', 'value' => $snapshot['price_book_id'] ?? ''],
         ['label' => '注文数量', 'value' => $orderQtySummary],
         ['label' => '工程種別', 'value' => $processType],
-        ['label' => 'MFD数', 'value' => $isTecMode ? '-' : ($config['mfdCount'] ?? '')],
+        ['label' => 'TEC位置', 'value' => $isTecMode ? (($config['tecSide'] ?? '') ?: '未指定') : '-'],
+        ['label' => 'MFD数', 'value' => $isTecMode ? '-' : '1'],
         ['label' => 'チューブ数', 'value' => $config['tubeCount'] ?? ''],
         ['label' => 'エラー件数', 'value' => is_array($errors) ? count($errors) : 0],
         ['label' => 'BOM件数', 'value' => count($bom)],

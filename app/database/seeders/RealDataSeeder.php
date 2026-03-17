@@ -471,12 +471,14 @@ final class RealDataSeeder extends Seeder
                     'dsl_version' => '0.2',
                     'dsl_json' => json_encode([
                         'template_code' => $code,
-                        'mfdCount' => ['min' => 1, 'max' => 10],
+                        'mfdCount' => ['min' => 1, 'max' => 1],
+                        'tubeCount' => ['min' => 0, 'max' => 2],
                         'note' => 'demo dsl',
                         'default_config' => [
                             'processType' => 'MFD',
-                            'mfdCount' => ($i % 5) + 1,
+                            'mfdCount' => 1,
                             'tubeCount' => $i % 3,
+                            'tecSide' => null,
                         ],
                     ], JSON_UNESCAPED_UNICODE),
                     'active' => true,

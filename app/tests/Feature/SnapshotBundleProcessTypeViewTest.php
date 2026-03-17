@@ -12,8 +12,9 @@ final class SnapshotBundleProcessTypeViewTest extends TestCase
             'svg' => '<svg></svg>',
             'config' => [
                 'processType' => 'TEC20',
-                'mfdCount' => 3,
+                'mfdCount' => 1,
                 'tubeCount' => 1,
+                'tecSide' => 'left',
                 'sleeves' => [],
                 'fibers' => [
                     ['skuCode' => 'FIBER_A', 'lengthM' => 0.5],
@@ -51,21 +52,18 @@ final class SnapshotBundleProcessTypeViewTest extends TestCase
         $this->assertStringNotContainsString('スリーブ(MFD)', $html);
     }
 
-    public function test_snapshot_bundle_keeps_mfd_row_expansion(): void
+    public function test_snapshot_bundle_renders_single_mfd_process_row(): void
     {
         $html = view('snapshot_bundle', [
             'svg' => '<svg></svg>',
             'config' => [
                 'processType' => 'MFD',
-                'mfdCount' => 2,
+                'mfdCount' => 1,
                 'tubeCount' => 0,
                 'sleeves' => [
                     ['skuCode' => 'SLEEVE_A'],
-                    ['skuCode' => 'SLEEVE_B'],
                 ],
                 'fibers' => [
-                    ['skuCode' => 'FIBER_A', 'lengthM' => 0.5],
-                    ['skuCode' => 'FIBER_A', 'lengthM' => 0.5],
                     ['skuCode' => 'FIBER_A', 'lengthM' => 0.5],
                 ],
                 'tubes' => [],
@@ -85,16 +83,16 @@ final class SnapshotBundleProcessTypeViewTest extends TestCase
                 'price_book_id' => 1,
                 'totals' => ['subtotal' => 1000, 'tax' => 100, 'total' => 1100],
                 'bom' => [
-                    ['sku_code' => 'PROC_MFD_CONVERSION', 'quantity' => 2, 'source_path' => '$.processType', 'sort_order' => 0],
+                    ['sku_code' => 'PROC_MFD_CONVERSION', 'quantity' => 1, 'source_path' => '$.processType', 'sort_order' => 0],
                 ],
                 'pricing' => [
-                    ['sort_order' => 0, 'unit_price' => 2000, 'line_total' => 4000],
+                    ['sort_order' => 0, 'unit_price' => 2000, 'line_total' => 2000],
                 ],
             ],
         ])->render();
 
         $this->assertStringContainsString('工程種別', $html);
         $this->assertStringContainsString('MFD', $html);
-        $this->assertGreaterThanOrEqual(2, substr_count($html, 'MFD変換'));
+        $this->assertGreaterThanOrEqual(1, substr_count($html, 'MFD変換'));
     }
 }
