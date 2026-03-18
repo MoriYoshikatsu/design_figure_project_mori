@@ -67,7 +67,6 @@ final class LaborCostController extends Controller
                     'priority' => (int)$row->priority,
                     'include_tags' => $this->decodeJsonArray($row->include_tags_json),
                     'exclude_tags' => $this->decodeJsonArray($row->exclude_tags_json),
-                    'required_sku_categories' => $this->decodeJsonArray($row->required_sku_categories_json),
                     'required_sku_codes' => $this->decodeJsonArray($row->required_sku_codes_json),
                     'always_apply' => (bool)$row->always_apply,
                     'active' => (bool)$row->active,
@@ -76,6 +75,25 @@ final class LaborCostController extends Controller
             })
             ->values()
             ->all();
+
+        $skuOptionsByCategory = [];
+        $skuRows = DB::table('skus')
+            ->whereNull('deleted_at')
+            ->orderBy('category')
+            ->orderBy('sku_code')
+            ->get(['sku_code', 'name', 'category', 'active']);
+        foreach ($skuRows as $row) {
+            $category = strtoupper(trim((string)($row->category ?? '')));
+            if ($category === '') {
+                $category = 'OTHER';
+            }
+            $skuOptionsByCategory[$category][] = [
+                'sku_code' => strtoupper(trim((string)($row->sku_code ?? ''))),
+                'name' => trim((string)($row->name ?? '')),
+                'active' => (bool)($row->active ?? true),
+            ];
+        }
+        ksort($skuOptionsByCategory);
 
         return view('work.labor-costs.index', [
             'activeTab' => $tab,
@@ -89,6 +107,7 @@ final class LaborCostController extends Controller
                 ],
                 $processes
             ),
+            'skuOptionsByCategory' => $skuOptionsByCategory,
         ]);
     }
 
@@ -111,7 +130,8 @@ final class LaborCostController extends Controller
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'labor_cost_setting',
             (int)$after['id'],
             $before,
@@ -120,7 +140,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', '作業費全体設定の更新申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '作業費全体設定を更新しました',
+            '作業費全体設定の更新申請を送信しました'
+        ));
     }
 
     public function storeProcess(Request $request): RedirectResponse
@@ -143,14 +167,19 @@ final class LaborCostController extends Controller
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'labor_process',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', '工程の作成申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '工程を作成しました',
+            '工程の作成申請を送信しました'
+        ));
     }
 
     public function updateProcess(Request $request, int $id): RedirectResponse
@@ -178,7 +207,8 @@ final class LaborCostController extends Controller
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'labor_process',
             $id,
             (array)$row,
@@ -187,7 +217,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', '工程の更新申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '工程を更新しました',
+            '工程の更新申請を送信しました'
+        ));
     }
 
     public function destroyProcess(Request $request, int $id): RedirectResponse
@@ -197,7 +231,8 @@ final class LaborCostController extends Controller
             abort(404);
         }
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'labor_process',
             $id,
             (array)$row,
@@ -205,7 +240,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', '工程の削除申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '工程を削除しました',
+            '工程の削除申請を送信しました'
+        ));
     }
 
     public function storeElement(Request $request): RedirectResponse
@@ -238,14 +277,19 @@ final class LaborCostController extends Controller
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'labor_process_element',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', '工程要素の作成申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '工程要素を作成しました',
+            '工程要素の作成申請を送信しました'
+        ));
     }
 
     public function updateElement(Request $request, int $id): RedirectResponse
@@ -283,7 +327,8 @@ final class LaborCostController extends Controller
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'labor_process_element',
             $id,
             (array)$row,
@@ -292,7 +337,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', '工程要素の更新申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '工程要素を更新しました',
+            '工程要素の更新申請を送信しました'
+        ));
     }
 
     public function destroyElement(Request $request, int $id): RedirectResponse
@@ -302,7 +351,8 @@ final class LaborCostController extends Controller
             abort(404);
         }
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'labor_process_element',
             $id,
             (array)$row,
@@ -310,7 +360,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', '工程要素の削除申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'processes'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '工程要素を削除しました',
+            '工程要素の削除申請を送信しました'
+        ));
     }
 
     public function storeRule(Request $request): RedirectResponse
@@ -322,8 +376,8 @@ final class LaborCostController extends Controller
             'priority' => 'nullable|integer',
             'include_tags' => 'nullable|string|max:5000',
             'exclude_tags' => 'nullable|string|max:5000',
-            'required_sku_categories' => 'nullable|string|max:5000',
-            'required_sku_codes' => 'nullable|string|max:5000',
+            'required_sku_codes' => 'nullable|array',
+            'required_sku_codes.*' => 'string|max:255',
             'always_apply' => 'nullable|boolean',
             'active' => 'nullable|boolean',
             'memo' => 'nullable|string|max:5000',
@@ -336,21 +390,26 @@ final class LaborCostController extends Controller
             'priority' => (int)($data['priority'] ?? 100),
             'include_tags_json' => $this->parseCsvList((string)($data['include_tags'] ?? ''), false),
             'exclude_tags_json' => $this->parseCsvList((string)($data['exclude_tags'] ?? ''), false),
-            'required_sku_categories_json' => $this->parseCsvList((string)($data['required_sku_categories'] ?? ''), true),
-            'required_sku_codes_json' => $this->parseCsvList((string)($data['required_sku_codes'] ?? ''), true),
+            'required_sku_categories_json' => [],
+            'required_sku_codes_json' => $this->normalizeListInput($data['required_sku_codes'] ?? [], true),
             'always_apply' => $request->boolean('always_apply', false),
             'active' => $request->boolean('active', true),
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'labor_auto_rule',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', '自動ルールの作成申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '自動ルールを作成しました',
+            '自動ルールの作成申請を送信しました'
+        ));
     }
 
     public function updateRule(Request $request, int $id): RedirectResponse
@@ -367,8 +426,8 @@ final class LaborCostController extends Controller
             'priority' => 'nullable|integer',
             'include_tags' => 'nullable|string|max:5000',
             'exclude_tags' => 'nullable|string|max:5000',
-            'required_sku_categories' => 'nullable|string|max:5000',
-            'required_sku_codes' => 'nullable|string|max:5000',
+            'required_sku_codes' => 'nullable|array',
+            'required_sku_codes.*' => 'string|max:255',
             'always_apply' => 'nullable|boolean',
             'active' => 'nullable|boolean',
             'memo' => 'nullable|string|max:5000',
@@ -382,14 +441,15 @@ final class LaborCostController extends Controller
             'priority' => (int)($data['priority'] ?? 100),
             'include_tags_json' => $this->parseCsvList((string)($data['include_tags'] ?? ''), false),
             'exclude_tags_json' => $this->parseCsvList((string)($data['exclude_tags'] ?? ''), false),
-            'required_sku_categories_json' => $this->parseCsvList((string)($data['required_sku_categories'] ?? ''), true),
-            'required_sku_codes_json' => $this->parseCsvList((string)($data['required_sku_codes'] ?? ''), true),
+            'required_sku_categories_json' => [],
+            'required_sku_codes_json' => $this->normalizeListInput($data['required_sku_codes'] ?? [], true),
             'always_apply' => $request->boolean('always_apply', false),
             'active' => $request->boolean('active', false),
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'labor_auto_rule',
             $id,
             $before,
@@ -398,7 +458,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', '自動ルールの更新申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '自動ルールを更新しました',
+            '自動ルールの更新申請を送信しました'
+        ));
     }
 
     public function destroyRule(Request $request, int $id): RedirectResponse
@@ -408,7 +472,8 @@ final class LaborCostController extends Controller
             abort(404);
         }
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'labor_auto_rule',
             $id,
             $this->serializeRuleRow($row),
@@ -416,7 +481,11 @@ final class LaborCostController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', '自動ルールの削除申請を送信しました');
+        return redirect()->route('work.labor-costs.index', ['tab' => 'settings'])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '自動ルールを削除しました',
+            '自動ルールの削除申請を送信しました'
+        ));
     }
 
     /**
@@ -484,6 +553,29 @@ final class LaborCostController extends Controller
     }
 
     /**
+     * @param mixed $raw
+     * @return array<int, string>
+     */
+    private function normalizeListInput(mixed $raw, bool $uppercase): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($raw as $item) {
+            $value = trim((string)$item);
+            if ($value === '') {
+                continue;
+            }
+            $value = $uppercase ? strtoupper($value) : strtolower($value);
+            $result[$value] = true;
+        }
+
+        return array_keys($result);
+    }
+
+    /**
      * @return array<int, string>
      */
     private function decodeJsonArray(mixed $raw): array
@@ -505,4 +597,3 @@ final class LaborCostController extends Controller
         return $value === '' ? null : $value;
     }
 }
-

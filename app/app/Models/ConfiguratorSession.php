@@ -20,6 +20,7 @@ final class ConfiguratorSession extends Model
         'account_id',
         'template_version_id',
         'status',
+        'spec_sheet_number',
         'config',
         'derived',
         'validation_errors',

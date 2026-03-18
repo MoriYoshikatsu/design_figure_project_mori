@@ -18,6 +18,7 @@
         'initialConfig' => $initialConfig,
         'initialTemplateVersionId' => (int)$templateVersionId,
         'initialMemo' => $initialMemo ?? '',
+        'initialSpecSheetNumber' => $initialSpecSheetNumber ?? '',
         'initialSummaryFields' => $selectedSummaryFields ?? [],
         'summaryFieldOptions' => $summaryFieldOptions ?? [],
         'initialPricingInput' => $initialPricingInput ?? [],

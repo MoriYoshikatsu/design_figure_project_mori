@@ -519,11 +519,20 @@ final class WorkChangeRequestApplier
         if ($entityType === 'quote') {
             $snapshot = is_array($after['snapshot'] ?? null) ? $after['snapshot'] : [];
             $memo = array_key_exists('memo', $after) ? $after['memo'] : null;
+            $specSheetNumber = null;
+            if (array_key_exists('spec_sheet_number', $after)) {
+                $specSheetNumber = trim((string)$after['spec_sheet_number']);
+                $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
+            }
             $update = [
                 'updated_at' => now(),
             ];
             if (!empty($snapshot)) {
                 $update['snapshot'] = json_encode($snapshot, JSON_UNESCAPED_UNICODE);
+                if ($specSheetNumber === null && array_key_exists('spec_sheet_number', $snapshot)) {
+                    $specSheetNumber = trim((string)$snapshot['spec_sheet_number']);
+                    $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
+                }
                 $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
                 $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
                 $pricingOutput = is_array($snapshot['pricing_output'] ?? null) ? $snapshot['pricing_output'] : [];
@@ -597,6 +606,9 @@ final class WorkChangeRequestApplier
             }
             if ($memo !== null) {
                 $update['memo'] = $memo;
+            }
+            if ($this->hasQuoteColumn('spec_sheet_number')) {
+                $update['spec_sheet_number'] = $specSheetNumber;
             }
             DB::table('quotes')->whereNull('deleted_at')->where('id', $entityId)->update($update);
             $this->auditLogger->log($actorId, 'QUOTE_UPDATED', 'quote', $entityId, $before, $after);

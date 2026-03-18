@@ -883,6 +883,7 @@ final class ChangeRequestReviewController extends Controller
 
         $before = [
             'snapshot' => $this->decodeJson($quote->snapshot) ?? [],
+            'spec_sheet_number' => $quote->spec_sheet_number ?? null,
             'subtotal' => (float)$quote->subtotal,
             'tax_total' => (float)$quote->tax_total,
             'total' => (float)$quote->total,
@@ -892,9 +893,12 @@ final class ChangeRequestReviewController extends Controller
         $subtotal = isset($totals['subtotal']) ? (float)$totals['subtotal'] : (float)$quote->subtotal;
         $tax = isset($totals['tax']) ? (float)$totals['tax'] : (float)$quote->tax_total;
         $total = isset($totals['total']) ? (float)$totals['total'] : (float)$quote->total;
+        $specSheetNumber = trim((string)($snapshot['spec_sheet_number'] ?? ''));
+        $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
 
         DB::table('quotes')->where('id', $quoteId)->update([
             'snapshot' => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            'spec_sheet_number' => $specSheetNumber,
             'subtotal' => $subtotal,
             'tax_total' => $tax,
             'total' => $total,
@@ -905,6 +909,7 @@ final class ChangeRequestReviewController extends Controller
 
         $after = [
             'snapshot' => $snapshot,
+            'spec_sheet_number' => $specSheetNumber,
             'subtotal' => $subtotal,
             'tax_total' => $tax,
             'total' => $total,

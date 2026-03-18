@@ -3,6 +3,10 @@
         $processType = strtoupper((string)($config['processType'] ?? 'MFD'));
         $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
         $isMfdMode = !$isTecMode;
+        $fiberCount = max(1, count($config['fibers'] ?? []));
+        $maxFiberIndex = max(0, $fiberCount - 1);
+        $publicEnglish = !$quoteEditId;
+        $tr = static fn(string $ja, string $en): string => $publicEnglish ? $en : $ja;
     @endphp
     <div style="display:flex; gap:0; padding:16px; align-items:flex-start;">
         <div
@@ -10,9 +14,9 @@
             wire:ignore.self
             style="width: 280px; min-width: 220px; max-width: calc(100vw - 280px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; padding-right: 8px; flex: 0 0 auto;"
         >
-            <h1 style="font-weight:700;">コンフィグレーター</h1>
+            <h1 style="font-weight:700;">{{ $tr('コンフィグレーター', 'Configurator') }}</h1>
             <div style="margin-top:12px;">
-                <label>工程種別</label>
+                <label>{{ $tr('加工種別', 'Process Type') }}</label>
                 <select wire:model.live.debounce.200ms="config.processType" style="width:100%;">
                     <option value="MFD">MFD</option>
                     <option value="TEC20">TEC20</option>
@@ -24,28 +28,23 @@
 
             @if($isTecMode)
                 <div style="margin-top:12px;">
-                    <label>TEC位置（必須）</label>
+                    <label>{{ $tr('TEC位置', 'TEC Position') }}</label>
                     <select wire:model.live.debounce.200ms="config.tecSide" style="width:100%;">
-                        <option value="">（選択してください）</option>
-                        <option value="left">左端</option>
-                        <option value="right">右端</option>
+                        <option value="">{{ $tr('（選択してください）', '(Please select)') }}</option>
+                        <option value="left">{{ $tr('左端', 'Left End') }}</option>
+                        <option value="right">{{ $tr('右端', 'Right End') }}</option>
                     </select>
                 </div>
             @endif
 
-            <div style="margin-top:12px;">
-                <label>チューブの数（0〜2）</label>
-                <input type="number" min="0" max="2" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
-            </div>
-
             @if($isMfdMode)
                 <div style="margin-top:12px;">
-                    <label>スリーブ（MFDごと）</label>
+                    <label>{{ $tr('スリーブ', 'Sleeves') }}</label>
                     @foreach(($config['sleeves'] ?? []) as $k => $s)
                         <div style="margin-top:6px;">
-                            <div style="font-size:12px;">MFD[{{ $k }}]</div>
+                            <!-- <div style="font-size:12px;">MFD[{{ $k }}]</div> -->
                             <select wire:model.live.debounce.500ms="config.sleeves.{{ $k }}.skuCode" style="width:100%;">
-                                <option value="">（未選択）</option>
+                                <option value="">{{ $tr('（未選択）', '(Not selected)') }}</option>
                                 @foreach(($skuOptions['sleeve'] ?? []) as $opt)
                                     <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                                 @endforeach
@@ -57,72 +56,77 @@
                 <hr style="margin:12px 0;">
             @endif
 
-            <h2 style="font-weight:700;">ファイバ（公差±10cm）</h2>
+            <div style="margin-top:12px;">
+                <label>{{ $tr('チューブの数（0〜2）', 'Tube Count (0-2)') }}</label>
+                <input type="number" min="0" max="2" wire:model.live.debounce.200ms="config.tubeCount" style="width:100%;">
+            </div>
+
+            <h2 style="font-weight:700;">{{ $tr('ファイバ（公差±10cm）', 'Fibers (Tolerance +/-0.1m)') }}</h2>
             @foreach(($config['fibers'] ?? []) as $i => $f)
                 <div wire:key="fiber-row-{{ $f['key'] ?? $i }}" style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                    <div>ファイバ[{{ $i }}]</div>
+                    <div>{{ $tr('ファイバ', 'Fiber') }}[{{ $i }}]</div>
                     <select wire:model.live.debounce.500ms="config.fibers.{{ $i }}.skuCode" style="width:100%;">
-                        <option value="">（未選択）</option>
+                        <option value="">{{ $tr('（未選択）', '(Not selected)') }}</option>
                         @foreach(($skuOptions['fiber'] ?? []) as $opt)
                             <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                         @endforeach
                     </select>
-                    <label>長さ(m)（0.2〜2.0）</label>
-                    <input type="number" step="0.001" min="0.2" max="2.0" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthM" style="width:100%;">
+                    <label>{{ $tr('長さ(m)（0.2〜2.0m）', 'Length (m) (0.2-2.0m)') }}</label>
+                    <input type="number" step="0.1" min="0.2" max="2.0" wire:model.live.debounce.1000ms="config.fibers.{{ $i }}.lengthM" style="width:100%;">
                 </div>
             @endforeach
 
             <hr style="margin:12px 0;">
 
-            <h2 style="font-weight:700;">チューブ（公差±1cm / 長さ0.2〜2.0m）</h2>
+            <h2 style="font-weight:700;">{{ $tr('チューブ（公差±1cm）', 'Tubes (Tolerance +/-0.01m)') }}</h2>
             @foreach(($config['tubes'] ?? []) as $j => $t)
                 <div wire:key="tube-row-{{ $t['key'] ?? $j }}" style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                    <div>チューブ[{{ $j }}]</div>
+                    <div>{{ $tr('チューブ', 'Tube') }}[{{ $j }}]</div>
 
                     <select wire:model.live.debounce.500ms="config.tubes.{{ $j }}.skuCode" style="width:100%;">
-                        <option value="">（未選択）</option>
+                        <option value="">{{ $tr('（未選択）', '(Not selected)') }}</option>
                         @foreach(($skuOptions['tube'] ?? []) as $opt)
                             <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                         @endforeach
                     </select>
 
-                    <label>チューブ左端位置のファイバ番号</label>
-                    <input type="number" min="0" max="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startFiberIndex" style="width:100%;">
+                    <label>{{ $tr('チューブ左端位置のファイバ番号', 'Fiber Index at Tube Left End') }}</label>
+                    <input type="number" min="0" max="{{ $maxFiberIndex }}" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startFiberIndex" style="width:100%;">
 
-                    <label>そのファイバ左端からの距離(m)</label>
-                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startOffsetM" style="width:100%;">
+                    <label>{{ $tr('そのファイバ左端からの距離(m)', 'Distance from That Fiber\'s Left End (m)') }}</label>
+                    <input type="number" step="0.01" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.startOffsetM" style="width:100%;">
 
-                    <label>チューブ右端位置のファイバ番号</label>
-                    <input type="number" min="0" max="0" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endFiberIndex" style="width:100%;">
+                    <label>{{ $tr('チューブ右端位置のファイバ番号', 'Fiber Index at Tube Right End') }}</label>
+                    <input type="number" min="0" max="{{ $maxFiberIndex }}" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endFiberIndex" style="width:100%;">
 
-                    <label>そのファイバ左端からの距離(m)</label>
-                    <input type="number" step="0.001" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endOffsetM" style="width:100%;">
+                    <label>{{ $tr('そのファイバ左端からの距離(m)', 'Distance from That Fiber\'s Left End (m)') }}</label>
+                    <input type="number" step="0.01" wire:model.live.debounce.1000ms="config.tubes.{{ $j }}.endOffsetM" style="width:100%;">
                 </div>
             @endforeach
 
             <hr style="margin:12px 0;">
 
-            <h2 style="font-weight:700;">コネクタ</h2>
+            <h2 style="font-weight:700;">{{ $tr('コネクタ', 'Connectors') }}</h2>
             <div style="border:1px solid #ddd; padding:8px; margin-top:8px;">
-                <label>必要な位置</label>
+                <label>{{ $tr('必要な位置', 'Required Position') }}</label>
                 <select wire:model.live.debounce.300ms="config.connectors.mode" style="width:100%;">
-                    <option value="none">なし</option>
-                    <option value="left">全体の左端</option>
-                    <option value="right">全体の右端</option>
-                    <option value="both">全体の両端</option>
+                    <option value="none">{{ $tr('なし', 'None') }}</option>
+                    <option value="left">{{ $tr('全体の左端', 'System Left End') }}</option>
+                    <option value="right">{{ $tr('全体の右端', 'System Right End') }}</option>
+                    <option value="both">{{ $tr('全体の両端', 'Both System Ends') }}</option>
                 </select>
 
-                <label>全体の左端</label>
+                <label>{{ $tr('全体の左端', 'System Left End') }}</label>
                 <select wire:model.live.debounce.500ms="config.connectors.leftSkuCode" style="width:100%;">
-                    <option value="">（未選択）</option>
+                    <option value="">{{ $tr('（未選択）', '(Not selected)') }}</option>
                     @foreach(($skuOptions['connector'] ?? []) as $opt)
                         <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                     @endforeach
                 </select>
 
-                <label style="margin-top:8px; display:block;">全体の右端</label>
+                <label style="margin-top:8px; display:block;">{{ $tr('全体の右端', 'System Right End') }}</label>
                 <select wire:model.live.debounce.500ms="config.connectors.rightSkuCode" style="width:100%;">
-                    <option value="">（未選択）</option>
+                    <option value="">{{ $tr('（未選択）', '(Not selected)') }}</option>
                     @foreach(($skuOptions['connector'] ?? []) as $opt)
                         <option value="{{ $opt['code'] }}">{{ $opt['label'] }}</option>
                     @endforeach
@@ -130,12 +134,12 @@
             </div>
 
             <hr style="margin:12px 0;">
-            <h2 style="font-weight:700;">希望注文数量</h2>
+            <h2 style="font-weight:700;">{{ $tr('希望注文数量', 'Desired Order Quantity') }}</h2>
             <input type="number" min="1" step="1" wire:model.live.debounce.300ms="orderQty" style="width:100%;">
 
-            <h2 style="font-weight:700;">メモ</h2>
+            <h2 style="font-weight:700;">{{ $tr('メモ', 'Notes') }}</h2>
             <div style="margin-top:12px;">
-                <label>詳細な希望仕様、送付先住所など</label>
+                <label>{{ $tr('詳細な希望仕様、送付先住所など', 'Detailed Requirements, Shipping Address, etc.') }}</label>
                 <textarea wire:model.live.debounce.600ms="memo" rows="4" style="width:100%;"></textarea>
             </div>
         </div>
@@ -143,38 +147,49 @@
         <button
             id="configurator-panel-resizer"
             type="button"
-            aria-label="左パネル幅を調整"
-            title="ドラッグして左パネルの幅を調整"
+            aria-label="{{ $tr('左パネル幅を調整', 'Adjust Left Panel Width') }}"
+            title="{{ $tr('ドラッグして左パネルの幅を調整', 'Drag to Resize the Left Panel') }}"
             style="width:10px; min-width:10px; height: calc(100vh - 32px); margin:0 8px; padding:0; border:0; border-radius:999px; cursor:col-resize; background:#d1d5db; flex:0 0 auto;"
         ></button>
 
         <div style="flex:1; min-width:0;">
             @if(!$quoteEditId)
-                <button wire:click="newSession" type="button">新規ファイバ作成（新規セッション）</button>
+                <button wire:click="newSession" type="button">{{ $tr('新規ファイバ作成（新規セッション）', 'Create New Fiber (New Session)') }}</button>
             @endif
             @if($quoteEditId)
                 <button type="button" wire:click="requestQuoteEdit">
                     見積変更を申請
                 </button>
             @else
-                <button type="button" wire:click="issueQuote">
-                    仕様書発行
+                <button
+                    type="button"
+                    wire:click="issueQuote"
+                    @disabled(!empty($errors))
+                    style="{{ !empty($errors) ? 'opacity:0.5; cursor:not-allowed;' : '' }}"
+                    title="{{ !empty($errors) ? $tr('エラーを解消すると仕様書発行できます', 'Resolve the errors to issue the spec sheet') : '' }}"
+                >
+                    {{ $tr('仕様書発行', 'Issue Spec Sheet') }}
                 </button>
+                @if(!empty($errors))
+                    <div style="color:#dc2626; font-size:12px; margin-top:4px;">
+                        {{ $tr('エラーがあるため、仕様書発行はできません。', 'The spec sheet cannot be issued while errors remain.') }}
+                    </div>
+                @endif
             @endif
             {{-- 保存中 --}}
             @if($isSaving)
-                <span wire:loading wire:target="saveNow">保存中…</span>
+                <span wire:loading wire:target="saveNow">{{ $tr('保存中…', 'Saving...') }}</span>
             @else
                 {{-- 失敗 --}}
                 @if($saveError)
-                    <span style="color:#dc2626; font-weight:700;">保存失敗…</span>
+                    <span style="color:#dc2626; font-weight:700;">{{ $tr('保存失敗…', 'Save failed...') }}</span>
                     <span style="color:#dc2626;">{{ $saveError }}</span>
-                    <button type="button" wire:click="saveNow">再試行</button>
+                    <button type="button" wire:click="saveNow">{{ $tr('再試行', 'Retry') }}</button>
                 @else
                     {{-- 通常 --}}
                     <span>
-                        {{ $dirty ? '未保存' : '保存済み' }}
-                        @if($saveStatus)（{{ $saveStatus }}）@endif
+                        {{ $dirty ? $tr('未保存', 'Unsaved') : $tr('保存済み', 'Saved') }}
+                        @if($saveStatus){{ $publicEnglish ? ' (' : '（' }}{{ $saveStatus }}{{ $publicEnglish ? ')' : '）' }}@endif
                     </span>
                 @endif
             @endif
@@ -182,24 +197,33 @@
             @if($quoteEditId)
                 <div style="margin-top:12px; border:1px solid #d1d5db; border-radius:8px; padding:12px; background:#f8fafc;">
                     <h2 style="font-weight:700; margin:0;">見積編集用設定</h2>
-                    <div style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
-                        <label style="display:block; font-weight:700; margin-bottom:4px;">編集した理由・背景のコメント（必須）</label>
-                        <textarea
-                            wire:model.live.debounce.180000ms="editComment"
-                            rows="1"
-                            required
-                            placeholder="例）顧客要望により仕様変更、金額調整"
-                            style="width:100%;"
-                        ></textarea>
-                        @php
-                            $editCommentErrorMessage = method_exists($this, 'getErrorBag')
-                                ? $this->getErrorBag()->first('editComment')
-                                : null;
-                        @endphp
-                        @if($editCommentErrorMessage)
-                            <div style="color:#dc2626; font-size:12px; margin-top:4px;">{{ $editCommentErrorMessage }}</div>
-                        @endif
-                    </div>
+                    <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;" @if(($specSheetNumber ?? null) || trim((string)($editComment ?? '')) !== '') open @endif>
+                        <summary style="cursor:pointer; font-weight:700;">仕様書番号・編集コメント</summary>
+                        <div style="margin-top:8px; display:grid; gap:8px;">
+                            <div>
+                                <label style="display:block; font-weight:700; margin-bottom:4px;">仕様書番号</label>
+                                <div style="font-size:12px; color:#475569; margin-bottom:6px;">プレビュー右上とPDFに表示する番号</div>
+                                <input
+                                    type="text"
+                                    maxlength="255"
+                                    autocomplete="off"
+                                    wire:model.live.debounce.600ms="specSheetNumber"
+                                    placeholder="例）SPEC-2026-001"
+                                    style="width:100%;"
+                                >
+                            </div>
+
+                            <div>
+                                <label style="display:block; font-weight:700; margin-bottom:4px;">編集した理由・背景のコメント（任意）</label>
+                                <textarea
+                                    wire:model.live.debounce.180000ms="editComment"
+                                    rows="2"
+                                    placeholder="例）顧客要望により仕様変更、金額調整"
+                                    style="width:100%;"
+                                ></textarea>
+                            </div>
+                        </div>
+                    </details>
 
                     <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;">
                         <summary style="cursor:pointer; font-weight:700;">概要カード表示項目</summary>
@@ -250,10 +274,6 @@
                             <div>
                                 <label>税率（上書き可）</label>
                                 <input type="number" step="0.0001" wire:model.live.debounce.180000ms="taxRate" style="width:100%;">
-                            </div>
-                            <div>
-                                <label>価格ポリシーID</label>
-                                <input type="number" step="1" min="1" wire:model.live.debounce.180000ms="pricingPolicyId" style="width:100%;">
                             </div>
                         </div>
                     </details>
@@ -340,17 +360,17 @@
                 </div>
             @endif
 
-            <h2 style="font-weight:700;">プレビュー</h2>
+            <h2 style="font-weight:700;">{{ $tr('プレビュー', 'Preview') }}</h2>
             <div style="border:1px solid #ddd; padding:12px;">
                 {!! $svg !!}
             </div>
 
             <hr style="margin:12px 0;">
 
-            <h2 style="font-weight:700;">エラー</h2>
+            <h2 style="font-weight:700;">{{ $tr('エラー', 'Errors') }}</h2>
             <ul>
                 @foreach($errors as $e)
-                    <li><b>{{ $e['path'] ?? '' }}</b>：{{ $e['message'] ?? '' }}</li>
+                    <li><b>{{ $e['path'] ?? '' }}</b>{{ $publicEnglish ? ': ' : '：' }}{{ $this->displayErrorMessage($e) }}</li>
                 @endforeach
             </ul>
         </div>
@@ -491,12 +511,14 @@ document.addEventListener('livewire:init', () => {
         if (!sessionId || Number(sessionId) <= 0) return;
         const config = c.get('config');
         const memo = c.get('memo');
+        const specSheetNumber = c.get('specSheetNumber');
 
         const fd = new FormData();
         fd.append('_token', csrfToken);                 // CSRF（改ざん防止）
         fd.append('session_id', String(sessionId));     // 保存先セッション
         fd.append('config_json', JSON.stringify(config || {})); // config本体
         fd.append('memo', memo ?? '');
+        fd.append('spec_sheet_number', specSheetNumber ?? '');
 
         navigator.sendBeacon(autosaveUrl, fd);          // sendBeacon（離脱送信）
     });
@@ -515,12 +537,14 @@ document.addEventListener('livewire:init', () => {
         if (!sessionId || Number(sessionId) <= 0) return;
         const config = c.get('config');
         const memo = c.get('memo');
+        const specSheetNumber = c.get('specSheetNumber');
 
         const fd = new FormData();
         fd.append('_token', csrfToken);
         fd.append('session_id', String(sessionId));
         fd.append('config_json', JSON.stringify(config || {}));
         fd.append('memo', memo ?? '');
+        fd.append('spec_sheet_number', specSheetNumber ?? '');
 
         navigator.sendBeacon(autosaveUrl, fd);
     });

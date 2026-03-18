@@ -43,5 +43,5 @@
             <a href="{{ route('work.accounts.index') }}">一覧へ戻る</a>
         </div>
     </form>
-        <a href="{{ route('work.accounts.permissions', $account->id) }}">このアカウントのルート権限設定ページへ</a>
+        <a href="{{ route('work.accounts.permissions', $account->id) }}">このアカウントの変更申請必須設定ページへ</a>
 @endsection

@@ -94,7 +94,7 @@
                 <th>登録メールアドレス</th>
                 <th>担当者</th>
                 <th>権限区分</th>
-                <th>許可route</th>
+                <th>変更申請必須</th>
                 <th>メモ</th>
                 <th>作成日</th>
                 <th>更新日</th>
@@ -117,13 +117,14 @@
                         <div>{{ $a->role_list ?: '未設定' }}</div>
                         {{-- <div class="muted">{{ $a->member_summary ?? '-' }}</div> --}}
                     </td>
-                    <td style="white-space:pre-line;">{{ $a->route_access_summary ?? '-' }}</td>
+                    <td style="white-space:pre-line;">{{ $a->change_request_requirement_summary ?? 'すべて必須' }}</td>
                     <td>{{ $a->memo ?? '-' }}</td>
                     <td>{{ $a->created_at }}</td>
                     <td>{{ $a->updated_at }}</td>
                     <td>
                         <div class="actions">
                             <a href="{{ route('work.accounts.edit', $a->id) }}">編集</a>
+                            <a href="{{ route('work.accounts.permissions', $a->id) }}">申請設定</a>
                             @if(($a->can_request_delete ?? false) && is_numeric((string)$a->id))
                                 <form method="POST" action="{{ route('work.accounts.edit-request.delete', ['id' => $a->id]) }}" onsubmit="return confirm('アカウント #{{ $a->id }} の削除申請を送信しますか？');">
                                     @csrf

@@ -6,8 +6,10 @@ final class DslEngine
 {
     private const MIN_LENGTH_M = 0.2;
     private const MAX_LENGTH_M = 2.0;
+    private const FIBER_LENGTH_STEP_M = 0.1;
+    private const TUBE_LENGTH_STEP_M = 0.01;
     private const FIXED_MFD_COUNT = 1;
-    private const FIXED_FIBER_COUNT = 1;
+    private const FIXED_TEC_FIBER_COUNT = 1;
     private const MAX_TUBE_COUNT = 2;
 
     /**
@@ -24,7 +26,7 @@ final class DslEngine
         }
         $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
         $mfdCount = self::FIXED_MFD_COUNT;
-        $fiberCount = self::FIXED_FIBER_COUNT;
+        $fiberCount = $this->resolveRequiredFiberCount($isTecMode, $mfdCount);
         $tecSide = $this->normalizeTecSide($config['tecSide'] ?? null);
         if ($isTecMode && $tecSide === null) {
             $errors[] = ['path' => 'tecSide', 'message' => 'TECモードではtecSide（left/right）の指定が必須です'];
@@ -48,6 +50,15 @@ final class DslEngine
             ],
             'errors' => $errors,
         ];
+    }
+
+    private function resolveRequiredFiberCount(bool $isTecMode, int $mfdCount): int
+    {
+        if ($isTecMode) {
+            return self::FIXED_TEC_FIBER_COUNT;
+        }
+
+        return max(1, $mfdCount + 1);
     }
 
     private function validateRange(string $name, mixed $value, mixed $rule, array &$errors, string $path): void
@@ -144,6 +155,9 @@ final class DslEngine
             if ($len < self::MIN_LENGTH_M || $len > self::MAX_LENGTH_M) {
                 $errors[] = ['path' => "fibers.$i.lengthM", 'message' => 'ファイバ長さは0.2〜2.0mです'];
             }
+            if (!$this->isStepAligned($len, self::FIBER_LENGTH_STEP_M)) {
+                $errors[] = ['path' => "fibers.$i.lengthM", 'message' => 'ファイバ長さは0.1m刻みで入力してください'];
+            }
         }
     }
 
@@ -173,8 +187,6 @@ final class DslEngine
      */
     private function validateTubesStartPosition(array $config, int $fiberCount, int $mfdCount, bool $isTecMode, array &$errors): void
     {
-        $mfdCount = self::FIXED_MFD_COUNT;
-
         // fiber長さ（未入力に備えた暫定値）
         $fallbackPerSeg = self::MIN_LENGTH_M;
         $fibers = $config['fibers'] ?? [];
@@ -224,6 +236,9 @@ final class DslEngine
                 continue;
             }
             $offset = (float)$offset;
+            if (!$this->isStepAligned($offset, self::TUBE_LENGTH_STEP_M)) {
+                $errors[] = ['path' => "tubes.$j.startOffsetM", 'message' => 'チューブ位置は0.01m刻みで入力してください'];
+            }
 
             // 3) 新方式: start/end ファイバ指定がある場合
             $startIdx = $tube['startFiberIndex'] ?? null;
@@ -256,6 +271,9 @@ final class DslEngine
 
                 $startOffset = $offset;
                 $endOffset = (float)$endOffset;
+                if (!$this->isStepAligned($endOffset, self::TUBE_LENGTH_STEP_M)) {
+                    $errors[] = ['path' => "tubes.$j.endOffsetM", 'message' => 'チューブ位置は0.01m刻みで入力してください'];
+                }
                 $startSegLen = $segLens[$si] ?? $fallbackPerSeg;
                 $endSegLen = $segLens[$ei] ?? $fallbackPerSeg;
 
@@ -298,6 +316,9 @@ final class DslEngine
             if ($lenM < self::MIN_LENGTH_M || $lenM > self::MAX_LENGTH_M) {
                 $errors[] = ['path' => "tubes.$j.lengthM", 'message' => 'チューブ長さは0.2〜2.0mです'];
                 continue;
+            }
+            if (!$this->isStepAligned($lenM, self::TUBE_LENGTH_STEP_M)) {
+                $errors[] = ['path' => "tubes.$j.lengthM", 'message' => 'チューブ長さは0.01m刻みで入力してください'];
             }
 
             // 4) targetFiberIndex がある場合は、そのファイバー区間を基準に判定（描画と整合）
@@ -355,5 +376,15 @@ final class DslEngine
         }
 
         return null;
+    }
+
+    private function isStepAligned(float $value, float $step): bool
+    {
+        if ($step <= 0) {
+            return true;
+        }
+
+        $scaled = $value / $step;
+        return abs($scaled - round($scaled)) < 0.000001;
     }
 }

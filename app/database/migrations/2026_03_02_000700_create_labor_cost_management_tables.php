@@ -196,7 +196,7 @@ return new class extends Migration
         $insertRule('RULE_TEC20_HP', 'TEC20+高精度タグで高精度TEC20工程を適用', 'TEC20_HP', 40, ['tec20', 'high_precision']);
         $insertRule('RULE_TEC30_HP', 'TEC30+高精度タグで高精度TEC30工程を適用', 'TEC30_HP', 50, ['tec30', 'high_precision']);
         $insertRule('RULE_FUSION', '融着タグで融着工程を適用', 'FUSION', 60, ['fusion']);
-        $insertRule('RULE_CONN_NORMAL', 'コネクタ(通常)工程を適用', 'CONN_NORMAL', 70, ['connector'], ['pm', 'apc']);
+        $insertRule('RULE_CONN_NORMAL', 'コネクタ(通常)工程を適用', 'CONN_NORMAL', 70, ['connector'], ['pm']);
         $insertRule('RULE_CONN_PM', 'コネクタ(PM)工程を適用', 'CONN_PM', 80, ['connector', 'pm'], ['apc']);
         $insertRule('RULE_CONN_PM_APC', 'コネクタ(PM+APC)工程を適用', 'CONN_PM_APC', 90, ['connector', 'pm', 'apc']);
         $insertRule('RULE_PACKAGING', '梱包工程を常時適用', 'PACKAGING', 999, [], [], true);
@@ -210,4 +210,3 @@ return new class extends Migration
         Schema::dropIfExists('labor_cost_settings');
     }
 };
-

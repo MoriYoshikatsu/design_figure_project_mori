@@ -77,8 +77,12 @@ Route::post('/configurator/autosave', function (Request $request) {
         $memo = trim((string)$request->input('memo', ''));
         $payload['memo'] = $memo === '' ? null : $memo;
     }
+    if ($request->has('spec_sheet_number')) {
+        $specSheetNumber = trim((string)$request->input('spec_sheet_number', ''));
+        $payload['spec_sheet_number'] = $specSheetNumber === '' ? null : $specSheetNumber;
+    }
 
-    // ここではconfig/memoだけ保存（derived/errorsは次回表示時に再計算でOK）
+    // ここではconfig/memo/仕様書番号だけ保存（derived/errorsは次回表示時に再計算でOK）
     ConfiguratorSession::where('id', $sid)->update($payload);
 
     return response()->noContent(); // 空でOK
@@ -156,7 +160,7 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
     $derived = $snapshot['derived'] ?? [];
     $errors = $snapshot['validation_errors'] ?? [];
 
-    $svg = $renderer->render($config, $derived, $errors);
+    $svg = $renderer->render($config, $derived, $errors, 'en');
 
     $totals = $snapshot['totals'] ?? [
         'subtotal' => (float)($quote->subtotal ?? 0),
@@ -267,17 +271,12 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::post('/accounts/edit-request/create', [AccountController::class, 'store'])->name('accounts.edit-request.create');
     Route::get('/accounts/{id}/edit', [AccountController::class, 'edit'])->name('accounts.edit');
     Route::get('/accounts/{id}/permissions', [AccountController::class, 'permissions'])->name('accounts.permissions');
+    Route::post('/accounts/{id}/permissions', [AccountController::class, 'updatePermissions'])->name('accounts.permissions.update');
     Route::put('/accounts/{id}', [AccountController::class, 'update'])->name('accounts.update');
     Route::post('/accounts/{id}/edit-request/update', [AccountController::class, 'update'])->name('accounts.edit-request.update');
     Route::post('/accounts/{id}/edit-request/delete', [AccountController::class, 'destroy'])->name('accounts.edit-request.delete');
     Route::put('/accounts/{id}/members/{userId}/memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.update');
     Route::post('/accounts/{id}/members/{userId}/edit-request/update-memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.edit-request.update');
-    Route::post('/accounts/{id}/sales-route-permissions', [AccountController::class, 'storeSalesRoutePermission'])->name('accounts.sales-route-permissions.store');
-    Route::post('/accounts/{id}/sales-route-permissions/edit-request/create', [AccountController::class, 'storeSalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.create');
-    Route::put('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'updateSalesRoutePermission'])->name('accounts.sales-route-permissions.update');
-    Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/update', [AccountController::class, 'updateSalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.update');
-    Route::delete('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.destroy');
-    Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/delete', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.delete');
 
     Route::get('/skus', [CatalogController::class, 'index'])->name('skus.index');
     Route::get('/skus/create', [SkuController::class, 'create'])->name('skus.create');

@@ -204,6 +204,9 @@ final class SessionController extends Controller
         $config = $this->decodeJson($session->config) ?? [];
         $derived = $this->decodeJson($session->derived) ?? [];
         $errors = $this->decodeJson($session->validation_errors) ?? [];
+        $derived['specSheetNumber'] = $this->resolveSpecSheetNumber(
+            $session->spec_sheet_number ?? ($derived['specSheetNumber'] ?? null)
+        );
 
         $requests = DB::table('change_requests')
             ->where('change_requests.entity_type', 'configurator_session')
@@ -286,6 +289,9 @@ final class SessionController extends Controller
         $config = $this->decodeJson($session->config) ?? [];
         $derived = $this->decodeJson($session->derived) ?? [];
         $errors = $this->decodeJson($session->validation_errors) ?? [];
+        $derived['specSheetNumber'] = $this->resolveSpecSheetNumber(
+            $session->spec_sheet_number ?? ($derived['specSheetNumber'] ?? null)
+        );
         $bom = is_array($derived['bom'] ?? null) ? $derived['bom'] : [];
         $pricingRaw = $derived['pricing'] ?? [];
         $pricingItems = is_array($pricingRaw['items'] ?? null) ? $pricingRaw['items'] : (is_array($pricingRaw) ? $pricingRaw : []);
@@ -304,6 +310,7 @@ final class SessionController extends Controller
         $snapshotView = [
             'template_version_id' => (int)$session->template_version_id,
             'price_book_id' => $pricingRaw['price_book_id'] ?? null,
+            'spec_sheet_number' => $this->resolveSpecSheetNumber($session->spec_sheet_number ?? null),
             'config' => $config,
             'derived' => $derived,
             'validation_errors' => $errors,
@@ -368,5 +375,11 @@ final class SessionController extends Controller
         if ($value === null) return null;
         $decoded = json_decode((string)$value, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    private function resolveSpecSheetNumber(mixed $value): ?string
+    {
+        $normalized = trim((string)$value);
+        return $normalized === '' ? null : $normalized;
     }
 }

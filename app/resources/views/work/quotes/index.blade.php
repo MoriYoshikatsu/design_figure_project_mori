@@ -7,7 +7,7 @@
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / アカウント / メール / 担当者 / ステータス / 合計 / メモ">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / 仕様書番号 / アカウント / メール / 担当者 / ステータス / 合計 / メモ">
             </div>
             <div class="col">
                 <label>ステータス</label>
@@ -73,6 +73,7 @@
                 <th>担当者</th>
                 <th>ステータス</th>
                 <th>通貨</th>
+                <th>仕様書番号</th>
                 <th>合計</th>
                 <th>メモ</th>
                 <th>更新日</th>
@@ -91,6 +92,7 @@
                     <td>{{ $q->assignee_name ?? '-' }}</td>
                     <td>{{ $q->status }}</td>
                     <td>{{ $q->currency }}</td>
+                    <td>{{ $q->spec_sheet_number ?? '-' }}</td>
                     <td>{{ format_amount($q->total) }}</td>
                     <td>{{ $q->memo ?? '-' }}</td>
                     <td>{{ $q->updated_at }}</td>

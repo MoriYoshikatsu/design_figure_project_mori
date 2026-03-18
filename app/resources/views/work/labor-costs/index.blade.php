@@ -6,6 +6,7 @@
         $processes = is_array($processes ?? null) ? $processes : [];
         $rules = is_array($rules ?? null) ? $rules : [];
         $processOptions = is_array($processOptions ?? null) ? $processOptions : [];
+        $skuOptionsByCategory = is_array($skuOptionsByCategory ?? null) ? $skuOptionsByCategory : [];
         $setting = $setting ?? null;
         $processesTabUrl = route('work.labor-costs.index', ['tab' => 'processes']);
         $settingsTabUrl = route('work.labor-costs.index', ['tab' => 'settings']);
@@ -239,6 +240,64 @@
         .labor-mono {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         }
+        .labor-rule-full {
+            grid-column: 1 / -1;
+        }
+        .labor-rule-help {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+        .labor-sku-picker {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 8px;
+            max-height: 300px;
+            overflow: auto;
+        }
+        .labor-sku-picker-groups {
+            display: grid;
+            gap: 8px;
+        }
+        .labor-sku-group {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background: #fff;
+            padding: 6px;
+        }
+        .labor-sku-group summary {
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .labor-sku-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .labor-sku-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 6px;
+            background: #fff;
+        }
+        .labor-sku-option-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .labor-sku-option-name {
+            font-size: 12px;
+            color: #374151;
+        }
+        .labor-sku-option-meta {
+            font-size: 11px;
+            color: #6b7280;
+        }
         @media (max-width: 900px) {
             .labor-segment {
                 display: grid;
@@ -276,6 +335,7 @@
                 'setting' => $setting,
                 'rules' => $rules,
                 'processOptions' => $processOptions,
+                'skuOptionsByCategory' => $skuOptionsByCategory,
             ])
         </section>
     </div>

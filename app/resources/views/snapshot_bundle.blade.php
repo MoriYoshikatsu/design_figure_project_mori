@@ -1,17 +1,28 @@
 @php
-    $panelTitle = $panelTitle ?? 'スナップショット';
+    $uiLanguage = strtolower((string)($uiLanguage ?? 'ja'));
+    $isEnglish = $uiLanguage === 'en';
+    $t = static fn(string $ja, string $en): string => $isEnglish ? $en : $ja;
+    $translateTecSide = static function (?string $side) use ($t): string {
+        return match (strtolower(trim((string)$side))) {
+            'left' => $t('左端', 'Left End'),
+            'right' => $t('右端', 'Right End'),
+            default => $t('未指定', 'Not Set'),
+        };
+    };
+
+    $panelTitle = $panelTitle ?? $t('スナップショット', 'Snapshot');
     $pdfUrl = $pdfUrl ?? null;
-    $pdfLabel = $pdfLabel ?? 'PDFダウンロード';
+    $pdfLabel = $pdfLabel ?? $t('PDFダウンロード', 'Download PDF');
     $summaryItems = is_array($summaryItems ?? null) ? $summaryItems : [];
     $includeAutoSummary = (bool)($includeAutoSummary ?? true);
     $showDetails = (bool)($showDetails ?? true);
     $detailsInToggle = (bool)($detailsInToggle ?? true);
-    $detailsSummaryLabel = (string)($detailsSummaryLabel ?? '詳細（エラー・構成価格表・JSON）');
+    $detailsSummaryLabel = (string)($detailsSummaryLabel ?? $t('詳細（エラー・構成価格表・JSON）', 'Details (Errors, Configuration & Pricing, JSON)'));
     $showErrorTable = (bool)($showErrorTable ?? true);
     $showConfigPriceTable = (bool)($showConfigPriceTable ?? true);
     $showSummary = (bool)($showSummary ?? true);
-    $summaryTitle = (string)($summaryTitle ?? '概要');
-    $errorTableLabel = (string)($errorTableLabel ?? '検証エラー');
+    $summaryTitle = (string)($summaryTitle ?? $t('概要', 'Summary'));
+    $errorTableLabel = (string)($errorTableLabel ?? $t('検証エラー', 'Validation Errors'));
     $summaryUseTableLayout = (bool)($summaryUseTableLayout ?? false);
     $showCreatorColumns = (bool)($showCreatorColumns ?? false);
     $creatorAccountDisplayName = trim((string)($creatorAccountDisplayName ?? ''));
@@ -24,16 +35,16 @@
     $showQuantityColumn = (bool)($showQuantityColumn ?? true);
     $showPriceColumns = (bool)($showPriceColumns ?? true);
     $showSkuOnlyWhenPriced = (bool)($showSkuOnlyWhenPriced ?? false);
-    $configTableLabel = (string)($configTableLabel ?? '構成価格表');
+    $configTableLabel = (string)($configTableLabel ?? $t('構成価格表', 'Configuration & Pricing Table'));
     $showJsonSection = (bool)($showJsonSection ?? true);
     $showMemoCard = (bool)($showMemoCard ?? false);
     $memoValue = (string)($memoValue ?? '');
-    $memoLabel = (string)($memoLabel ?? 'メモ');
+    $memoLabel = (string)($memoLabel ?? $t('メモ', 'Notes'));
     $memoUpdateUrl = $memoUpdateUrl ?? null;
     $memoFieldName = (string)($memoFieldName ?? 'memo');
     $memoRows = max(2, (int)($memoRows ?? 3));
     $memoFixedHeightPx = max(32, (int)($memoFixedHeightPx ?? 40));
-    $memoButtonLabel = (string)($memoButtonLabel ?? 'メモ保存');
+    $memoButtonLabel = (string)($memoButtonLabel ?? $t('メモ保存', 'Save Notes'));
     $memoHttpMethod = strtoupper((string)($memoHttpMethod ?? 'PUT'));
     $memoReadonly = (bool)($memoReadonly ?? false);
     // summaryLayoutMode:
@@ -88,6 +99,8 @@
         'tax' => true,
         'total' => true,
     ];
+    $emptyMemoText = $t('（未入力）', '(Not entered)');
+    $jsonSummaryLabel = $t('JSONデータ', 'JSON Data');
     $toSummaryValueText = static function (array $item) use ($summaryMoneyLabels): string {
         $label = trim((string)($item['label'] ?? ''));
         $value = $item['value'] ?? null;
@@ -172,7 +185,7 @@
         $processSelectedSku = $selectedProcessSkuCode;
         $processPricedSku = (string)($processBom['sku_code'] ?? '');
         $rows[] = [
-            'type' => 'TEC工程',
+            'type' => $t('TEC工程', 'TEC Process'),
             'index' => '',
             'sku_code' => $processSelectedSku,
             'priced_sku_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
@@ -189,7 +202,7 @@
         for ($i = 0; $i < $mfdCount; $i++) {
             $mfdSkuCode = (string)($processBom['sku_code'] ?? '');
             $rows[] = [
-                'type' => 'MFD変換',
+                'type' => $t('MFD変換', 'MFD Conversion'),
                 'index' => '['.$i.']',
                 'sku_code' => $mfdSkuCode,
                 'priced_sku_code' => $mfdSkuCode,
@@ -212,7 +225,7 @@
             $selectedSku = (string)($s['skuCode'] ?? '');
             $pricedSku = (string)($r['sku_code'] ?? '');
             $rows[] = [
-                'type' => 'スリーブ(MFD)',
+                'type' => $t('スリーブ(MFD)', 'Sleeve (MFD)'),
                 'index' => '['.$i.']',
                 'sku_code' => $selectedSku,
                 'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
@@ -242,7 +255,7 @@
             $fiberTolerance = (float)$f['toleranceMm'] / 1000;
         }
         $rows[] = [
-            'type' => 'ファイバ(F)',
+            'type' => $t('ファイバ(F)', 'Fiber (F)'),
             'index' => '['.$i.']',
             'sku_code' => $selectedSku,
             'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
@@ -280,7 +293,7 @@
             $tubeTolerance = (float)$t['toleranceMm'] / 1000;
         }
         $rows[] = [
-            'type' => 'チューブ(T)',
+            'type' => $t('チューブ(T)', 'Tube (T)'),
             'index' => '['.$i.']',
             'sku_code' => $selectedSku,
             'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
@@ -304,8 +317,8 @@
     $leftPricedSku = (string)($leftRow['sku_code'] ?? '');
     if ($showLeftConnector) {
         $rows[] = [
-            'type' => 'コネクタ',
-            'index' => '左端',
+            'type' => $t('コネクタ', 'Connector'),
+            'index' => $t('左端', 'Left End'),
             'sku_code' => $leftSku,
             'priced_sku_code' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $leftPricedSku : '',
             'sku_name' => $toSkuName($leftSku),
@@ -324,8 +337,8 @@
     $rightPricedSku = (string)($rightRow['sku_code'] ?? '');
     if ($showRightConnector) {
         $rows[] = [
-            'type' => 'コネクタ',
-            'index' => '右端',
+            'type' => $t('コネクタ', 'Connector'),
+            'index' => $t('右端', 'Right End'),
             'sku_code' => $rightSku,
             'priced_sku_code' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $rightPricedSku : '',
             'sku_name' => $toSkuName($rightSku),
@@ -357,19 +370,19 @@
     }
 
     $summaryAuto = [
-        ['label' => 'ルールテンプレ', 'value' => $snapshot['template_version_id'] ?? ''],
-        ['label' => '納品物価格表', 'value' => $snapshot['price_book_id'] ?? ''],
-        ['label' => '注文数量', 'value' => $orderQtySummary],
-        ['label' => '工程種別', 'value' => $processType],
-        ['label' => 'TEC位置', 'value' => $isTecMode ? (($config['tecSide'] ?? '') ?: '未指定') : '-'],
-        ['label' => 'MFD数', 'value' => $isTecMode ? '-' : '1'],
-        ['label' => 'チューブ数', 'value' => $config['tubeCount'] ?? ''],
-        ['label' => 'エラー件数', 'value' => is_array($errors) ? count($errors) : 0],
-        ['label' => 'BOM件数', 'value' => count($bom)],
-        ['label' => '価格内訳件数', 'value' => count($pricing)],
-        ['label' => '小計', 'value' => $totals['subtotal'] ?? ''],
-        ['label' => '税', 'value' => $totals['tax'] ?? ''],
-        ['label' => '合計', 'value' => $totals['total'] ?? ''],
+        ['label' => $t('ルールテンプレ', 'Rule Template'), 'value' => $snapshot['template_version_id'] ?? ''],
+        ['label' => $t('納品物価格表', 'Price Book'), 'value' => $snapshot['price_book_id'] ?? ''],
+        ['label' => $t('注文数量', 'Order Quantity'), 'value' => $orderQtySummary],
+        ['label' => $t('工程種別', 'Process Type'), 'value' => $processType],
+        ['label' => $t('TEC位置', 'TEC Position'), 'value' => $isTecMode ? $translateTecSide($config['tecSide'] ?? '') : '-'],
+        ['label' => $t('MFD数', 'MFD Count'), 'value' => $isTecMode ? '-' : '1'],
+        ['label' => $t('チューブ数', 'Tube Count'), 'value' => $config['tubeCount'] ?? ''],
+        ['label' => $t('エラー件数', 'Error Count'), 'value' => is_array($errors) ? count($errors) : 0],
+        ['label' => $t('BOM件数', 'BOM Count'), 'value' => count($bom)],
+        ['label' => $t('価格内訳件数', 'Pricing Line Count'), 'value' => count($pricing)],
+        ['label' => $t('小計', 'Subtotal'), 'value' => $totals['subtotal'] ?? ''],
+        ['label' => $t('税', 'Tax'), 'value' => $totals['tax'] ?? ''],
+        ['label' => $t('合計', 'Total'), 'value' => $totals['total'] ?? ''],
     ];
     $summary = $includeAutoSummary ? array_merge($summaryItems, $summaryAuto) : $summaryItems;
 
@@ -476,7 +489,7 @@
                                                         </div>
                                                     </form>
                                                 @else
-                                                    <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : '（未入力）' }}</div>
+                                                    <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : $emptyMemoText }}</div>
                                                 @endif
                                             </div>
                                         @endif
@@ -519,7 +532,7 @@
                                     </div>
                                 </form>
                             @else
-                                <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : '（未入力）' }}</div>
+                                <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : $emptyMemoText }}</div>
                             @endif
                         </div>
                     @endif
@@ -541,12 +554,12 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>パス</th>
-                            <th>メッセージ</th>
+                            <th>{{ $t('パス', 'Path') }}</th>
+                            <th>{{ $t('メッセージ', 'Message') }}</th>
                             @if($showCreatorColumns)
-                                <th>作成アカウント</th>
-                                <th>メールアドレス</th>
-                                <th>担当者</th>
+                                <th>{{ $t('作成アカウント', 'Created Account') }}</th>
+                                <th>{{ $t('メールアドレス', 'Email Address') }}</th>
+                                <th>{{ $t('担当者', 'Assignee') }}</th>
                             @endif
                         </tr>
                     </thead>
@@ -583,20 +596,20 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>種類</th>
-                            <th>番号</th>
-                            <th>パーツ名</th>
+                            <th>{{ $t('種類', 'Type') }}</th>
+                            <th>{{ $t('番号', 'No.') }}</th>
+                            <th>{{ $t('パーツ名', 'Part Name') }}</th>
                             @if($showSourcePathColumn)
                                 <th>source_path</th>
                             @endif
-                            <th>長さ/範囲</th>
-                            <th>許容誤差</th>
+                            <th>{{ $t('長さ/範囲', 'Length / Range') }}</th>
+                            <th>{{ $t('許容誤差', 'Tolerance') }}</th>
                             @if($showQuantityColumn)
-                                <th>個数</th>
+                                <th>{{ $t('個数', 'Qty') }}</th>
                             @endif
                             @if($showPriceColumns)
-                                <th>単価(¥)</th>
-                                <th>小計(¥)</th>
+                                <th>{{ $t('単価(¥)', 'Unit Price (JPY)') }}</th>
+                                <th>{{ $t('小計(¥)', 'Line Total (JPY)') }}</th>
                             @endif
                         </tr>
                     </thead>
@@ -632,7 +645,7 @@
 
             @if($showJsonSection)
                 <details style="margin-top:12px;">
-                    <summary>JSONデータ</summary>
+                    <summary>{{ $jsonSummaryLabel }}</summary>
                     <h5>snapshot</h5>
                     <pre>{{ $snapshotJsonText }}</pre>
                     <h5>config</h5>

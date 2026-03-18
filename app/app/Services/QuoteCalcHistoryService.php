@@ -122,6 +122,7 @@ final class QuoteCalcHistoryService
         return match (strtoupper($eventType)) {
             'ISSUE' => '見積発行',
             'EDIT_REQUEST_SUBMIT' => '変更申請送信',
+            'EDIT_DIRECT_APPLY' => '即時反映',
             'EDIT_REQUEST_APPROVE' => '変更申請承認',
             'EDIT_REQUEST_REJECT' => '変更申請却下',
             'LEGACY_BASELINE' => '既存見積の基準化',

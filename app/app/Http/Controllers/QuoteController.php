@@ -105,6 +105,7 @@ final class QuoteController extends Controller
                     ->orWhereRaw('cast(q.account_id as text) ilike ?', ["%{$q}%"])
                     ->orWhere('q.status', 'ilike', "%{$q}%")
                     ->orWhere('q.currency', 'ilike', "%{$q}%")
+                    ->orWhere('q.spec_sheet_number', 'ilike', "%{$q}%")
                     ->orWhere('q.memo', 'ilike', "%{$q}%")
                     ->orWhereRaw('cast(q.total as text) ilike ?', ["%{$q}%"])
                     ->orWhere('a.internal_name', 'ilike', "%{$q}%")
@@ -287,6 +288,9 @@ final class QuoteController extends Controller
         $config = $snapshot['config'] ?? [];
         $derived = $snapshot['derived'] ?? [];
         $errors = $snapshot['validation_errors'] ?? [];
+        $derived['specSheetNumber'] = $this->resolveSpecSheetNumber(
+            $quote->spec_sheet_number ?? ($snapshot['spec_sheet_number'] ?? ($derived['specSheetNumber'] ?? null))
+        );
 
         $svg = $renderer->render($config, $derived, $errors);
         $totals = $snapshot['totals'] ?? [];
@@ -376,6 +380,9 @@ final class QuoteController extends Controller
         $quoteMemo = trim((string)($quote->memo ?? ''));
         $sessionMemo = trim((string)($quote->session_memo ?? ''));
         $initialMemo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
+        $initialSpecSheetNumber = $this->resolveSpecSheetNumber(
+            $quote->spec_sheet_number ?? ($snapshot['spec_sheet_number'] ?? ($snapshot['derived']['specSheetNumber'] ?? null))
+        );
         $summaryFieldOptions = self::SUMMARY_FIELD_LABELS;
         $selectedSummaryFields = $this->resolveSummaryCardFields($snapshot);
         $initialPricingInput = $this->buildInitialPricingInput($quote, $snapshot);
@@ -385,6 +392,7 @@ final class QuoteController extends Controller
             'initialConfig' => $config,
             'templateVersionId' => $templateVersionId,
             'initialMemo' => $initialMemo,
+            'initialSpecSheetNumber' => $initialSpecSheetNumber,
             'summaryFieldOptions' => $summaryFieldOptions,
             'selectedSummaryFields' => $selectedSummaryFields,
             'initialPricingInput' => $initialPricingInput,
@@ -454,7 +462,8 @@ final class QuoteController extends Controller
             $decoded['memo'] = $quote->memo;
         }
 
-        $requestId = app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'quote',
             $id,
             [
@@ -468,11 +477,16 @@ final class QuoteController extends Controller
             (string)($data['comment'] ?? '')
         );
 
+        $requestId = $changeRequestService->requestId($submission);
+        $eventType = $changeRequestService->approvalRequired($submission)
+            ? 'EDIT_REQUEST_SUBMIT'
+            : 'EDIT_DIRECT_APPLY';
+
         $newSnapshot = is_array($decoded['snapshot'] ?? null) ? $decoded['snapshot'] : $decoded;
         if (is_array($newSnapshot) && !empty($newSnapshot)) {
             app(QuoteCalcRunRecorder::class)->recordFromSnapshot(
                 $id,
-                'EDIT_REQUEST_SUBMIT',
+                $eventType,
                 $newSnapshot,
                 (int)$request->user()->id,
                 true,
@@ -482,7 +496,11 @@ final class QuoteController extends Controller
             );
         }
 
-        return redirect()->route('work.quotes.show', $id)->with('status', '承認変更申請を送信しました');
+        return redirect()->route('work.quotes.show', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '見積を更新しました',
+            '承認変更申請を送信しました'
+        ));
     }
 
     public function updateMemo(Request $request, int $id)
@@ -496,7 +514,8 @@ final class QuoteController extends Controller
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') $memo = null;
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'quote',
             $id,
             [
@@ -510,7 +529,11 @@ final class QuoteController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.quotes.show', $id)->with('status', '見積メモの更新申請を送信しました');
+        return redirect()->route('work.quotes.show', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '見積メモを更新しました',
+            '見積メモの更新申請を送信しました'
+        ));
     }
 
     private function decodeJson(mixed $value): ?array
@@ -519,6 +542,12 @@ final class QuoteController extends Controller
         if ($value === null) return null;
         $decoded = json_decode((string)$value, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    private function resolveSpecSheetNumber(mixed $value): ?string
+    {
+        $normalized = trim((string)$value);
+        return $normalized === '' ? null : $normalized;
     }
 
     public function downloadSnapshotPdf(int $id, SvgRenderer $renderer, SnapshotPdfService $pdfService)
@@ -571,6 +600,9 @@ final class QuoteController extends Controller
         $config = $snapshot['config'] ?? [];
         $derived = $snapshot['derived'] ?? [];
         $errors = $snapshot['validation_errors'] ?? [];
+        $derived['specSheetNumber'] = $this->resolveSpecSheetNumber(
+            $quote->spec_sheet_number ?? ($snapshot['spec_sheet_number'] ?? ($derived['specSheetNumber'] ?? null))
+        );
         $requestCount = (int)DB::table('change_requests')
             ->where('entity_type', 'quote')
             ->where('entity_id', $id)

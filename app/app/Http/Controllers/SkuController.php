@@ -64,14 +64,19 @@ final class SkuController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'sku',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.skus.index')->with('status', 'SKUの作成申請を送信しました');
+        return redirect()->route('work.skus.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'SKUを作成しました',
+            'SKUの作成申請を送信しました'
+        ));
     }
 
     public function edit(int $id)
@@ -130,7 +135,8 @@ final class SkuController extends Controller
             'attributes' => $attrs,
             'memo' => $memo,
         ];
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'sku',
             $id,
             (array)$sku,
@@ -139,7 +145,11 @@ final class SkuController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.skus.edit', $id)->with('status', 'SKUの更新申請を送信しました');
+        return redirect()->route('work.skus.edit', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'SKUを更新しました',
+            'SKUの更新申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $id)
@@ -147,7 +157,8 @@ final class SkuController extends Controller
         $sku = DB::table('skus')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$sku) abort(404);
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'sku',
             $id,
             (array)$sku,
@@ -160,6 +171,10 @@ final class SkuController extends Controller
             $tab = 'skus';
         }
 
-        return redirect()->route('work.skus.index', ['tab' => $tab])->with('status', 'SKUの削除申請を送信しました');
+        return redirect()->route('work.skus.index', ['tab' => $tab])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'SKUを削除しました',
+            'SKUの削除申請を送信しました'
+        ));
     }
 }

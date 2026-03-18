@@ -402,6 +402,157 @@ final class LaborCostEngineTest extends TestCase
         $this->assertContains('CONN_PM_APC', $matchedCodes);
     }
 
+    public function test_connector_rules_select_normal_pm_and_pm_apc_exclusively(): void
+    {
+        DB::table('labor_cost_settings')->insert([
+            'id' => 1,
+            'hourly_rate' => 9000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $normalProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'CONN_NORMAL',
+            'name' => 'CONN_NORMAL',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $pmProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'CONN_PM',
+            'name' => 'CONN_PM',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 20,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $pmApcProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'CONN_PM_APC',
+            'name' => 'CONN_PM_APC',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 30,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        foreach ([
+            [$normalProcessId, 'NORMAL_POLISH', '通常研磨'],
+            [$pmProcessId, 'PM_POLISH', 'PM研磨'],
+            [$pmApcProcessId, 'PM_APC_POLISH', 'PM/APC研磨'],
+        ] as [$processId, $elementCode, $name]) {
+            DB::table('labor_process_elements')->insert([
+                'process_id' => $processId,
+                'element_code' => $elementCode,
+                'name' => $name,
+                'work_minutes' => 10,
+                'activity_coeff' => 1,
+                'batch_size' => 1,
+                'depreciation_amount' => 0,
+                'default_yield_rate' => 0.95,
+                'active' => true,
+                'sort_order' => 10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('labor_auto_rules')->insert([
+            [
+                'rule_code' => 'RULE_CONN_NORMAL',
+                'name' => 'CONN_NORMAL',
+                'process_id' => $normalProcessId,
+                'priority' => 70,
+                'include_tags_json' => json_encode(['connector'], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode(['pm'], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'rule_code' => 'RULE_CONN_PM',
+                'name' => 'CONN_PM',
+                'process_id' => $pmProcessId,
+                'priority' => 80,
+                'include_tags_json' => json_encode(['connector', 'pm'], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode(['apc'], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'rule_code' => 'RULE_CONN_PM_APC',
+                'name' => 'CONN_PM_APC',
+                'process_id' => $pmApcProcessId,
+                'priority' => 90,
+                'include_tags_json' => json_encode(['connector', 'pm', 'apc'], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        DB::table('skus')->insert([
+            [
+                'sku_code' => 'FIBER_SMF28E+',
+                'category' => 'FIBER',
+                'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'sku_code' => 'FIBER_PMF',
+                'category' => 'FIBER',
+                'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'sku_code' => 'CONN_SC_PC',
+                'category' => 'CONNECTOR',
+                'attributes' => json_encode(['polish' => 'PC'], JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'sku_code' => 'CONN_SC_APC',
+                'category' => 'CONNECTOR',
+                'attributes' => json_encode(['polish' => 'APC'], JSON_UNESCAPED_UNICODE),
+            ],
+        ]);
+
+        $engine = app(LaborCostEngine::class);
+
+        $normal = $engine->calculate([
+            ['sku_code' => 'FIBER_SMF28E+', 'quantity' => 1, 'sort_order' => 0],
+            ['sku_code' => 'CONN_SC_PC', 'quantity' => 1, 'sort_order' => 1],
+        ], 1, []);
+        $normalApc = $engine->calculate([
+            ['sku_code' => 'FIBER_SMF28E+', 'quantity' => 1, 'sort_order' => 0],
+            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 1],
+        ], 1, []);
+        $pm = $engine->calculate([
+            ['sku_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 0],
+            ['sku_code' => 'CONN_SC_PC', 'quantity' => 1, 'sort_order' => 1],
+        ], 1, []);
+        $pmApc = $engine->calculate([
+            ['sku_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 0],
+            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 1],
+        ], 1, []);
+
+        $this->assertSame(['CONN_NORMAL'], array_values($normal['matched_process_codes'] ?? []));
+        $this->assertSame(['CONN_NORMAL'], array_values($normalApc['matched_process_codes'] ?? []));
+        $this->assertSame(['CONN_PM'], array_values($pm['matched_process_codes'] ?? []));
+        $this->assertSame(['CONN_PM_APC'], array_values($pmApc['matched_process_codes'] ?? []));
+    }
+
     public function test_infers_fusion_tag_from_sleeve_category(): void
     {
         DB::table('labor_cost_settings')->insert([
@@ -461,6 +612,118 @@ final class LaborCostEngineTest extends TestCase
 
         $matchedCodes = is_array($result['matched_process_codes'] ?? null) ? $result['matched_process_codes'] : [];
         $this->assertContains('FUSION', $matchedCodes);
+    }
+
+    public function test_required_sku_codes_are_primary_and_exact_code_tags_no_longer_match(): void
+    {
+        DB::table('labor_cost_settings')->insert([
+            'id' => 1,
+            'hourly_rate' => 9000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $codeProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'CODE_MATCH',
+            'name' => 'CODE_MATCH',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $tagProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'TAG_MATCH',
+            'name' => 'TAG_MATCH',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 20,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $categoryProcessId = (int)DB::table('labor_processes')->insertGetId([
+            'process_code' => 'CATEGORY_MATCH',
+            'name' => 'CATEGORY_MATCH',
+            'default_yield_rate' => 0.95,
+            'active' => true,
+            'sort_order' => 30,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        foreach ([$codeProcessId, $tagProcessId, $categoryProcessId] as $index => $processId) {
+            DB::table('labor_process_elements')->insert([
+                'process_id' => $processId,
+                'element_code' => 'WORK_' . ($index + 1),
+                'name' => 'WORK_' . ($index + 1),
+                'work_minutes' => 5,
+                'activity_coeff' => 1,
+                'batch_size' => 1,
+                'depreciation_amount' => 0,
+                'default_yield_rate' => 0.95,
+                'active' => true,
+                'sort_order' => 10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('labor_auto_rules')->insert([
+            [
+                'rule_code' => 'RULE_CODE_MATCH',
+                'name' => 'CODE_MATCH',
+                'process_id' => $codeProcessId,
+                'priority' => 10,
+                'include_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode(['CONN_SC_APC'], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'rule_code' => 'RULE_TAG_MATCH',
+                'name' => 'TAG_MATCH',
+                'process_id' => $tagProcessId,
+                'priority' => 20,
+                'include_tags_json' => json_encode(['conn_sc_apc'], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'rule_code' => 'RULE_CATEGORY_MATCH',
+                'name' => 'CATEGORY_MATCH',
+                'process_id' => $categoryProcessId,
+                'priority' => 30,
+                'include_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_sku_categories_json' => json_encode(['CONNECTOR'], JSON_UNESCAPED_UNICODE),
+                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'always_apply' => false,
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        DB::table('skus')->insert([
+            'sku_code' => 'CONN_SC_APC',
+            'category' => 'CONNECTOR',
+            'attributes' => json_encode(['polish' => 'APC'], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $result = app(LaborCostEngine::class)->calculate([
+            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 0],
+        ], 1, []);
+
+        $this->assertSame(['CODE_MATCH'], array_values($result['matched_process_codes'] ?? []));
     }
 
     private function prepareTables(): void

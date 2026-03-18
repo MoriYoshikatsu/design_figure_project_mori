@@ -2,6 +2,15 @@
     $setting = $setting ?? null;
     $rules = is_array($rules ?? null) ? $rules : [];
     $processOptions = is_array($processOptions ?? null) ? $processOptions : [];
+    $skuOptionsByCategory = is_array($skuOptionsByCategory ?? null) ? $skuOptionsByCategory : [];
+    $createRequiredCodes = is_array(old('required_sku_codes')) ? old('required_sku_codes') : [];
+    $createRequiredCodeSet = [];
+    foreach ($createRequiredCodes as $code) {
+        $normalizedCode = strtoupper(trim((string)$code));
+        if ($normalizedCode !== '') {
+            $createRequiredCodeSet[$normalizedCode] = true;
+        }
+    }
 @endphp
 
 <div class="labor-card labor-card--settings">
@@ -59,20 +68,12 @@
                         <input type="number" name="priority" value="100" aria-label="優先度">
                     </label>
                     <label class="labor-field">
-                        <span class="labor-field-label">含めるタグ</span>
-                        <input type="text" name="include_tags" aria-label="含めるタグ">
+                        <span class="labor-field-label">補助タグ（すべて一致）</span>
+                        <input type="text" name="include_tags" aria-label="補助タグ">
                     </label>
                     <label class="labor-field">
-                        <span class="labor-field-label">除外タグ</span>
-                        <input type="text" name="exclude_tags" aria-label="除外タグ">
-                    </label>
-                    <label class="labor-field">
-                        <span class="labor-field-label">必須品目カテゴリ</span>
-                        <input type="text" name="required_sku_categories" aria-label="必須品目カテゴリ">
-                    </label>
-                    <label class="labor-field">
-                        <span class="labor-field-label">必須品目コード</span>
-                        <input type="text" name="required_sku_codes" aria-label="必須品目コード">
+                        <span class="labor-field-label">除外補助タグ</span>
+                        <input type="text" name="exclude_tags" aria-label="除外補助タグ">
                     </label>
                     <label class="labor-checkbox-inline" title="常時適用">
                         <input type="checkbox" name="always_apply" value="1">
@@ -88,6 +89,50 @@
                     </label>
                     <button type="submit">作成申請</button>
                 </div>
+
+                <div class="labor-field labor-rule-full">
+                    <span class="labor-field-label">主条件の品目コード（複数選択した全コードがBOMに含まれるとき一致）</span>
+                    <div class="labor-sku-picker">
+                        @if(empty($skuOptionsByCategory))
+                            <div class="labor-compact-note">選択可能なSKUがありません。</div>
+                        @else
+                            <div class="labor-sku-picker-groups">
+                                @foreach($skuOptionsByCategory as $category => $skuRows)
+                                    @php
+                                        $groupHasSelected = false;
+                                        foreach ($skuRows as $skuRow) {
+                                            $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                            if (isset($createRequiredCodeSet[$skuCode])) {
+                                                $groupHasSelected = true;
+                                                break;
+                                            }
+                                        }
+                                    @endphp
+                                    <details class="labor-sku-group" @if($groupHasSelected) open @endif>
+                                        <summary>{{ $category }} ({{ count($skuRows) }})</summary>
+                                        <div class="labor-sku-grid">
+                                            @foreach($skuRows as $skuRow)
+                                                @php
+                                                    $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                                    $skuName = trim((string)($skuRow['name'] ?? ''));
+                                                    $isChecked = isset($createRequiredCodeSet[$skuCode]);
+                                                @endphp
+                                                <label class="labor-sku-option">
+                                                    <input type="checkbox" name="required_sku_codes[]" value="{{ $skuCode }}" @if($isChecked) checked @endif>
+                                                    <span>
+                                                        <div class="labor-sku-option-code">{{ $skuCode }}</div>
+                                                        <div class="labor-sku-option-name">{{ $skuName !== '' ? $skuName : '名称未設定' }}</div>
+                                                        <div class="labor-sku-option-meta">{{ !empty($skuRow['active']) ? '有効SKU' : '無効SKU' }}</div>
+                                                    </span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                    </details>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </div>
             </div>
         </form>
     </div>
@@ -98,8 +143,11 @@
         $ruleId = (int)($rule['id'] ?? 0);
         $includeTags = implode(',', $rule['include_tags'] ?? []);
         $excludeTags = implode(',', $rule['exclude_tags'] ?? []);
-        $requiredCategories = implode(',', $rule['required_sku_categories'] ?? []);
-        $requiredCodes = implode(',', $rule['required_sku_codes'] ?? []);
+        $requiredCodes = array_values(array_map(
+            static fn ($code): string => strtoupper(trim((string)$code)),
+            is_array($rule['required_sku_codes'] ?? null) ? $rule['required_sku_codes'] : []
+        ));
+        $requiredCodeSet = array_fill_keys(array_filter($requiredCodes), true);
     @endphp
 
     <details class="labor-card labor-card--rule labor-card-toggle">
@@ -116,6 +164,10 @@
                 <input type="hidden" name="_mode" value="submit">
                 <div class="labor-inline-wrap">
                     <div class="labor-inline-form labor-inline-form--rule">
+                        <div class="labor-rule-help labor-rule-full">
+                            主条件は品目コードです。タグは補助条件だけに使う前提です。
+                        </div>
+
                         <label class="labor-field">
                             <span class="labor-field-label">ルールコード</span>
                             <input type="text" name="rule_code" value="{{ $rule['rule_code'] ?? '' }}" aria-label="ルールコード">
@@ -137,20 +189,12 @@
                             <input type="number" name="priority" value="{{ $rule['priority'] ?? 100 }}" aria-label="優先度">
                         </label>
                         <label class="labor-field">
-                            <span class="labor-field-label">含めるタグ</span>
-                            <input type="text" name="include_tags" value="{{ $includeTags }}" aria-label="含めるタグ">
+                            <span class="labor-field-label">補助タグ（すべて一致）</span>
+                            <input type="text" name="include_tags" value="{{ $includeTags }}" aria-label="補助タグ">
                         </label>
                         <label class="labor-field">
-                            <span class="labor-field-label">除外タグ</span>
-                            <input type="text" name="exclude_tags" value="{{ $excludeTags }}" aria-label="除外タグ">
-                        </label>
-                        <label class="labor-field">
-                            <span class="labor-field-label">必須品目カテゴリ</span>
-                            <input type="text" name="required_sku_categories" value="{{ $requiredCategories }}" aria-label="必須品目カテゴリ">
-                        </label>
-                        <label class="labor-field">
-                            <span class="labor-field-label">必須品目コード</span>
-                            <input type="text" name="required_sku_codes" value="{{ $requiredCodes }}" aria-label="必須品目コード">
+                            <span class="labor-field-label">除外補助タグ</span>
+                            <input type="text" name="exclude_tags" value="{{ $excludeTags }}" aria-label="除外補助タグ">
                         </label>
                         <label class="labor-checkbox-inline" title="常時適用">
                             <input type="checkbox" name="always_apply" value="1" @if(!empty($rule['always_apply'])) checked @endif>
@@ -165,6 +209,51 @@
                             <input type="text" class="labor-text-input" name="memo" value="{{ $rule['memo'] ?? '' }}" aria-label="メモ">
                         </label>
                         <button type="submit">更新申請</button>
+
+                        <div class="labor-field labor-rule-full">
+                            <span class="labor-field-label">主条件の品目コード（複数選択）</span>
+                            <div class="labor-rule-help">選択した全コードがBOMに含まれるときに一致します。</div>
+                            <div class="labor-sku-picker">
+                                @if(empty($skuOptionsByCategory))
+                                    <div class="labor-compact-note">選択可能なSKUがありません。</div>
+                                @else
+                                    <div class="labor-sku-picker-groups">
+                                        @foreach($skuOptionsByCategory as $category => $skuRows)
+                                            @php
+                                                $groupHasSelected = false;
+                                                foreach ($skuRows as $skuRow) {
+                                                    $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                                    if (isset($requiredCodeSet[$skuCode])) {
+                                                        $groupHasSelected = true;
+                                                        break;
+                                                    }
+                                                }
+                                            @endphp
+                                            <details class="labor-sku-group" @if($groupHasSelected) open @endif>
+                                                <summary>{{ $category }} ({{ count($skuRows) }})</summary>
+                                                <div class="labor-sku-grid">
+                                                    @foreach($skuRows as $skuRow)
+                                                        @php
+                                                            $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                                            $skuName = trim((string)($skuRow['name'] ?? ''));
+                                                            $isChecked = isset($requiredCodeSet[$skuCode]);
+                                                        @endphp
+                                                        <label class="labor-sku-option">
+                                                            <input type="checkbox" name="required_sku_codes[]" value="{{ $skuCode }}" @if($isChecked) checked @endif>
+                                                            <span>
+                                                                <div class="labor-sku-option-code">{{ $skuCode }}</div>
+                                                                <div class="labor-sku-option-name">{{ $skuName !== '' ? $skuName : '名称未設定' }}</div>
+                                                                <div class="labor-sku-option-meta">{{ !empty($skuRow['active']) ? '有効SKU' : '無効SKU' }}</div>
+                                                            </span>
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                            </details>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
                     </div>
                 </div>
             </form>

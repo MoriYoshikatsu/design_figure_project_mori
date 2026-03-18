@@ -239,14 +239,19 @@ final class PriceBookController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'price_book',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.index')->with('status', '価格表の作成申請を送信しました');
+        return redirect()->route('work.price-books.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '価格表を作成しました',
+            '価格表の作成申請を送信しました'
+        ));
     }
 
     public function edit(Request $request, int $id)
@@ -508,7 +513,8 @@ final class PriceBookController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'price_book',
             $id,
             (array)$book,
@@ -517,7 +523,11 @@ final class PriceBookController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.edit', $id)->with('status', '価格表の更新申請を送信しました');
+        return redirect()->route('work.price-books.edit', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '価格表を更新しました',
+            '価格表の更新申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $id)
@@ -525,7 +535,8 @@ final class PriceBookController extends Controller
         $book = DB::table('price_books')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$book) abort(404);
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'price_book',
             $id,
             (array)$book,
@@ -538,6 +549,10 @@ final class PriceBookController extends Controller
             $tab = 'price_books';
         }
 
-        return redirect()->route('work.price-books.index', ['tab' => $tab])->with('status', '価格表の削除申請を送信しました');
+        return redirect()->route('work.price-books.index', ['tab' => $tab])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '価格表を削除しました',
+            '価格表の削除申請を送信しました'
+        ));
     }
 }

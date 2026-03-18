@@ -268,13 +268,6 @@ final class LaborCostEngine
         $polish = strtoupper(trim((string)($attributes['polish'] ?? '')));
         $tags = [];
 
-        if ($code !== '') {
-            $tags[strtolower($code)] = true;
-        }
-
-        if ($cat !== '') {
-            $tags[strtolower($cat)] = true;
-        }
         if ($cat === 'CONNECTOR' || str_starts_with($code, 'CONN_')) {
             $tags['connector'] = true;
         }
@@ -351,7 +344,6 @@ final class LaborCostEngine
                 'r.priority',
                 'r.include_tags_json',
                 'r.exclude_tags_json',
-                'r.required_sku_categories_json',
                 'r.required_sku_codes_json',
                 'r.always_apply',
                 'p.process_code',
@@ -359,7 +351,7 @@ final class LaborCostEngine
 
         $rules = [];
         foreach ($rows as $row) {
-            $rules[] = [
+            $rules[] = $this->normalizeConnectorRule([
                 'id' => (int)$row->id,
                 'rule_code' => (string)$row->rule_code,
                 'name' => (string)$row->name,
@@ -367,14 +359,37 @@ final class LaborCostEngine
                 'priority' => (int)$row->priority,
                 'include_tags' => $this->normalizeStringList($this->decodeJsonArray($row->include_tags_json), false),
                 'exclude_tags' => $this->normalizeStringList($this->decodeJsonArray($row->exclude_tags_json), false),
-                'required_categories' => $this->normalizeStringList($this->decodeJsonArray($row->required_sku_categories_json), true),
+                'required_categories' => [],
                 'required_sku_codes' => $this->normalizeStringList($this->decodeJsonArray($row->required_sku_codes_json), true),
                 'always_apply' => (bool)$row->always_apply,
                 'process_code' => (string)$row->process_code,
-            ];
+            ]);
         }
 
         return $rules;
+    }
+
+    /**
+     * 旧データ互換: CONN_NORMAL は APC で除外しない。
+     *
+     * @param array<string, mixed> $rule
+     * @return array<string, mixed>
+     */
+    private function normalizeConnectorRule(array $rule): array
+    {
+        $processCode = strtoupper(trim((string)($rule['process_code'] ?? '')));
+        if ($processCode !== 'CONN_NORMAL') {
+            return $rule;
+        }
+
+        $excludeTags = is_array($rule['exclude_tags'] ?? null) ? $rule['exclude_tags'] : [];
+        $excludeTags = array_values(array_filter(
+            $excludeTags,
+            static fn($tag): bool => strtolower(trim((string)$tag)) !== 'apc'
+        ));
+        $rule['exclude_tags'] = $excludeTags;
+
+        return $rule;
     }
 
     /**
@@ -388,7 +403,6 @@ final class LaborCostEngine
         }
 
         $tags = $context['tags'] ?? [];
-        $categories = $context['categories'] ?? [];
         $skuCodes = $context['sku_codes'] ?? [];
 
         foreach (($rule['include_tags'] ?? []) as $tag) {
@@ -401,11 +415,6 @@ final class LaborCostEngine
                 return false;
             }
         }
-        foreach (($rule['required_categories'] ?? []) as $category) {
-            if (!isset($categories[$category])) {
-                return false;
-            }
-        }
         foreach (($rule['required_sku_codes'] ?? []) as $skuCode) {
             if (!isset($skuCodes[$skuCode])) {
                 return false;
@@ -413,7 +422,6 @@ final class LaborCostEngine
         }
 
         return !empty($rule['include_tags'])
-            || !empty($rule['required_categories'])
             || !empty($rule['required_sku_codes']);
     }
 

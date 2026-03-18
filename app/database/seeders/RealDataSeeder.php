@@ -204,6 +204,7 @@ final class RealDataSeeder extends Seeder
 
             // TUBE（チューブ）
             $this->skuRow('TUBE_0.9_LOOSE', 'Φ0.9ルースチューブ', 'TUBE', ['minLenM' => 0.03, 'maxLenM' => 10.0]),
+            $this->skuRow('TUBE_frex_metal', '金属フレキチューブ', 'TUBE', ['kind' => 'frex', 'material' => 'metal']),
 
             // CONNECTOR（コネクタ：端子）
             $this->skuRow('CONN_FERRULE_PC', 'フェルール/PCコネクタ', 'CONNECTOR', ['polish' => 'PC']),

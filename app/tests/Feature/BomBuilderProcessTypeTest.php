@@ -15,7 +15,7 @@ final class BomBuilderProcessTypeTest extends TestCase
         $builder = app(BomBuilder::class);
 
         $mfdCount = 3;
-        $fiberCount = 1;
+        $fiberCount = $processType === 'MFD' ? 2 : 1;
 
         $fibers = [];
         for ($i = 0; $i < $fiberCount; $i++) {
@@ -47,6 +47,8 @@ final class BomBuilderProcessTypeTest extends TestCase
         if ($processType === 'MFD') {
             $options = is_array($processRow['options'] ?? null) ? $processRow['options'] : [];
             $this->assertSame(1, (int)($options['mfdCount'] ?? 0));
+            $this->assertEqualsWithDelta(1.0, (float)($options['totalFiberLengthM'] ?? 0.0), 0.000001);
+            $this->assertCount(2, is_array($options['fiberItems'] ?? null) ? $options['fiberItems'] : []);
         } else {
             $options = is_array($processRow['options'] ?? null) ? $processRow['options'] : [];
             $this->assertSame('left', (string)($options['tecSide'] ?? ''));

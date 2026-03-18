@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Services\AccountChangeRequestRequirementService;
 use App\Services\SalesRoutePermissionService;
 use App\Services\WorkPermissionService;
 use App\Services\WorkChangeRequestService;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Hash;
 final class AccountController extends Controller
 {
     public function __construct(
+        private readonly AccountChangeRequestRequirementService $accountChangeRequestRequirementService,
         private readonly SalesRoutePermissionService $salesRoutePermissionService,
         private readonly WorkPermissionService $workPermissionService
     ) {
@@ -139,19 +141,16 @@ final class AccountController extends Controller
         $accountIds = $accounts->pluck('id')->map(fn ($v) => (int)$v)->all();
         $userId = (int)($request->user()?->id ?? 0);
 
-        $permissionMap = $this->collectAccountPermissionLines($accountIds);
+        $changeRequestRequirementSummaryMap = $this->accountChangeRequestRequirementService->summaryMap($accountIds);
         $canCreateAccount = $userId > 0
             && $this->canUserAccessPath(
                 $userId,
                 'POST',
                 route('work.accounts.edit-request.create', [], false)
             );
-
-        $routeCatalog = $this->salesRoutePermissionService->routeCatalog();
         foreach ($accounts as $account) {
             $aid = (int)$account->id;
-            $previews = $permissionMap[$aid] ?? [];
-            $account->route_access_summary = $this->buildRouteAccessSummary($previews, $routeCatalog);
+            $account->change_request_requirement_summary = $changeRequestRequirementSummaryMap[$aid] ?? 'すべて必須';
             $account->can_request_delete = $userId > 0
                 && $this->canUserAccessPath(
                     $userId,
@@ -221,11 +220,28 @@ final class AccountController extends Controller
         $account = DB::table('accounts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$account) abort(404);
 
-        $salesRouteViewData = $this->buildSalesRouteViewData($id);
-
         return view('work.accounts.permissions', array_merge([
             'account' => $account,
-        ], $salesRouteViewData));
+        ], $this->accountChangeRequestRequirementService->buildViewData($id)));
+    }
+
+    public function updatePermissions(Request $request, int $id)
+    {
+        $account = DB::table('accounts')->whereNull('deleted_at')->where('id', $id)->first();
+        if (!$account) abort(404);
+
+        $data = $request->validate([
+            'required_entity_types' => 'nullable|array',
+            'required_entity_types.*' => 'string|max:100',
+        ]);
+
+        $this->accountChangeRequestRequirementService->sync(
+            $id,
+            $data['required_entity_types'] ?? [],
+            (int)($request->user()?->id ?? 0)
+        );
+
+        return redirect()->route('work.accounts.permissions', $id)->with('status', '変更申請必須設定を更新しました');
     }
 
     public function update(Request $request, int $id)
@@ -254,7 +270,8 @@ final class AccountController extends Controller
             'assignee_name' => $assigneeName,
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'account',
             $id,
             (array)$account,
@@ -263,7 +280,11 @@ final class AccountController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.edit', $id)->with('status', 'アカウントの更新申請を送信しました');
+        return redirect()->route('work.accounts.edit', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'アカウントを更新しました',
+            'アカウントの更新申請を送信しました'
+        ));
     }
 
     public function store(Request $request)
@@ -311,14 +332,19 @@ final class AccountController extends Controller
             'user_password_hash' => $userPasswordHash,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'account',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.index')->with('status', 'アカウントの作成申請を送信しました');
+        return redirect()->route('work.accounts.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'アカウントを作成しました',
+            'アカウントの作成申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $id)
@@ -326,7 +352,8 @@ final class AccountController extends Controller
         $account = DB::table('accounts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$account) abort(404);
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'account',
             $id,
             (array)$account,
@@ -334,7 +361,11 @@ final class AccountController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.index')->with('status', 'アカウントの削除申請を送信しました');
+        return redirect()->route('work.accounts.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'アカウントを削除しました',
+            'アカウントの削除申請を送信しました'
+        ));
     }
 
     public function updateMemberMemo(Request $request, int $id, int $userId)
@@ -365,7 +396,8 @@ final class AccountController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'account_user_memo',
             $id,
             $before,
@@ -374,7 +406,11 @@ final class AccountController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.accounts.edit', $id)->with('status', '権限設定メモの更新申請を送信しました');
+        return redirect()->route('work.accounts.edit', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '権限設定メモを更新しました',
+            '権限設定メモの更新申請を送信しました'
+        ));
     }
 
     public function storeSalesRoutePermission(Request $request, int $id)

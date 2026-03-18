@@ -227,14 +227,19 @@ final class TemplateController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'product_template',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.templates.index')->with('status', 'テンプレの作成申請を送信しました');
+        return redirect()->route('work.templates.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'テンプレートを作成しました',
+            'テンプレの作成申請を送信しました'
+        ));
     }
 
     public function edit(int $id)
@@ -335,7 +340,8 @@ final class TemplateController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'product_template',
             $id,
             (array)$template,
@@ -344,7 +350,11 @@ final class TemplateController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.templates.edit', $id)->with('status', 'テンプレの更新申請を送信しました');
+        return redirect()->route('work.templates.edit', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'テンプレートを更新しました',
+            'テンプレの更新申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $id)
@@ -352,7 +362,8 @@ final class TemplateController extends Controller
         $template = DB::table('product_templates')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$template) abort(404);
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'product_template',
             $id,
             (array)$template,
@@ -360,6 +371,10 @@ final class TemplateController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.templates.index')->with('status', 'テンプレの削除申請を送信しました');
+        return redirect()->route('work.templates.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'テンプレートを削除しました',
+            'テンプレの削除申請を送信しました'
+        ));
     }
 }

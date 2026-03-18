@@ -89,16 +89,7 @@ final class SalesRoutePermissionService
         if (!$this->userHasSalesRole($userId)) {
             return false;
         }
-
-        $originalPath = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
-        $workPath = $this->toWorkPathForPermission($originalPath);
-
-        /** @var WorkPermissionService $service */
-        $service = app(WorkPermissionService::class);
-        $proxy = Request::create($workPath, $method);
-        $proxy->setUserResolver(static fn () => $request->user());
-
-        return $service->allowsRequest($proxy, $userId);
+        return true;
     }
 
     public function resolveAccountContextId(Request $request): ?int

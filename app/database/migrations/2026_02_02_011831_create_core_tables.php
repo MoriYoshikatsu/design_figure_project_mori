@@ -105,6 +105,7 @@ return new class extends Migration
             $table->unsignedBigInteger('template_version_id');
 
             $table->enum('status', ['DRAFT', 'LOCKED', 'QUOTED', 'EXPIRED']);
+            $table->string('spec_sheet_number')->nullable();
             $table->jsonb('config');  // ユーザー入力の正本（config）
             $table->jsonb('derived')->default('{}'); // fiberCount等
             $table->jsonb('validation_errors')->default('[]'); // エラー配列
@@ -125,6 +126,7 @@ return new class extends Migration
 
             $table->enum('status', ['ISSUED', 'ORDERED', 'CANCELLED']);
             $table->string('currency')->default('JPY');
+            $table->string('spec_sheet_number')->nullable();
 
             $table->decimal('subtotal', 12, 2);
             $table->decimal('discount_total', 12, 2)->default(0);

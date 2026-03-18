@@ -1,3 +1,7 @@
+@php
+    $backToTopLabel = (string)($backToTopLabel ?? 'ページの先頭へ戻る');
+@endphp
+
 <style>
     .back-to-top-btn {
         position: fixed;
@@ -46,7 +50,7 @@
     }
 </style>
 
-<button type="button" class="back-to-top-btn" data-back-to-top aria-label="ページの先頭へ戻る" title="ページの先頭へ戻る">↑</button>
+<button type="button" class="back-to-top-btn" data-back-to-top aria-label="{{ $backToTopLabel }}" title="{{ $backToTopLabel }}">↑</button>
 
 <script>
     (() => {

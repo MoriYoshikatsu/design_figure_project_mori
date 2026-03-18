@@ -58,6 +58,8 @@ final class QuoteService
             $config = $this->decodeJson($session->config) ?? [];
             $derived = $this->decodeJson($session->derived) ?? [];
             $validationErrors = $this->decodeJson($session->validation_errors) ?? [];
+            $specSheetNumber = trim((string)($session->spec_sheet_number ?? ($derived['specSheetNumber'] ?? '')));
+            $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
 
             $dsl = $this->loadTemplateDsl((int)$session->template_version_id) ?? [];
 
@@ -65,6 +67,7 @@ final class QuoteService
             $dslEngine = app(\App\Services\DslEngine::class);
             $eval = $dslEngine->evaluate($config, $dsl);
             $derived = array_merge($derived, $eval['derived'] ?? []);
+            $derived['specSheetNumber'] = $specSheetNumber;
             $validationErrors = $eval['errors'] ?? $validationErrors;
 
             /** @var \App\Services\BomBuilder $bomBuilder */
@@ -103,6 +106,7 @@ final class QuoteService
                 'snapshot' => json_encode([
                     'template_version_id' => (int)$session->template_version_id,
                     'price_book_id' => $pricingResult['price_book_id'] ?? null,
+                    'spec_sheet_number' => $specSheetNumber,
                     'summary_card_fields' => [
                         'quote_id',
                         'status',
@@ -151,6 +155,9 @@ final class QuoteService
                 if ($this->hasQuoteColumn($column)) {
                     $insertPayload[$column] = $value;
                 }
+            }
+            if ($this->hasQuoteColumn('spec_sheet_number')) {
+                $insertPayload['spec_sheet_number'] = $specSheetNumber;
             }
 
             $quoteId = (int)DB::table('quotes')->insertGetId($insertPayload);
