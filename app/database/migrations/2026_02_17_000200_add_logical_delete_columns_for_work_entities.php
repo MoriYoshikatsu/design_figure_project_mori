@@ -9,7 +9,7 @@ return new class extends Migration
     /** @var array<int, string> */
     private array $tables = [
         'accounts',
-        'skus',
+        'parts',
         'price_books',
         'price_book_items',
         'product_templates',

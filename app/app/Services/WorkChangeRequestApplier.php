@@ -43,14 +43,21 @@ final class WorkChangeRequestApplier
                 $accountType = $role === 'customer' ? 'B2C' : 'B2B';
             }
 
-            $id = (int)DB::table('accounts')->insertGetId([
+            $insert = [
                 'account_type' => $accountType,
                 'internal_name' => $after['internal_name'] ?? null,
                 'memo' => $after['memo'] ?? null,
                 'assignee_name' => $after['assignee_name'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+            if (Schema::hasColumn('accounts', 'customer_factor_default')) {
+                $insert['customer_factor_default'] = $this->normalizeCustomerFactorDefault(
+                    $after['customer_factor_default'] ?? null
+                );
+            }
+
+            $id = (int)DB::table('accounts')->insertGetId($insert);
 
             $linkedUserId = 0;
             $userName = trim((string)($after['user_name'] ?? ''));
@@ -104,9 +111,9 @@ final class WorkChangeRequestApplier
             return $id;
         }
 
-        if ($entityType === 'sku') {
-            $id = (int)DB::table('skus')->insertGetId([
-                'sku_code' => $after['sku_code'] ?? '',
+        if (in_array($entityType, ['part', 'sku'], true)) {
+            $insert = [
+                'part_code' => $after['part_code'] ?? ($after['sku_code'] ?? ''),
                 'name' => $after['name'] ?? '',
                 'category' => $after['category'] ?? 'PROC',
                 'active' => (bool)($after['active'] ?? true),
@@ -114,8 +121,13 @@ final class WorkChangeRequestApplier
                 'memo' => $after['memo'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
-            $this->auditLogger->log($actorId, 'SKU_CREATED', 'sku', $id, null, $after);
+            ];
+            if (Schema::hasColumn('parts', 'name_en')) {
+                $insert['name_en'] = $after['name_en'] ?? null;
+            }
+
+            $id = (int)DB::table('parts')->insertGetId($insert);
+            $this->auditLogger->log($actorId, 'PART_CREATED', 'part', $id, null, $after);
             return $id;
         }
 
@@ -143,7 +155,7 @@ final class WorkChangeRequestApplier
 
             $insert = [
                 'price_book_id' => (int)($after['price_book_id'] ?? 0),
-                'sku_id' => (int)($after['sku_id'] ?? 0),
+                'part_id' => (int)($after['part_id'] ?? ($after['sku_id'] ?? 0)),
                 'pricing_model' => $pricingModel,
                 'unit_price' => $after['unit_price'] ?? null,
                 'formula' => !empty($after['formula']) ? json_encode($after['formula'], JSON_UNESCAPED_UNICODE) : null,
@@ -238,8 +250,8 @@ final class WorkChangeRequestApplier
                 'priority' => (int)($after['priority'] ?? 100),
                 'include_tags_json' => json_encode($this->normalizeJsonArrayField($after['include_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode($this->normalizeJsonArrayField($after['exclude_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_categories_json'] ?? []), JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_codes_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_part_categories_json'] ?? ($after['required_sku_categories_json'] ?? [])), JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_part_codes_json'] ?? ($after['required_sku_codes_json'] ?? [])), JSON_UNESCAPED_UNICODE),
                 'always_apply' => (bool)($after['always_apply'] ?? false),
                 'active' => (bool)($after['active'] ?? true),
                 'memo' => $after['memo'] ?? null,
@@ -264,16 +276,26 @@ final class WorkChangeRequestApplier
         $after = is_array($after) ? $after : [];
 
         if ($entityType === 'account') {
+            $update = [
+                'account_type' => $after['account_type'] ?? null,
+                'internal_name' => $after['internal_name'] ?? null,
+                'memo' => $after['memo'] ?? null,
+                'assignee_name' => $after['assignee_name'] ?? null,
+                'updated_at' => now(),
+            ];
+            if (
+                Schema::hasColumn('accounts', 'customer_factor_default')
+                && array_key_exists('customer_factor_default', $after)
+            ) {
+                $update['customer_factor_default'] = $this->normalizeCustomerFactorDefault(
+                    $after['customer_factor_default']
+                );
+            }
+
             DB::table('accounts')
                 ->whereNull('deleted_at')
                 ->where('id', $entityId)
-                ->update([
-                    'account_type' => $after['account_type'] ?? null,
-                    'internal_name' => $after['internal_name'] ?? null,
-                    'memo' => $after['memo'] ?? null,
-                    'assignee_name' => $after['assignee_name'] ?? null,
-                    'updated_at' => now(),
-                ]);
+                ->update($update);
             $this->auditLogger->log($actorId, 'ACCOUNT_UPDATED', 'account', $entityId, $before, $after);
             return $entityId;
         }
@@ -305,6 +327,17 @@ final class WorkChangeRequestApplier
                 ]);
             $this->auditLogger->log($actorId, 'ACCOUNT_USER_MEMO_UPDATED', 'account_user', null, $before, $after);
             return 0;
+        }
+
+        if ($entityType === 'account_change_request_requirement') {
+            $accountId = (int)($after['account_id'] ?? $entityId);
+            app(AccountChangeRequestRequirementService::class)->sync(
+                $accountId,
+                is_array($after['required_entity_types'] ?? null) ? $after['required_entity_types'] : [],
+                $actorId
+            );
+            $this->auditLogger->log($actorId, 'ACCOUNT_CHANGE_REQUEST_REQUIREMENT_UPDATED', 'account_change_request_requirement', $accountId, $before, $after);
+            return $accountId;
         }
 
         if ($entityType === 'account_sales_route_permission') {
@@ -380,17 +413,22 @@ final class WorkChangeRequestApplier
             return $accountId;
         }
 
-        if ($entityType === 'sku') {
-            DB::table('skus')->whereNull('deleted_at')->where('id', $entityId)->update([
-                'sku_code' => $after['sku_code'] ?? '',
+        if (in_array($entityType, ['part', 'sku'], true)) {
+            $update = [
+                'part_code' => $after['part_code'] ?? ($after['sku_code'] ?? ''),
                 'name' => $after['name'] ?? '',
                 'category' => $after['category'] ?? 'PROC',
                 'active' => (bool)($after['active'] ?? true),
                 'attributes' => json_encode($after['attributes'] ?? [], JSON_UNESCAPED_UNICODE),
                 'memo' => $after['memo'] ?? null,
                 'updated_at' => now(),
-            ]);
-            $this->auditLogger->log($actorId, 'SKU_UPDATED', 'sku', $entityId, $before, $after);
+            ];
+            if (Schema::hasColumn('parts', 'name_en')) {
+                $update['name_en'] = $after['name_en'] ?? null;
+            }
+
+            DB::table('parts')->whereNull('deleted_at')->where('id', $entityId)->update($update);
+            $this->auditLogger->log($actorId, 'PART_UPDATED', 'part', $entityId, $before, $after);
             return $entityId;
         }
 
@@ -416,7 +454,7 @@ final class WorkChangeRequestApplier
             }
 
             $update = [
-                'sku_id' => (int)($after['sku_id'] ?? 0),
+                'part_id' => (int)($after['part_id'] ?? ($after['sku_id'] ?? 0)),
                 'pricing_model' => $pricingModel,
                 'unit_price' => $after['unit_price'] ?? null,
                 'formula' => !empty($after['formula']) ? json_encode($after['formula'], JSON_UNESCAPED_UNICODE) : null,
@@ -505,8 +543,8 @@ final class WorkChangeRequestApplier
                 'priority' => (int)($after['priority'] ?? 100),
                 'include_tags_json' => json_encode($this->normalizeJsonArrayField($after['include_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode($this->normalizeJsonArrayField($after['exclude_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_categories_json'] ?? []), JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_sku_codes_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_part_categories_json'] ?? ($after['required_sku_categories_json'] ?? [])), JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_part_codes_json'] ?? ($after['required_sku_codes_json'] ?? [])), JSON_UNESCAPED_UNICODE),
                 'always_apply' => (bool)($after['always_apply'] ?? false),
                 'active' => (bool)($after['active'] ?? true),
                 'memo' => $after['memo'] ?? null,
@@ -658,7 +696,8 @@ final class WorkChangeRequestApplier
         }
 
         $map = [
-            'sku' => 'skus',
+            'part' => 'parts',
+            'sku' => 'parts',
             'price_book' => 'price_books',
             'price_book_item' => 'price_book_items',
             'product_template' => 'product_templates',
@@ -960,6 +999,15 @@ final class WorkChangeRequestApplier
             return 'source:' . $source . ';';
         }
         return 'source:' . $source . ';' . $memoValue;
+    }
+
+    private function normalizeCustomerFactorDefault(mixed $value): float
+    {
+        if (!is_numeric($value)) {
+            return 1.0;
+        }
+
+        return max(0.0, (float)$value);
     }
 
     private function hasQuoteColumn(string $column): bool

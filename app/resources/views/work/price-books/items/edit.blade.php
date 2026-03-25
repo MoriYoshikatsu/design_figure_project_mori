@@ -9,10 +9,10 @@
         <input type="hidden" name="_mode" value="submit">
         <div class="row">
             <div class="col">
-                <label>SKU名</label>
-                <select name="sku_id">
+                <label>Part</label>
+                <select name="part_id">
                     @foreach($skus as $sku)
-                        <option value="{{ $sku->id }}" @if((int)$item->sku_id === (int)$sku->id) selected @endif>
+                        <option value="{{ $sku->id }}" @if((int)$item->part_id === (int)$sku->id) selected @endif>
                             {{ $sku->name }}
                         </option>
                     @endforeach

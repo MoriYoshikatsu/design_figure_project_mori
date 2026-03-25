@@ -210,7 +210,7 @@ final class QuoteCalculationEngine
 
         $skuCodes = [];
         foreach ($bom as $row) {
-            $code = trim((string)($row['sku_code'] ?? ''));
+            $code = trim((string)($row['part_code'] ?? ($row['sku_code'] ?? '')));
             if ($code !== '') {
                 $skuCodes[$code] = true;
             }
@@ -218,11 +218,11 @@ final class QuoteCalculationEngine
 
         $skuMetaByCode = [];
         if (!empty($skuCodes)) {
-            $rows = DB::table('skus')
-                ->whereIn('sku_code', array_keys($skuCodes))
-                ->get(['id', 'sku_code', 'category']);
+            $rows = DB::table('parts')
+                ->whereIn('part_code', array_keys($skuCodes))
+                ->get(['id', 'part_code', 'category']);
             foreach ($rows as $row) {
-                $skuMetaByCode[(string)$row->sku_code] = [
+                $skuMetaByCode[(string)$row->part_code] = [
                     'id' => (int)$row->id,
                     'category' => strtoupper((string)$row->category),
                 ];
@@ -233,7 +233,7 @@ final class QuoteCalculationEngine
         $partsBreakdown = [];
 
         foreach ($bom as $index => $row) {
-            $skuCode = trim((string)($row['sku_code'] ?? ''));
+            $skuCode = trim((string)($row['part_code'] ?? ($row['sku_code'] ?? '')));
             if ($skuCode === '') {
                 continue;
             }
@@ -252,7 +252,7 @@ final class QuoteCalculationEngine
             if ($category !== 'PROC') {
                 $partsUnitCost += $lineTotal;
                 $partsBreakdown[] = [
-                    'sku_code' => $skuCode,
+                    'part_code' => $skuCode,
                     'quantity' => $this->normalizeAmount($qty),
                     'line_total' => $this->normalizeAmount($lineTotal),
                     'category' => $category,

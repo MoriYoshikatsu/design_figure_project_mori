@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="780" viewBox="0 0 1400 780">
+  <defs>
+    <style>
+      .title { font: 700 28px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .sub { font: 500 16px 'Noto Sans JP', sans-serif; fill: #334155; }
+      .label { font: 700 18px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .text { font: 500 14px 'Noto Sans JP', sans-serif; fill: #1e293b; }
+      .small { font: 500 12px 'Noto Sans JP', sans-serif; fill: #475569; }
+      .panel { fill: #fff; stroke: #cbd5e1; stroke-width: 2; rx: 18; ry: 18; }
+      .route { fill: #eff6ff; stroke: #60a5fa; }
+      .ctrl { fill: #fef3c7; stroke: #f59e0b; }
+      .svc { fill: #ecfdf5; stroke: #22c55e; }
+      .view { fill: #f5f3ff; stroke: #8b5cf6; }
+      .db { fill: #fff7ed; stroke: #fb923c; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="780" fill="#f8fafc"/>
+  <text x="50" y="55" class="title">図6 生コードとの対応レイヤー</text>
+  <text x="50" y="85" class="sub">第6章で使う「route / controller or livewire / view / main services / main tables」の見方を示した図です。</text>
+
+  <rect x="70" y="170" width="220" height="360" class="panel route"/>
+  <text x="180" y="205" text-anchor="middle" class="label">Route</text>
+  <text x="100" y="250" class="text">/configurator</text>
+  <text x="100" y="280" class="text">/quotes/{id}</text>
+  <text x="100" y="310" class="text">/work/accounts/*</text>
+  <text x="100" y="340" class="text">/work/parts/*</text>
+  <text x="100" y="370" class="text">/work/quotes/*</text>
+  <text x="100" y="400" class="text">/work/change-requests/*</text>
+
+  <rect x="340" y="170" width="220" height="360" class="panel ctrl"/>
+  <text x="450" y="205" text-anchor="middle" class="label">Controller / Livewire</text>
+  <text x="370" y="250" class="text">Configurator</text>
+  <text x="370" y="280" class="text">QuoteController</text>
+  <text x="370" y="310" class="text">AccountController</text>
+  <text x="370" y="340" class="text">CatalogController</text>
+  <text x="370" y="370" class="text">ChangeRequestController</text>
+  <text x="370" y="400" class="text">ChangeRequestReviewController</text>
+
+  <rect x="610" y="170" width="260" height="360" class="panel svc"/>
+  <text x="740" y="205" text-anchor="middle" class="label">Main Services</text>
+  <text x="640" y="250" class="text">QuoteService</text>
+  <text x="640" y="280" class="text">QuoteCalculationEngine</text>
+  <text x="640" y="310" class="text">PricingService</text>
+  <text x="640" y="340" class="text">WorkChangeRequestService</text>
+  <text x="640" y="370" class="text">WorkChangeRequestApplier</text>
+  <text x="640" y="400" class="text">SvgRenderer / SnapshotPdfService</text>
+
+  <rect x="920" y="170" width="200" height="360" class="panel view"/>
+  <text x="1020" y="205" text-anchor="middle" class="label">View</text>
+  <text x="950" y="250" class="text">configurator.blade.php</text>
+  <text x="950" y="280" class="text">quote_show.blade.php</text>
+  <text x="950" y="310" class="text">work/*/*.blade.php</text>
+  <text x="950" y="340" class="text">snapshot_bundle.blade.php</text>
+  <text x="950" y="370" class="text">pdf/*.blade.php</text>
+
+  <rect x="1170" y="170" width="180" height="360" class="panel db"/>
+  <text x="1260" y="205" text-anchor="middle" class="label">Main Tables</text>
+  <text x="1200" y="250" class="text">accounts</text>
+  <text x="1200" y="280" class="text">parts</text>
+  <text x="1200" y="310" class="text">price_books</text>
+  <text x="1200" y="340" class="text">configurator_sessions</text>
+  <text x="1200" y="370" class="text">quotes</text>
+  <text x="1200" y="400" class="text">change_requests</text>
+  <text x="1200" y="430" class="text">audit_logs</text>
+
+  <path d="M290 350 H320" class="arrow"/>
+  <path d="M560 350 H590" class="arrow"/>
+  <path d="M870 350 H900" class="arrow"/>
+  <path d="M1120 350 H1150" class="arrow"/>
+
+  <rect x="150" y="600" width="1100" height="100" class="panel"/>
+  <text x="700" y="638" text-anchor="middle" class="text">第6章では、この 5 層を画面群ごとに横並びで整理し、「どの画面がどのロジックを通ってどのテーブルへ着地するか」を最短距離で追えるようにする。</text>
+  <text x="700" y="664" text-anchor="middle" class="small">実装調査の入口として使うものであり、全ソースの詳細解説ではなく、保守時の導線を示すことを目的とする。</text>
+</svg>

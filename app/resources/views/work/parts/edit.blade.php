@@ -1,18 +1,24 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>SKU編集</h1>
-    <form method="POST" action="{{ route('work.skus.edit-request.update', $sku->id) }}">
+    <h1>Edit Part</h1>
+    <form method="POST" action="{{ route('work.parts.edit-request.update', $sku->id) }}">
         @csrf
         <input type="hidden" name="_mode" value="submit">
         <div class="row">
             <div class="col">
-                <label>SKUコード</label>
-                <input type="text" name="sku_code" value="{{ old('sku_code', $sku->sku_code) }}">
+                <label>Part code</label>
+                <input type="text" name="part_code" value="{{ old('part_code', $sku->part_code) }}">
             </div>
             <div class="col">
                 <label>名称</label>
                 <input type="text" name="name" value="{{ old('name', $sku->name) }}">
+            </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+            <div class="col">
+                <label>英語名称</label>
+                <input type="text" name="name_en" value="{{ old('name_en', $sku->name_en ?? '') }}">
             </div>
         </div>
         <div class="row" style="margin-top:8px;">
@@ -43,9 +49,9 @@
             <button type="submit">更新</button>
         </div>
     </form>
-    <form method="POST" action="{{ route('work.skus.edit-request.delete', $sku->id) }}" style="display:inline;">
+    <form method="POST" action="{{ route('work.parts.edit-request.delete', $sku->id) }}" style="display:inline;">
         @csrf
         <input type="hidden" name="_mode" value="submit">
-        <button type="submit" onclick="return confirm('このSKUの削除申請を送信しますか？')">削除申請</button>
+        <button type="submit" onclick="return confirm('このPartの削除申請を送信しますか？')">削除申請</button>
     </form>
 @endsection

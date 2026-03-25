@@ -76,6 +76,21 @@
                         <label>担当者名</label>
                         <input type="text" name="assignee_name" value="{{ old('assignee_name') }}" placeholder="例: 山田 太郎">
                     </div>
+                    @if(($supportsCustomerFactorDefault ?? false) === true)
+                        <div class="col">
+                            <label>顧客別仕切係数</label>
+                            <input
+                                type="number"
+                                name="customer_factor_default"
+                                value="{{ old('customer_factor_default', '1') }}"
+                                min="0"
+                                step="0.000001"
+                                inputmode="decimal"
+                                placeholder="例: 0.95"
+                            >
+                            <div class="muted">そのアカウントの見積既定値に自動適用されます。</div>
+                        </div>
+                    @endif
                     <div class="actions" style="margin-top:8px;">
                         <button type="submit">登録申請を送信</button>
                     </div>
@@ -117,7 +132,7 @@
                         <div>{{ $a->role_list ?: '未設定' }}</div>
                         {{-- <div class="muted">{{ $a->member_summary ?? '-' }}</div> --}}
                     </td>
-                    <td style="white-space:pre-line;">{{ $a->change_request_requirement_summary ?? 'すべて必須' }}</td>
+                    <td style="white-space:pre-line;">{{ $a->change_request_requirement_summary ?? '作成・更新はすべて必須' }}</td>
                     <td>{{ $a->memo ?? '-' }}</td>
                     <td>{{ $a->created_at }}</td>
                     <td>{{ $a->updated_at }}</td>

@@ -177,7 +177,7 @@ final class LaborCostEngine
     {
         $skuCodes = [];
         foreach ($bom as $row) {
-            $code = strtoupper(trim((string)($row['sku_code'] ?? '')));
+            $code = strtoupper(trim((string)($row['part_code'] ?? ($row['sku_code'] ?? ''))));
             if ($code !== '') {
                 $skuCodes[$code] = true;
             }
@@ -186,12 +186,12 @@ final class LaborCostEngine
         $tags = [];
         $categories = [];
         $skuMetaByCode = [];
-        if (!empty($skuCodes) && $this->hasTable('skus')) {
-            $rows = DB::table('skus')
-                ->whereIn('sku_code', array_keys($skuCodes))
-                ->get(['sku_code', 'category', 'attributes']);
+        if (!empty($skuCodes) && $this->hasTable('parts')) {
+            $rows = DB::table('parts')
+                ->whereIn('part_code', array_keys($skuCodes))
+                ->get(['part_code', 'category', 'attributes']);
             foreach ($rows as $row) {
-                $skuCode = strtoupper(trim((string)($row->sku_code ?? '')));
+                $skuCode = strtoupper(trim((string)($row->part_code ?? '')));
                 if ($skuCode === '') {
                     continue;
                 }
@@ -231,7 +231,7 @@ final class LaborCostEngine
         return [
             'tags' => $tags,
             'categories' => $categories,
-            'sku_codes' => $skuCodes,
+            'part_codes' => $skuCodes,
         ];
     }
 
@@ -344,7 +344,7 @@ final class LaborCostEngine
                 'r.priority',
                 'r.include_tags_json',
                 'r.exclude_tags_json',
-                'r.required_sku_codes_json',
+                'r.required_part_codes_json',
                 'r.always_apply',
                 'p.process_code',
             ]);
@@ -360,7 +360,7 @@ final class LaborCostEngine
                 'include_tags' => $this->normalizeStringList($this->decodeJsonArray($row->include_tags_json), false),
                 'exclude_tags' => $this->normalizeStringList($this->decodeJsonArray($row->exclude_tags_json), false),
                 'required_categories' => [],
-                'required_sku_codes' => $this->normalizeStringList($this->decodeJsonArray($row->required_sku_codes_json), true),
+                'required_part_codes' => $this->normalizeStringList($this->decodeJsonArray($row->required_part_codes_json), true),
                 'always_apply' => (bool)$row->always_apply,
                 'process_code' => (string)$row->process_code,
             ]);
@@ -403,7 +403,7 @@ final class LaborCostEngine
         }
 
         $tags = $context['tags'] ?? [];
-        $skuCodes = $context['sku_codes'] ?? [];
+        $skuCodes = $context['part_codes'] ?? [];
 
         foreach (($rule['include_tags'] ?? []) as $tag) {
             if (!isset($tags[$tag])) {
@@ -415,14 +415,14 @@ final class LaborCostEngine
                 return false;
             }
         }
-        foreach (($rule['required_sku_codes'] ?? []) as $skuCode) {
+        foreach (($rule['required_part_codes'] ?? []) as $skuCode) {
             if (!isset($skuCodes[$skuCode])) {
                 return false;
             }
         }
 
         return !empty($rule['include_tags'])
-            || !empty($rule['required_sku_codes']);
+            || !empty($rule['required_part_codes']);
     }
 
     /**

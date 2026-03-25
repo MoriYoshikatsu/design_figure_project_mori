@@ -35,8 +35,8 @@ final class PricingServicePriceBookFallbackTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $skuId = (int)DB::table('skus')->insertGetId([
-            'sku_code' => 'FIBER_SMF28E+',
+        $skuId = (int)DB::table('parts')->insertGetId([
+            'part_code' => 'FIBER_SMF28E+',
             'category' => 'FIBER',
             'active' => true,
             'created_at' => now(),
@@ -45,7 +45,7 @@ final class PricingServicePriceBookFallbackTest extends TestCase
 
         DB::table('price_book_items')->insert([
             'price_book_id' => $priceBookId,
-            'sku_id' => $skuId,
+            'part_id' => $skuId,
             'pricing_model' => 'FIXED',
             'unit_price' => 1200,
             'price_per_m' => null,
@@ -57,7 +57,7 @@ final class PricingServicePriceBookFallbackTest extends TestCase
 
         $result = app(PricingService::class)->price(1, [
             [
-                'sku_code' => 'FIBER_SMF28E+',
+                'part_code' => 'FIBER_SMF28E+',
                 'quantity' => 2,
                 'options' => [],
                 'source_path' => '$.fibers[0]',
@@ -75,7 +75,7 @@ final class PricingServicePriceBookFallbackTest extends TestCase
     {
         Schema::dropIfExists('price_book_items');
         Schema::dropIfExists('price_books');
-        Schema::dropIfExists('skus');
+        Schema::dropIfExists('parts');
         Schema::dropIfExists('accounts');
 
         Schema::create('accounts', function (Blueprint $table) {
@@ -94,9 +94,9 @@ final class PricingServicePriceBookFallbackTest extends TestCase
             $table->timestamps();
         });
 
-        Schema::create('skus', function (Blueprint $table) {
+        Schema::create('parts', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('sku_code')->unique();
+            $table->string('part_code')->unique();
             $table->string('category')->nullable();
             $table->boolean('active')->default(true);
             $table->timestamps();
@@ -105,7 +105,7 @@ final class PricingServicePriceBookFallbackTest extends TestCase
         Schema::create('price_book_items', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->unsignedBigInteger('price_book_id');
-            $table->unsignedBigInteger('sku_id');
+            $table->unsignedBigInteger('part_id');
             $table->string('pricing_model')->nullable();
             $table->decimal('unit_price', 12, 2)->nullable();
             $table->decimal('price_per_m', 12, 4)->nullable();

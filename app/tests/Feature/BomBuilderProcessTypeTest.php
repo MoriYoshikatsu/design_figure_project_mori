@@ -40,7 +40,7 @@ final class BomBuilderProcessTypeTest extends TestCase
         $bom = $builder->build($config, [], []);
         $processRow = $bom[0] ?? [];
 
-        $this->assertSame($expectedSku, (string)($processRow['sku_code'] ?? ''));
+        $this->assertSame($expectedSku, (string)($processRow['part_code'] ?? ''));
         $this->assertEquals($expectedQty, (int)($processRow['quantity'] ?? 0));
         $this->assertSame('$.processType', (string)($processRow['source_path'] ?? ''));
 

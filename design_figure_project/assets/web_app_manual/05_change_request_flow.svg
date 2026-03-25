@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="840" viewBox="0 0 1400 840">
+  <defs>
+    <style>
+      .title { font: 700 28px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .sub { font: 500 16px 'Noto Sans JP', sans-serif; fill: #334155; }
+      .label { font: 700 18px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .text { font: 500 14px 'Noto Sans JP', sans-serif; fill: #1e293b; }
+      .small { font: 500 12px 'Noto Sans JP', sans-serif; fill: #475569; }
+      .panel { fill: #fff; stroke: #cbd5e1; stroke-width: 2; rx: 18; ry: 18; }
+      .input { fill: #eff6ff; stroke: #60a5fa; }
+      .pending { fill: #fef3c7; stroke: #f59e0b; }
+      .approved { fill: #ecfdf5; stroke: #22c55e; }
+      .rejected { fill: #fee2e2; stroke: #ef4444; }
+      .audit { fill: #f5f3ff; stroke: #8b5cf6; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="840" fill="#f8fafc"/>
+  <text x="50" y="55" class="title">図5 変更申請フロー</text>
+  <text x="50" y="85" class="sub">申請が必要な更新がどのように pending 化され、承認・却下・監査へ流れるかを示した図です。</text>
+
+  <rect x="70" y="170" width="260" height="120" class="panel input"/>
+  <text x="100" y="210" class="label">1. 業務画面で更新</text>
+  <text x="100" y="238" class="text">例: 見積編集 / Part 編集 / アカウント設定</text>
+  <text x="100" y="260" class="small">フォーム送信時に変更申請必須設定を判定する</text>
+
+  <rect x="400" y="170" width="260" height="120" class="panel pending"/>
+  <text x="430" y="210" class="label">2. 変更申請作成</text>
+  <text x="430" y="238" class="text">change_requests</text>
+  <text x="430" y="260" class="small">before / after / コメント / 対象アカウントを保存</text>
+
+  <rect x="750" y="100" width="260" height="120" class="panel approved"/>
+  <text x="780" y="140" class="label">3-A. 承認</text>
+  <text x="780" y="168" class="text">WorkChangeRequestApplier</text>
+  <text x="780" y="190" class="small">対象テーブルへ反映し、必要に応じて見積履歴も更新</text>
+
+  <rect x="750" y="260" width="260" height="120" class="panel rejected"/>
+  <text x="780" y="300" class="label">3-B. 却下</text>
+  <text x="780" y="328" class="text">status = REJECTED</text>
+  <text x="780" y="350" class="small">元データは保持し、却下コメントを記録する</text>
+
+  <rect x="1090" y="100" width="250" height="120" class="panel audit"/>
+  <text x="1120" y="140" class="label">4-A. 監査ログ</text>
+  <text x="1120" y="168" class="text">audit_logs</text>
+  <text x="1120" y="190" class="small">誰が何を承認・反映したかを残す</text>
+
+  <rect x="1090" y="260" width="250" height="120" class="panel audit"/>
+  <text x="1120" y="300" class="label">4-B. 計算履歴</text>
+  <text x="1120" y="328" class="text">quote_calc_runs</text>
+  <text x="1120" y="350" class="small">見積系は承認/却下結果も履歴として残す</text>
+
+  <path d="M330 230 H380" class="arrow"/>
+  <path d="M660 230 H730 V160 H740" class="arrow"/>
+  <path d="M660 230 H730 V320 H740" class="arrow"/>
+  <path d="M1010 160 H1070" class="arrow"/>
+  <path d="M1010 320 H1070" class="arrow"/>
+
+  <rect x="120" y="500" width="1180" height="220" class="panel"/>
+  <text x="160" y="545" class="label">実務上の見方</text>
+  <text x="160" y="580" class="text">- 「申請中」と表示されている間は、申請内容が保存されたことを意味するが、必ずしも現物データへ反映されたことは意味しない。</text>
+  <text x="160" y="612" class="text">- 承認後は対象データと監査ログが更新され、見積系では計算履歴に承認 run が追加される。</text>
+  <text x="160" y="644" class="text">- 却下後は元データを維持しつつ、申請詳細で差分と却下コメントを確認できる。</text>
+  <text x="160" y="676" class="text">- 削除は設定に関係なく常に申請必須で、反映後も監査ログから追跡できる。</text>
+</svg>

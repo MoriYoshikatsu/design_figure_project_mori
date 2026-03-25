@@ -67,7 +67,7 @@ final class LaborCostController extends Controller
                     'priority' => (int)$row->priority,
                     'include_tags' => $this->decodeJsonArray($row->include_tags_json),
                     'exclude_tags' => $this->decodeJsonArray($row->exclude_tags_json),
-                    'required_sku_codes' => $this->decodeJsonArray($row->required_sku_codes_json),
+                    'required_part_codes' => $this->decodeJsonArray($row->required_part_codes_json),
                     'always_apply' => (bool)$row->always_apply,
                     'active' => (bool)$row->active,
                     'memo' => (string)($row->memo ?? ''),
@@ -77,18 +77,18 @@ final class LaborCostController extends Controller
             ->all();
 
         $skuOptionsByCategory = [];
-        $skuRows = DB::table('skus')
+        $skuRows = DB::table('parts')
             ->whereNull('deleted_at')
             ->orderBy('category')
-            ->orderBy('sku_code')
-            ->get(['sku_code', 'name', 'category', 'active']);
+            ->orderBy('part_code')
+            ->get(['part_code', 'name', 'category', 'active']);
         foreach ($skuRows as $row) {
             $category = strtoupper(trim((string)($row->category ?? '')));
             if ($category === '') {
                 $category = 'OTHER';
             }
             $skuOptionsByCategory[$category][] = [
-                'sku_code' => strtoupper(trim((string)($row->sku_code ?? ''))),
+                'part_code' => strtoupper(trim((string)($row->part_code ?? ''))),
                 'name' => trim((string)($row->name ?? '')),
                 'active' => (bool)($row->active ?? true),
             ];
@@ -376,8 +376,8 @@ final class LaborCostController extends Controller
             'priority' => 'nullable|integer',
             'include_tags' => 'nullable|string|max:5000',
             'exclude_tags' => 'nullable|string|max:5000',
-            'required_sku_codes' => 'nullable|array',
-            'required_sku_codes.*' => 'string|max:255',
+            'required_part_codes' => 'nullable|array',
+            'required_part_codes.*' => 'string|max:255',
             'always_apply' => 'nullable|boolean',
             'active' => 'nullable|boolean',
             'memo' => 'nullable|string|max:5000',
@@ -390,8 +390,8 @@ final class LaborCostController extends Controller
             'priority' => (int)($data['priority'] ?? 100),
             'include_tags_json' => $this->parseCsvList((string)($data['include_tags'] ?? ''), false),
             'exclude_tags_json' => $this->parseCsvList((string)($data['exclude_tags'] ?? ''), false),
-            'required_sku_categories_json' => [],
-            'required_sku_codes_json' => $this->normalizeListInput($data['required_sku_codes'] ?? [], true),
+            'required_part_categories_json' => [],
+            'required_part_codes_json' => $this->normalizeListInput($data['required_part_codes'] ?? [], true),
             'always_apply' => $request->boolean('always_apply', false),
             'active' => $request->boolean('active', true),
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
@@ -426,8 +426,8 @@ final class LaborCostController extends Controller
             'priority' => 'nullable|integer',
             'include_tags' => 'nullable|string|max:5000',
             'exclude_tags' => 'nullable|string|max:5000',
-            'required_sku_codes' => 'nullable|array',
-            'required_sku_codes.*' => 'string|max:255',
+            'required_part_codes' => 'nullable|array',
+            'required_part_codes.*' => 'string|max:255',
             'always_apply' => 'nullable|boolean',
             'active' => 'nullable|boolean',
             'memo' => 'nullable|string|max:5000',
@@ -441,8 +441,8 @@ final class LaborCostController extends Controller
             'priority' => (int)($data['priority'] ?? 100),
             'include_tags_json' => $this->parseCsvList((string)($data['include_tags'] ?? ''), false),
             'exclude_tags_json' => $this->parseCsvList((string)($data['exclude_tags'] ?? ''), false),
-            'required_sku_categories_json' => [],
-            'required_sku_codes_json' => $this->normalizeListInput($data['required_sku_codes'] ?? [], true),
+            'required_part_categories_json' => [],
+            'required_part_codes_json' => $this->normalizeListInput($data['required_part_codes'] ?? [], true),
             'always_apply' => $request->boolean('always_apply', false),
             'active' => $request->boolean('active', false),
             'memo' => $this->normalizeMemo($data['memo'] ?? null),
@@ -527,8 +527,8 @@ final class LaborCostController extends Controller
             'priority' => (int)$row->priority,
             'include_tags_json' => $this->decodeJsonArray($row->include_tags_json),
             'exclude_tags_json' => $this->decodeJsonArray($row->exclude_tags_json),
-            'required_sku_categories_json' => $this->decodeJsonArray($row->required_sku_categories_json),
-            'required_sku_codes_json' => $this->decodeJsonArray($row->required_sku_codes_json),
+            'required_part_categories_json' => $this->decodeJsonArray($row->required_part_categories_json),
+            'required_part_codes_json' => $this->decodeJsonArray($row->required_part_codes_json),
             'always_apply' => (bool)$row->always_apply,
             'active' => (bool)$row->active,
             'memo' => (string)($row->memo ?? ''),

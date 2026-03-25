@@ -3,7 +3,7 @@
     $rules = is_array($rules ?? null) ? $rules : [];
     $processOptions = is_array($processOptions ?? null) ? $processOptions : [];
     $skuOptionsByCategory = is_array($skuOptionsByCategory ?? null) ? $skuOptionsByCategory : [];
-    $createRequiredCodes = is_array(old('required_sku_codes')) ? old('required_sku_codes') : [];
+    $createRequiredCodes = is_array(old('required_part_codes')) ? old('required_part_codes') : [];
     $createRequiredCodeSet = [];
     foreach ($createRequiredCodes as $code) {
         $normalizedCode = strtoupper(trim((string)$code));
@@ -94,14 +94,14 @@
                     <span class="labor-field-label">主条件の品目コード（複数選択した全コードがBOMに含まれるとき一致）</span>
                     <div class="labor-sku-picker">
                         @if(empty($skuOptionsByCategory))
-                            <div class="labor-compact-note">選択可能なSKUがありません。</div>
+                            <div class="labor-compact-note">選択可能なPartがありません。</div>
                         @else
                             <div class="labor-sku-picker-groups">
                                 @foreach($skuOptionsByCategory as $category => $skuRows)
                                     @php
                                         $groupHasSelected = false;
                                         foreach ($skuRows as $skuRow) {
-                                            $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                            $skuCode = strtoupper(trim((string)($skuRow['part_code'] ?? '')));
                                             if (isset($createRequiredCodeSet[$skuCode])) {
                                                 $groupHasSelected = true;
                                                 break;
@@ -113,16 +113,16 @@
                                         <div class="labor-sku-grid">
                                             @foreach($skuRows as $skuRow)
                                                 @php
-                                                    $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                                    $skuCode = strtoupper(trim((string)($skuRow['part_code'] ?? '')));
                                                     $skuName = trim((string)($skuRow['name'] ?? ''));
                                                     $isChecked = isset($createRequiredCodeSet[$skuCode]);
                                                 @endphp
                                                 <label class="labor-sku-option">
-                                                    <input type="checkbox" name="required_sku_codes[]" value="{{ $skuCode }}" @if($isChecked) checked @endif>
+                                                    <input type="checkbox" name="required_part_codes[]" value="{{ $skuCode }}" @if($isChecked) checked @endif>
                                                     <span>
                                                         <div class="labor-sku-option-code">{{ $skuCode }}</div>
                                                         <div class="labor-sku-option-name">{{ $skuName !== '' ? $skuName : '名称未設定' }}</div>
-                                                        <div class="labor-sku-option-meta">{{ !empty($skuRow['active']) ? '有効SKU' : '無効SKU' }}</div>
+                                                        <div class="labor-sku-option-meta">{{ !empty($skuRow['active']) ? '有効Part' : '無効Part' }}</div>
                                                     </span>
                                                 </label>
                                             @endforeach
@@ -145,7 +145,7 @@
         $excludeTags = implode(',', $rule['exclude_tags'] ?? []);
         $requiredCodes = array_values(array_map(
             static fn ($code): string => strtoupper(trim((string)$code)),
-            is_array($rule['required_sku_codes'] ?? null) ? $rule['required_sku_codes'] : []
+            is_array($rule['required_part_codes'] ?? null) ? $rule['required_part_codes'] : []
         ));
         $requiredCodeSet = array_fill_keys(array_filter($requiredCodes), true);
     @endphp
@@ -215,14 +215,14 @@
                             <div class="labor-rule-help">選択した全コードがBOMに含まれるときに一致します。</div>
                             <div class="labor-sku-picker">
                                 @if(empty($skuOptionsByCategory))
-                                    <div class="labor-compact-note">選択可能なSKUがありません。</div>
+                                    <div class="labor-compact-note">選択可能なPartがありません。</div>
                                 @else
                                     <div class="labor-sku-picker-groups">
                                         @foreach($skuOptionsByCategory as $category => $skuRows)
                                             @php
                                                 $groupHasSelected = false;
                                                 foreach ($skuRows as $skuRow) {
-                                                    $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                                    $skuCode = strtoupper(trim((string)($skuRow['part_code'] ?? '')));
                                                     if (isset($requiredCodeSet[$skuCode])) {
                                                         $groupHasSelected = true;
                                                         break;
@@ -234,16 +234,16 @@
                                                 <div class="labor-sku-grid">
                                                     @foreach($skuRows as $skuRow)
                                                         @php
-                                                            $skuCode = strtoupper(trim((string)($skuRow['sku_code'] ?? '')));
+                                                            $skuCode = strtoupper(trim((string)($skuRow['part_code'] ?? '')));
                                                             $skuName = trim((string)($skuRow['name'] ?? ''));
                                                             $isChecked = isset($requiredCodeSet[$skuCode]);
                                                         @endphp
                                                         <label class="labor-sku-option">
-                                                            <input type="checkbox" name="required_sku_codes[]" value="{{ $skuCode }}" @if($isChecked) checked @endif>
+                                                            <input type="checkbox" name="required_part_codes[]" value="{{ $skuCode }}" @if($isChecked) checked @endif>
                                                             <span>
                                                                 <div class="labor-sku-option-code">{{ $skuCode }}</div>
                                                                 <div class="labor-sku-option-name">{{ $skuName !== '' ? $skuName : '名称未設定' }}</div>
-                                                                <div class="labor-sku-option-meta">{{ !empty($skuRow['active']) ? '有効SKU' : '無効SKU' }}</div>
+                                                                <div class="labor-sku-option-meta">{{ !empty($skuRow['active']) ? '有効Part' : '無効Part' }}</div>
                                                             </span>
                                                         </label>
                                                     @endforeach

@@ -54,11 +54,11 @@
                 </select>
             </div>
             <div class="col">
-                <label>SKU</label>
-                <select name="sku_id">
+                <label>Part</label>
+                <select name="part_id">
                     <option value="">すべて</option>
                     @foreach($skus as $sku)
-                        <option value="{{ $sku->id }}" @if(($itemFilters['sku_id'] ?? '') == (string)$sku->id) selected @endif>{{ $sku->sku_code }} / {{ $sku->name }}</option>
+                        <option value="{{ $sku->id }}" @if(($itemFilters['part_id'] ?? '') == (string)$sku->id) selected @endif>{{ $sku->part_code }} / {{ $sku->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -112,7 +112,7 @@
             <tr>
                 <th>ID</th>
                 <th>名称</th>
-                <th>SKU</th>
+                <th>Part</th>
                 <th>モデル</th>
                 <th>単価</th>
                 <th>m単価</th>
@@ -127,8 +127,8 @@
             @forelse($items as $it)
                 <tr>
                     <td>{{ $it->id }}</td>
-                    <td>{{ $it->sku_name }}</td>
-                    <td>{{ $it->sku_code }}</td>
+                    <td>{{ $it->part_name }}</td>
+                    <td>{{ $it->part_code }}</td>
                     <td>{{ $it->pricing_model }}</td>
                     <td>{{ format_amount($it->unit_price) }}</td>
                     <td>{{ format_amount($it->price_per_m) }}</td>

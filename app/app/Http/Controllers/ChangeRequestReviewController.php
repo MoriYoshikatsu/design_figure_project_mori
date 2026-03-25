@@ -931,7 +931,7 @@ final class ChangeRequestReviewController extends Controller
 
     private function buildSkuNameMap(): array
     {
-        return DB::table('skus')->pluck('name', 'sku_code')->all();
+        return DB::table('parts')->pluck('name', 'part_code')->all();
     }
 
     private function buildSkuSvgMap(): array
@@ -960,22 +960,22 @@ final class ChangeRequestReviewController extends Controller
         }
 
         $skuCodes = array_values(array_unique(array_filter(array_map(
-            fn ($r) => is_array($r) ? ($r['sku_code'] ?? null) : null,
+            fn ($r) => is_array($r) ? ($r['part_code'] ?? ($r['sku_code'] ?? null)) : null,
             $bom
         ))));
 
         $skuIdByCode = [];
         if (!empty($skuCodes)) {
-            $skuIdByCode = DB::table('skus')
-                ->whereIn('sku_code', $skuCodes)
-                ->pluck('id', 'sku_code')
+            $skuIdByCode = DB::table('parts')
+                ->whereIn('part_code', $skuCodes)
+                ->pluck('id', 'part_code')
                 ->all();
         }
 
         $rows = [];
         foreach ($bom as $row) {
             if (!is_array($row)) continue;
-            $skuCode = (string)($row['sku_code'] ?? '');
+            $skuCode = (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
             if ($skuCode === '') continue;
             $skuId = $skuIdByCode[$skuCode] ?? null;
             if (!$skuId) continue;
@@ -989,7 +989,7 @@ final class ChangeRequestReviewController extends Controller
 
             $rows[] = [
                 'quote_id' => $quoteId,
-                'sku_id' => $skuId,
+                'part_id' => $skuId,
                 'quantity' => $qty,
                 'unit_price' => $unitPrice,
                 'line_total' => $lineTotal,

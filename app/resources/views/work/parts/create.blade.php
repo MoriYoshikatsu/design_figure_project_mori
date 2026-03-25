@@ -1,14 +1,14 @@
-{{-- @extends('work.layout')
+@extends('work.layout')
 
 @section('content')
-    <h1>SKU作成</h1>
-    <form method="POST" action="{{ route('work.skus.edit-request.create') }}">
+    <h1>Create Part</h1>
+    <form method="POST" action="{{ route('work.parts.edit-request.create') }}">
         @csrf
         <input type="hidden" name="_mode" value="submit">
         <div class="row">
             <div class="col">
-                <label>SKUコード</label>
-                <input type="text" name="sku_code" value="{{ old('sku_code') }}">
+                <label>Part code</label>
+                <input type="text" name="part_code" value="{{ old('part_code') }}">
             </div>
             <div class="col">
                 <label>名称</label>
@@ -43,4 +43,4 @@
             <button type="submit">保存</button>
         </div>
     </form>
-@endsection --}}
+@endsection

@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('processing_labor_costs', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->foreignId('sku_id')->constrained('skus');
+            $table->foreignId('part_id')->constrained('parts');
             $table->decimal('labor_time_hours', 12, 6)->default(0);
             $table->decimal('hourly_rate', 12, 2)->default(9000);
             $table->decimal('activity_coeff', 10, 6)->default(1);
@@ -24,7 +24,7 @@ return new class extends Migration
             $table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestampsTz();
 
-            $table->index(['sku_id']);
+            $table->index(['part_id']);
         });
     }
 

@@ -1,16 +1,16 @@
-{{-- @extends('work.layout')
+@extends('work.layout')
 
 @section('content')
-    <h1>SKU管理</h1>
+    <h1>Parts</h1>
     <div class="actions" style="margin:8px 0;">
-        <a href="{{ route('work.skus.create') }}">SKU作成</a>
+        <a href="{{ route('work.parts.create') }}">Create Part</a>
     </div>
 
-    <form method="GET" action="{{ route('work.skus.index') }}" style="margin:12px 0;">
+    <form method="GET" action="{{ route('work.parts.index') }}" style="margin:12px 0;">
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / SKU / 名称 / メモ">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / Part / 名称 / メモ">
             </div>
             <div class="col">
                 <label>カテゴリ</label>
@@ -48,7 +48,7 @@
         </div>
         <div class="actions" style="margin-top:8px;">
             <button type="submit">絞り込み</button>
-            <a href="{{ route('work.skus.index') }}">クリア</a>
+            <a href="{{ route('work.parts.index') }}">クリア</a>
             <div class="muted" style="margin:8px 0;">{{ count($skus) }}件</div>
         </div>
     </form>
@@ -57,7 +57,7 @@
         <thead>
             <tr>
                 <th>ID</th>
-                <th>SKU</th>
+                <th>Part</th>
                 <th>名称</th>
                 <th>カテゴリ</th>
                 <th>有効</th>
@@ -70,7 +70,7 @@
             @foreach($skus as $s)
                 <tr>
                     <td>{{ $s->id }}</td>
-                    <td>{{ $s->sku_code }}</td>
+                    <td>{{ $s->part_code }}</td>
                     <td>{{ $s->name }}</td>
                     <td>{{ $s->category }}</td>
                     <td>{{ $s->active ? '有効' : '無効' }}</td>
@@ -83,11 +83,11 @@
                             @if(!empty($s->pending_operation))
                                 <span class="muted">申請中（{{ $s->pending_operation }}）</span>
                             @endif
-                            <a href="{{ route('work.skus.edit', $s->id) }}">編集</a>
-                            <form method="POST" action="{{ route('work.skus.edit-request.delete', $s->id) }}">
+                            <a href="{{ route('work.parts.edit', $s->id) }}">編集</a>
+                            <form method="POST" action="{{ route('work.parts.edit-request.delete', $s->id) }}">
                                 @csrf
                                 <input type="hidden" name="_mode" value="submit">
-                                <button type="submit" onclick="return confirm('このSKUの削除申請を送信しますか？')">削除申請</button>
+                                <button type="submit" onclick="return confirm('このPartの削除申請を送信しますか？')">削除申請</button>
                             </form>
                         @endif
                     </td>
@@ -95,4 +95,4 @@
             @endforeach
         </tbody>
     </table>
-@endsection --}}
+@endsection

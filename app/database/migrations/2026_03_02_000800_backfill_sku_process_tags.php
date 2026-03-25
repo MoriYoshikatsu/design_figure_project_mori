@@ -7,13 +7,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $rows = DB::table('skus')->get(['id', 'sku_code', 'category', 'attributes']);
+        $rows = DB::table('parts')->get(['id', 'part_code', 'category', 'attributes']);
         foreach ($rows as $row) {
             $attributes = $this->decodeAttributes($row->attributes);
             $originalTags = $this->normalizeTags($attributes['process_tags'] ?? []);
             $nextTags = $originalTags;
 
-            $skuCode = strtoupper(trim((string)$row->sku_code));
+            $skuCode = strtoupper(trim((string)$row->part_code));
             $category = strtoupper(trim((string)$row->category));
             $polish = strtoupper(trim((string)($attributes['polish'] ?? '')));
 
@@ -36,7 +36,7 @@ return new class extends Migration
             }
 
             $attributes['process_tags'] = $nextTags;
-            DB::table('skus')
+            DB::table('parts')
                 ->where('id', (int)$row->id)
                 ->update([
                     'attributes' => json_encode($attributes, JSON_UNESCAPED_UNICODE),

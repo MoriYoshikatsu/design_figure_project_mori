@@ -116,7 +116,8 @@ final class WorkChangeRequestService
                 $requestedBy,
                 $before,
                 $after,
-                $meta
+                $meta,
+                $operation
             );
 
             $now = now();

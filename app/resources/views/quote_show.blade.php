@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Specification Sheet #{{ $quote->id ?? '' }}</title>
+    <title>Specification Sheet</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding:16px; }
         table { border-collapse: collapse; width: 100%; }
@@ -29,10 +29,9 @@
         $connectors = is_array($config['connectors'] ?? null) ? $config['connectors'] : [];
     @endphp
 
-    <h1>Specification Sheet #{{ $quote->id ?? '' }}</h1>
+    <h1>Specification Sheet</h1>
     <table>
         <tbody>
-            <tr><th>Specification Sheet ID</th><td>{{ $quote->id ?? '' }}</td></tr>
             <tr><th>Created At</th><td>{{ $quote->created_at ?? '' }}</td></tr>
             <tr><th>Account</th><td>{{ $quote->account_name ?? '-' }}</td></tr>
             <tr><th>Email Address</th><td>{{ $quote->account_emails ?? '-' }}</td></tr>
@@ -44,12 +43,6 @@
         'uiLanguage' => 'en',
         'panelTitle' => 'Snapshot',
         'pdfUrl' => route('quotes.snapshot.pdf', $quote->id),
-        // 'summaryItems' => [
-        //     ['label' => '見積ID', 'value' => $quote->id ?? ''],
-        //     ['label' => 'ステータス', 'value' => $quote->status ?? ''],
-        //     ['label' => '通貨', 'value' => $quote->currency ?? ''],
-        //     ['label' => '作成日時', 'value' => $quote->created_at ?? ''],
-        // ],
         'includeAutoSummary' => false,
         'showDetails' => true,
         'detailsInToggle' => false,

@@ -181,11 +181,11 @@
         if ($showSidebar && auth()->check()) {
             $permissionService = app(\App\Services\WorkPermissionService::class);
             $currentUserId = (int)auth()->id();
-            $canSku = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/skus', 'GET'), $currentUserId);
+            $canSku = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/parts', 'GET'), $currentUserId);
             $canPriceBook = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/price-books', 'GET'), $currentUserId);
             $canLaborCosts = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/labor-costs', 'GET'), $currentUserId);
             if ($canSku) {
-                $catalogMenuUrl = route('work.skus.index');
+                $catalogMenuUrl = route('work.parts.index');
             } elseif ($canPriceBook) {
                 $catalogMenuUrl = route('work.price-books.index');
             }
@@ -211,7 +211,7 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
                     </a>
                     @if($catalogMenuUrl)
-                        <a href="{{ $catalogMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.skus.*') || request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ・価格">
+                        <a href="{{ $catalogMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.parts.*') || request()->routeIs('work.price-books.*')) is-active @endif" data-label="Parts & Pricing">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/><rect x="4.5" y="14.5" width="15" height="5" rx="1"/></svg>
                         </a>
                     @endif

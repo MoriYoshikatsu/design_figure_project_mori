@@ -79,14 +79,21 @@
     $errors = is_array($errors ?? null) ? $errors : [];
     $snapshot = is_array($snapshot ?? null) ? $snapshot : [];
     $skuNameByCode = is_array($derived['skuNameByCode'] ?? null) ? $derived['skuNameByCode'] : [];
-    if (empty($skuNameByCode)) {
-        $skuNameByCode = \Illuminate\Support\Facades\DB::table('skus')->pluck('name', 'sku_code')->all();
+    $localizedSkuNameByCode = [];
+    if ($isEnglish || empty($skuNameByCode)) {
+        $localizedSkuNameByCode = app(\App\Services\SkuDisplayNameService::class)->buildNameMap($uiLanguage);
+    }
+    if (!empty($localizedSkuNameByCode)) {
+        $skuNameByCode = $localizedSkuNameByCode;
     }
     $toSkuName = static function (?string $code) use ($skuNameByCode): string {
         if ($code === null || $code === '') {
             return '';
         }
         return (string)($skuNameByCode[$code] ?? '');
+    };
+    $bomPartCode = static function (array $row): string {
+        return (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
     };
     $summaryMoneyLabels = [
         '小計' => true,
@@ -153,10 +160,10 @@
         if (!is_array($b)) continue;
         $sortKey = (int)($b['sort_order'] ?? 0);
         $path = (string)($b['source_path'] ?? '');
-        $skuCode = (string)($b['sku_code'] ?? '');
+        $skuCode = $bomPartCode($b);
         $priceRow = $pricingBySort[$sortKey] ?? [];
         $row = [
-            'sku_code' => $skuCode,
+            'part_code' => $skuCode,
             'quantity' => $b['quantity'] ?? '',
             'source_path' => $path,
             'unit_price' => $priceRow['unit_price'] ?? '',
@@ -183,12 +190,12 @@
     $rows = [];
     if ($isTecMode) {
         $processSelectedSku = $selectedProcessSkuCode;
-        $processPricedSku = (string)($processBom['sku_code'] ?? '');
+        $processPricedSku = is_array($processBom) ? $bomPartCode($processBom) : '';
         $rows[] = [
             'type' => $t('TEC工程', 'TEC Process'),
             'index' => '',
-            'sku_code' => $processSelectedSku,
-            'priced_sku_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
+            'part_code' => $processSelectedSku,
+            'priced_part_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
             'sku_name' => $toSkuName($processSelectedSku),
             'priced_sku_name' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $toSkuName($processPricedSku) : '',
             'source_path' => $processBom['source_path'] ?? '$.processType',
@@ -200,12 +207,12 @@
         ];
     } else {
         for ($i = 0; $i < $mfdCount; $i++) {
-            $mfdSkuCode = (string)($processBom['sku_code'] ?? '');
+            $mfdSkuCode = is_array($processBom) ? $bomPartCode($processBom) : '';
             $rows[] = [
                 'type' => $t('MFD変換', 'MFD Conversion'),
                 'index' => '['.$i.']',
-                'sku_code' => $mfdSkuCode,
-                'priced_sku_code' => $mfdSkuCode,
+                'part_code' => $mfdSkuCode,
+                'priced_part_code' => $mfdSkuCode,
                 'sku_name' => $toSkuName($mfdSkuCode),
                 'priced_sku_name' => $toSkuName($mfdSkuCode),
                 'source_path' => $processBom['source_path'] ?? '$.processType',
@@ -223,12 +230,12 @@
             $path = '$.sleeves['.$i.']';
             $r = $bomByPath[$path] ?? null;
             $selectedSku = (string)($s['skuCode'] ?? '');
-            $pricedSku = (string)($r['sku_code'] ?? '');
+            $pricedSku = is_array($r) ? $bomPartCode($r) : '';
             $rows[] = [
                 'type' => $t('スリーブ(MFD)', 'Sleeve (MFD)'),
                 'index' => '['.$i.']',
-                'sku_code' => $selectedSku,
-                'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+                'part_code' => $selectedSku,
+                'priced_part_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
                 'sku_name' => $toSkuName($selectedSku),
                 'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
                 'source_path' => $r['source_path'] ?? $path,
@@ -245,7 +252,7 @@
         $path = '$.fibers['.$i.']';
         $r = $bomByPath[$path] ?? null;
         $selectedSku = (string)($f['skuCode'] ?? '');
-        $pricedSku = (string)($r['sku_code'] ?? '');
+        $pricedSku = is_array($r) ? $bomPartCode($r) : '';
         $fiberLength = $f['lengthM'] ?? null;
         if (!is_numeric($fiberLength) && is_numeric($f['lengthMm'] ?? null)) {
             $fiberLength = (float)$f['lengthMm'] / 1000;
@@ -257,8 +264,8 @@
         $rows[] = [
             'type' => $t('ファイバ(F)', 'Fiber (F)'),
             'index' => '['.$i.']',
-            'sku_code' => $selectedSku,
-            'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+            'part_code' => $selectedSku,
+            'priced_part_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
             'sku_name' => $toSkuName($selectedSku),
             'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
             'source_path' => $r['source_path'] ?? $path,
@@ -270,33 +277,33 @@
         ];
     }
 
-    foreach ($tubes as $i => $t) {
+    foreach ($tubes as $i => $tube) {
         $path = '$.tubes['.$i.']';
         $r = $bomByPath[$path] ?? null;
-        $selectedSku = (string)($t['skuCode'] ?? '');
-        $pricedSku = (string)($r['sku_code'] ?? '');
-        $sf = $t['startFiberIndex'] ?? $t['targetFiberIndex'] ?? '';
-        $ef = $t['endFiberIndex'] ?? $t['targetFiberIndex'] ?? '';
-        $so = $t['startOffsetM'] ?? null;
-        if (!is_numeric($so) && is_numeric($t['startOffsetMm'] ?? null)) {
-            $so = (float)$t['startOffsetMm'] / 1000;
+        $selectedSku = (string)($tube['skuCode'] ?? '');
+        $pricedSku = is_array($r) ? $bomPartCode($r) : '';
+        $sf = $tube['startFiberIndex'] ?? $tube['targetFiberIndex'] ?? '';
+        $ef = $tube['endFiberIndex'] ?? $tube['targetFiberIndex'] ?? '';
+        $so = $tube['startOffsetM'] ?? null;
+        if (!is_numeric($so) && is_numeric($tube['startOffsetMm'] ?? null)) {
+            $so = (float)$tube['startOffsetMm'] / 1000;
         }
-        $eo = $t['endOffsetM'] ?? null;
-        if (!is_numeric($eo) && is_numeric($t['endOffsetMm'] ?? null)) {
-            $eo = (float)$t['endOffsetMm'] / 1000;
+        $eo = $tube['endOffsetM'] ?? null;
+        if (!is_numeric($eo) && is_numeric($tube['endOffsetMm'] ?? null)) {
+            $eo = (float)$tube['endOffsetMm'] / 1000;
         }
         $soText = is_numeric($so) ? ($so . 'm') : '-';
         $eoText = is_numeric($eo) ? ($eo . 'm') : '-';
         $range = ($sf !== '' || $ef !== '') ? ('F'.$sf.'+'.$soText.' → F'.$ef.'+'.$eoText) : '';
-        $tubeTolerance = $t['toleranceM'] ?? null;
-        if (!is_numeric($tubeTolerance) && is_numeric($t['toleranceMm'] ?? null)) {
-            $tubeTolerance = (float)$t['toleranceMm'] / 1000;
+        $tubeTolerance = $tube['toleranceM'] ?? null;
+        if (!is_numeric($tubeTolerance) && is_numeric($tube['toleranceMm'] ?? null)) {
+            $tubeTolerance = (float)$tube['toleranceMm'] / 1000;
         }
         $rows[] = [
             'type' => $t('チューブ(T)', 'Tube (T)'),
             'index' => '['.$i.']',
-            'sku_code' => $selectedSku,
-            'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+            'part_code' => $selectedSku,
+            'priced_part_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
             'sku_name' => $toSkuName($selectedSku),
             'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
             'source_path' => $r['source_path'] ?? $path,
@@ -314,13 +321,13 @@
 
     $leftSku = (string)($connectors['leftSkuCode'] ?? '');
     $leftRow = $leftSku !== '' ? ($bomByPath['$.connectors.leftSkuCode'] ?? null) : null;
-    $leftPricedSku = (string)($leftRow['sku_code'] ?? '');
+    $leftPricedSku = is_array($leftRow) ? $bomPartCode($leftRow) : '';
     if ($showLeftConnector) {
         $rows[] = [
             'type' => $t('コネクタ', 'Connector'),
             'index' => $t('左端', 'Left End'),
-            'sku_code' => $leftSku,
-            'priced_sku_code' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $leftPricedSku : '',
+            'part_code' => $leftSku,
+            'priced_part_code' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $leftPricedSku : '',
             'sku_name' => $toSkuName($leftSku),
             'priced_sku_name' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $toSkuName($leftPricedSku) : '',
             'source_path' => $leftRow['source_path'] ?? '',
@@ -334,13 +341,13 @@
 
     $rightSku = (string)($connectors['rightSkuCode'] ?? '');
     $rightRow = $rightSku !== '' ? ($bomByPath['$.connectors.rightSkuCode'] ?? null) : null;
-    $rightPricedSku = (string)($rightRow['sku_code'] ?? '');
+    $rightPricedSku = is_array($rightRow) ? $bomPartCode($rightRow) : '';
     if ($showRightConnector) {
         $rows[] = [
             'type' => $t('コネクタ', 'Connector'),
             'index' => $t('右端', 'Right End'),
-            'sku_code' => $rightSku,
-            'priced_sku_code' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $rightPricedSku : '',
+            'part_code' => $rightSku,
+            'priced_part_code' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $rightPricedSku : '',
             'sku_name' => $toSkuName($rightSku),
             'priced_sku_name' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $toSkuName($rightPricedSku) : '',
             'source_path' => $rightRow['source_path'] ?? '',
@@ -356,8 +363,8 @@
         $rows[] = [
             'type' => '-',
             'index' => '-',
-            'sku_code' => '',
-            'priced_sku_code' => '',
+            'part_code' => '',
+            'priced_part_code' => '',
             'sku_name' => '',
             'priced_sku_name' => '',
             'source_path' => '',

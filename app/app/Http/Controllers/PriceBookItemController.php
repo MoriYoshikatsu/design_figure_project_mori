@@ -18,7 +18,7 @@ final class PriceBookItemController extends Controller
         if (!$book) abort(404);
 
         $data = $request->validate([
-            'sku_id' => 'required|integer',
+            'part_id' => 'required|integer',
             'pricing_model' => 'required|string',
             'unit_price' => 'nullable|numeric',
             'price_per_m' => 'nullable|numeric',
@@ -36,9 +36,9 @@ final class PriceBookItemController extends Controller
             return back()->withErrors(['pricing_model' => 'pricing_modelが不正です'])->withInput();
         }
 
-        $skuExists = DB::table('skus')->whereNull('deleted_at')->where('id', (int)$data['sku_id'])->exists();
+        $skuExists = DB::table('parts')->whereNull('deleted_at')->where('id', (int)$data['part_id'])->exists();
         if (!$skuExists) {
-            return back()->withErrors(['sku_id' => 'SKUが存在しません'])->withInput();
+            return back()->withErrors(['part_id' => 'Partが存在しません'])->withInput();
         }
 
         [$unitPrice, $pricePerM, $formula] = $this->normalizePricing($data);
@@ -51,7 +51,7 @@ final class PriceBookItemController extends Controller
 
         $after = [
             'price_book_id' => $priceBookId,
-            'sku_id' => (int)$data['sku_id'],
+            'part_id' => (int)$data['part_id'],
             'pricing_model' => $data['pricing_model'],
             'unit_price' => $unitPrice,
             'price_per_m' => $pricePerM,
@@ -95,10 +95,10 @@ final class PriceBookItemController extends Controller
             }
         }
 
-        $skus = DB::table('skus')
+        $skus = DB::table('parts')
             ->whereNull('deleted_at')
-            ->orderBy('sku_code')
-            ->get(['id', 'sku_code', 'name']);
+            ->orderBy('part_code')
+            ->get(['id', 'part_code', 'name']);
 
         $formula = $item->formula ?? '';
         if (is_array($formula)) {
@@ -123,7 +123,7 @@ final class PriceBookItemController extends Controller
         if (!$item) abort(404);
 
         $data = $request->validate([
-            'sku_id' => 'required|integer',
+            'part_id' => 'required|integer',
             'pricing_model' => 'required|string',
             'unit_price' => 'nullable|numeric',
             'price_per_m' => 'nullable|numeric',
@@ -141,9 +141,9 @@ final class PriceBookItemController extends Controller
             return back()->withErrors(['pricing_model' => 'pricing_modelが不正です'])->withInput();
         }
 
-        $skuExists = DB::table('skus')->whereNull('deleted_at')->where('id', (int)$data['sku_id'])->exists();
+        $skuExists = DB::table('parts')->whereNull('deleted_at')->where('id', (int)$data['part_id'])->exists();
         if (!$skuExists) {
-            return back()->withErrors(['sku_id' => 'SKUが存在しません'])->withInput();
+            return back()->withErrors(['part_id' => 'Partが存在しません'])->withInput();
         }
 
         [$unitPrice, $pricePerM, $formula] = $this->normalizePricing($data);
@@ -155,7 +155,7 @@ final class PriceBookItemController extends Controller
         if ($memo === '') $memo = null;
 
         $after = [
-            'sku_id' => (int)$data['sku_id'],
+            'part_id' => (int)$data['part_id'],
             'pricing_model' => $data['pricing_model'],
             'unit_price' => $unitPrice,
             'price_per_m' => $pricePerM,

@@ -36,7 +36,7 @@ final class PriceBookController extends Controller
         if ($pricingModel === 'PER_MM') {
             $pricingModel = 'PER_M';
         }
-        $skuId = (string)$request->input('sku_id', '');
+        $skuId = (string)$request->input('part_id', $request->input('sku_id', ''));
         $hasMemo = (string)$request->input('item_has_memo', '');
         $minQtyMin = (string)$request->input('min_qty_min', '');
         $minQtyMax = (string)$request->input('min_qty_max', '');
@@ -62,7 +62,7 @@ final class PriceBookController extends Controller
             : '(p.price_per_mm * 1000) as price_per_m';
 
         $itemsQuery = DB::table('price_book_items as p')
-            ->join('skus as s', 's.id', '=', 'p.sku_id')
+            ->join('parts as s', 's.id', '=', 'p.part_id')
             ->where('p.price_book_id', $id)
             ->whereNull('p.deleted_at')
             ->whereNull('s.deleted_at')
@@ -75,15 +75,15 @@ final class PriceBookController extends Controller
                 'p.min_qty',
                 'p.memo',
                 'p.updated_at',
-                'p.sku_id',
-                's.sku_code',
-                's.name as sku_name',
+                'p.part_id',
+                's.part_code',
+                's.name as part_name',
             ]);
 
         if ($itemQ !== '') {
             $itemsQuery->where(function ($sub) use ($itemQ, $pricePerColumn) {
                 $sub->whereRaw('cast(p.id as text) ilike ?', ["%{$itemQ}%"])
-                    ->orWhere('s.sku_code', 'ilike', "%{$itemQ}%")
+                    ->orWhere('s.part_code', 'ilike', "%{$itemQ}%")
                     ->orWhere('s.name', 'ilike', "%{$itemQ}%")
                     ->orWhere('p.pricing_model', 'ilike', "%{$itemQ}%")
                     ->orWhereRaw('cast(p.min_qty as text) ilike ?', ["%{$itemQ}%"])
@@ -101,7 +101,7 @@ final class PriceBookController extends Controller
             }
         }
         if ($skuId !== '' && is_numeric($skuId)) {
-            $itemsQuery->where('p.sku_id', (int)$skuId);
+            $itemsQuery->where('p.part_id', (int)$skuId);
         }
         if ($hasMemo === 'with') {
             $itemsQuery->whereNotNull('p.memo')->where('p.memo', '<>', '');
@@ -173,10 +173,10 @@ final class PriceBookController extends Controller
             }
         }
 
-        $skus = DB::table('skus')
+        $skus = DB::table('parts')
             ->whereNull('deleted_at')
-            ->orderBy('sku_code')
-            ->get(['id', 'sku_code', 'name']);
+            ->orderBy('part_code')
+            ->get(['id', 'part_code', 'name']);
 
         return view('work.price-books.show', [
             'book' => $book,
@@ -186,7 +186,7 @@ final class PriceBookController extends Controller
             'itemFilters' => [
                 'item_q' => $itemQ,
                 'pricing_model' => $pricingModel,
-                'sku_id' => $skuId,
+                'part_id' => $skuId,
                 'item_has_memo' => $hasMemo,
                 'min_qty_min' => $minQtyMin,
                 'min_qty_max' => $minQtyMax,
@@ -266,7 +266,7 @@ final class PriceBookController extends Controller
         if ($pricingModel === 'PER_MM') {
             $pricingModel = 'PER_M';
         }
-        $skuId = (string)$request->input('sku_id', '');
+        $skuId = (string)$request->input('part_id', $request->input('sku_id', ''));
         $hasMemo = (string)$request->input('item_has_memo', '');
         $minQtyMin = (string)$request->input('min_qty_min', '');
         $minQtyMax = (string)$request->input('min_qty_max', '');
@@ -284,7 +284,7 @@ final class PriceBookController extends Controller
             : '(p.price_per_mm * 1000) as price_per_m';
 
         $itemsQuery = DB::table('price_book_items as p')
-            ->join('skus as s', 's.id', '=', 'p.sku_id')
+            ->join('parts as s', 's.id', '=', 'p.part_id')
             ->where('p.price_book_id', $id)
             ->whereNull('p.deleted_at')
             ->whereNull('s.deleted_at')
@@ -298,15 +298,15 @@ final class PriceBookController extends Controller
                 'p.memo',
                 'p.updated_at',
                 'p.created_at',
-                'p.sku_id',
-                's.sku_code',
-                's.name as sku_name',
+                'p.part_id',
+                's.part_code',
+                's.name as part_name',
             ]);
 
         if ($itemQ !== '') {
             $itemsQuery->where(function ($sub) use ($itemQ, $pricePerColumn) {
                 $sub->whereRaw('cast(p.id as text) ilike ?', ["%{$itemQ}%"])
-                    ->orWhere('s.sku_code', 'ilike', "%{$itemQ}%")
+                    ->orWhere('s.part_code', 'ilike', "%{$itemQ}%")
                     ->orWhere('s.name', 'ilike', "%{$itemQ}%")
                     ->orWhere('p.pricing_model', 'ilike', "%{$itemQ}%")
                     ->orWhereRaw('cast(p.min_qty as text) ilike ?', ["%{$itemQ}%"])
@@ -324,7 +324,7 @@ final class PriceBookController extends Controller
             }
         }
         if ($skuId !== '' && is_numeric($skuId)) {
-            $itemsQuery->where('p.sku_id', (int)$skuId);
+            $itemsQuery->where('p.part_id', (int)$skuId);
         }
         if ($hasMemo === 'with') {
             $itemsQuery->whereNotNull('p.memo')->where('p.memo', '<>', '');
@@ -377,10 +377,10 @@ final class PriceBookController extends Controller
             }
         }
 
-        $skus = DB::table('skus')
+        $skus = DB::table('parts')
             ->whereNull('deleted_at')
-            ->orderBy('sku_code')
-            ->get(['id', 'sku_code', 'name']);
+            ->orderBy('part_code')
+            ->get(['id', 'part_code', 'name']);
 
         $skuMap = [];
         foreach ($skus as $sku) {
@@ -401,12 +401,13 @@ final class PriceBookController extends Controller
                 continue;
             }
 
-            $sku = $skuMap[(int)($after['sku_id'] ?? 0)] ?? null;
+            $partId = (int)($after['part_id'] ?? ($after['sku_id'] ?? 0));
+            $sku = $skuMap[$partId] ?? null;
             $virtual = (object)[
                 'id' => 'REQ-' . $req->id,
-                'sku_id' => (int)($after['sku_id'] ?? 0),
-                'sku_code' => (string)($sku->sku_code ?? ''),
-                'sku_name' => (string)($sku->name ?? ('SKU#' . (int)($after['sku_id'] ?? 0))),
+                'part_id' => $partId,
+                'part_code' => (string)($sku->part_code ?? ''),
+                'part_name' => (string)($sku->name ?? ('Part#' . $partId)),
                 'pricing_model' => ((string)($after['pricing_model'] ?? '')) === 'PER_MM'
                     ? 'PER_M'
                     : (string)($after['pricing_model'] ?? ''),
@@ -457,7 +458,7 @@ final class PriceBookController extends Controller
             'itemFilters' => [
                 'item_q' => $itemQ,
                 'pricing_model' => $pricingModel,
-                'sku_id' => $skuId,
+                'part_id' => $skuId,
                 'item_has_memo' => $hasMemo,
                 'min_qty_min' => $minQtyMin,
                 'min_qty_max' => $minQtyMax,
@@ -545,7 +546,10 @@ final class PriceBookController extends Controller
         );
 
         $tab = (string)$request->input('tab', 'price_books');
-        if (!in_array($tab, ['skus', 'price_books'], true)) {
+        if ($tab === 'skus') {
+            $tab = 'parts';
+        }
+        if (!in_array($tab, ['parts', 'price_books'], true)) {
             $tab = 'price_books';
         }
 

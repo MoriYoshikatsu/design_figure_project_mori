@@ -55,22 +55,22 @@ final class QuoteCalculationEngineProcessTypeIntegrationTest extends TestCase
             'priority' => 10,
             'include_tags_json' => json_encode(['tec20'], JSON_UNESCAPED_UNICODE),
             'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'always_apply' => false,
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        DB::table('skus')->insert([
-            'sku_code' => 'PROC_TEC20',
+        DB::table('parts')->insert([
+            'part_code' => 'PROC_TEC20',
             'category' => 'PROC',
             'attributes' => json_encode(['process_tags' => ['tec20']], JSON_UNESCAPED_UNICODE),
         ]);
 
         $result = app(QuoteCalculationEngine::class)->calculate(0, [
-            ['sku_code' => 'PROC_TEC20', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'PROC_TEC20', 'quantity' => 1, 'sort_order' => 0],
         ], [
             ['sort_order' => 0, 'line_total' => 0],
         ], [
@@ -128,22 +128,22 @@ final class QuoteCalculationEngineProcessTypeIntegrationTest extends TestCase
             'priority' => 10,
             'include_tags_json' => json_encode(['mfd'], JSON_UNESCAPED_UNICODE),
             'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'always_apply' => false,
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        DB::table('skus')->insert([
-            'sku_code' => 'PROC_MFD_CONVERSION',
+        DB::table('parts')->insert([
+            'part_code' => 'PROC_MFD_CONVERSION',
             'category' => 'PROC',
             'attributes' => json_encode(['process_tags' => ['mfd']], JSON_UNESCAPED_UNICODE),
         ]);
 
         $result = app(QuoteCalculationEngine::class)->calculate(0, [
-            ['sku_code' => 'PROC_MFD_CONVERSION', 'quantity' => 2, 'sort_order' => 0],
+            ['part_code' => 'PROC_MFD_CONVERSION', 'quantity' => 2, 'sort_order' => 0],
         ], [
             ['sort_order' => 0, 'line_total' => 0],
         ], [
@@ -169,11 +169,11 @@ final class QuoteCalculationEngineProcessTypeIntegrationTest extends TestCase
         Schema::dropIfExists('labor_process_elements');
         Schema::dropIfExists('labor_processes');
         Schema::dropIfExists('labor_cost_settings');
-        Schema::dropIfExists('skus');
+        Schema::dropIfExists('parts');
 
-        Schema::create('skus', function (Blueprint $table) {
+        Schema::create('parts', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('sku_code')->unique();
+            $table->string('part_code')->unique();
             $table->string('category');
             $table->text('attributes')->nullable();
         });
@@ -220,8 +220,8 @@ final class QuoteCalculationEngineProcessTypeIntegrationTest extends TestCase
             $table->integer('priority')->default(100);
             $table->text('include_tags_json')->nullable();
             $table->text('exclude_tags_json')->nullable();
-            $table->text('required_sku_categories_json')->nullable();
-            $table->text('required_sku_codes_json')->nullable();
+            $table->text('required_part_categories_json')->nullable();
+            $table->text('required_part_codes_json')->nullable();
             $table->boolean('always_apply')->default(false);
             $table->boolean('active')->default(true);
             $table->timestamp('deleted_at')->nullable();

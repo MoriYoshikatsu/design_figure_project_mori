@@ -55,36 +55,36 @@ final class QuoteCalculationEngineLaborIntegrationTest extends TestCase
             'priority' => 100,
             'include_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'always_apply' => true,
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        DB::table('skus')->insert([
+        DB::table('parts')->insert([
             [
-                'sku_code' => 'PART_A',
+                'part_code' => 'PART_A',
                 'category' => 'SLEEVE',
                 'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
             ],
             [
-                'sku_code' => 'PROC_MFD',
+                'part_code' => 'PROC_MFD',
                 'category' => 'PROC',
                 'attributes' => json_encode(['process_tags' => ['mfd']], JSON_UNESCAPED_UNICODE),
             ],
         ]);
 
         DB::table('processing_labor_costs')->insert([
-            'sku_id' => 1,
+            'part_id' => 1,
             'unit_labor_cost' => 999999,
         ]);
 
         $engine = app(QuoteCalculationEngine::class);
         $result = $engine->calculate(0, [
-            ['sku_code' => 'PART_A', 'quantity' => 1, 'sort_order' => 0],
-            ['sku_code' => 'PROC_MFD', 'quantity' => 1, 'sort_order' => 1],
+            ['part_code' => 'PART_A', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'PROC_MFD', 'quantity' => 1, 'sort_order' => 1],
         ], [
             ['sort_order' => 0, 'line_total' => 1000],
             ['sort_order' => 1, 'line_total' => 9999],
@@ -113,11 +113,11 @@ final class QuoteCalculationEngineLaborIntegrationTest extends TestCase
         Schema::dropIfExists('labor_processes');
         Schema::dropIfExists('labor_cost_settings');
         Schema::dropIfExists('processing_labor_costs');
-        Schema::dropIfExists('skus');
+        Schema::dropIfExists('parts');
 
-        Schema::create('skus', function (Blueprint $table) {
+        Schema::create('parts', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('sku_code')->unique();
+            $table->string('part_code')->unique();
             $table->string('category');
             $table->text('attributes')->nullable();
         });
@@ -164,8 +164,8 @@ final class QuoteCalculationEngineLaborIntegrationTest extends TestCase
             $table->integer('priority')->default(100);
             $table->text('include_tags_json')->nullable();
             $table->text('exclude_tags_json')->nullable();
-            $table->text('required_sku_categories_json')->nullable();
-            $table->text('required_sku_codes_json')->nullable();
+            $table->text('required_part_categories_json')->nullable();
+            $table->text('required_part_codes_json')->nullable();
             $table->boolean('always_apply')->default(false);
             $table->boolean('active')->default(true);
             $table->timestamp('deleted_at')->nullable();
@@ -174,7 +174,7 @@ final class QuoteCalculationEngineLaborIntegrationTest extends TestCase
 
         Schema::create('processing_labor_costs', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->unsignedBigInteger('sku_id');
+            $table->unsignedBigInteger('part_id');
             $table->decimal('unit_labor_cost', 12, 2)->default(0);
         });
     }

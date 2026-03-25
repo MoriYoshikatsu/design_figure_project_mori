@@ -9,18 +9,19 @@
     </div>
 
     <div style="margin-bottom:12px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; background:#fff;">
-        <div><strong>現在の設定:</strong> {{ $changeRequestRequirementSummary ?? 'すべて必須' }}</div>
+        <div><strong>現在の設定:</strong> {{ $changeRequestRequirementSummary ?? '作成・更新はすべて必須' }}</div>
         <div class="muted" style="margin-top:6px;">
-            チェックが入っている項目は変更申請が必要です。チェックを外した項目は、このアカウントの操作で即時反映されます。
+            チェックが入っている項目は、作成・更新で変更申請が必要です。チェックを外した項目は、作成・更新のみ即時反映されます。
+            削除は設定に関係なく常に変更申請が必要です。この設定ページ自体の更新も、対象項目として設定できます。
         </div>
     </div>
 
     <form method="POST" action="{{ route('work.accounts.permissions.update', $account->id) }}" id="change-request-settings-form">
         @csrf
         <div class="actions" style="margin-bottom:8px;">
-            <button type="button" id="settings-check-all">全項目を必須にする</button>
-            <button type="button" id="settings-uncheck-all">全項目を即時反映にする</button>
-            <span class="muted">{{ $changeRequestRequiredCount ?? 0 }} / {{ $changeRequestToggleableCount ?? 0 }} 項目が申請必須</span>
+            <button type="button" id="settings-check-all">全項目の作成・更新を必須にする</button>
+            <button type="button" id="settings-uncheck-all">全項目の作成・更新を即時反映にする</button>
+            <span class="muted">{{ $changeRequestRequiredCount ?? 0 }} / {{ $changeRequestToggleableCount ?? 0 }} 項目の作成・更新が申請必須</span>
             <button type="submit">設定を保存</button>
         </div>
 
@@ -44,7 +45,7 @@
                             <tr>
                                 <th style="width:72px;">必須</th>
                                 <th style="width:220px;">対象項目</th>
-                                <th>対象操作</th>
+                                <th>対象操作（削除は常に必須）</th>
                             </tr>
                         </thead>
                         <tbody>

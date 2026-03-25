@@ -30,6 +30,6 @@ final class SalesRoutePermissionServiceTest extends TestCase
 
         $this->assertSame('/work/quotes/*', $service->suggestPatternFromUri('/work/quotes/{id}'));
         $this->assertSame('/work/accounts/*/edit', $service->suggestPatternFromUri('/work/accounts/{id}/edit'));
-        $this->assertSame('/work/skus', $service->suggestPatternFromUri('/work/skus'));
+        $this->assertSame('/work/parts', $service->suggestPatternFromUri('/work/parts'));
     }
 }

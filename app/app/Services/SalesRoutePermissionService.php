@@ -194,6 +194,9 @@ final class SalesRoutePermissionService
         if ($path !== '/' && str_ends_with($path, '/')) {
             $path = rtrim($path, '/');
         }
+        if ($path === '/work/skus' || str_starts_with($path, '/work/skus/')) {
+            $path = '/work/parts' . substr($path, strlen('/work/skus'));
+        }
 
         return $path;
     }

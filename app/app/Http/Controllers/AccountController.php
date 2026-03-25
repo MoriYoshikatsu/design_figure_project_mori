@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 final class AccountController extends Controller
 {
@@ -142,6 +143,7 @@ final class AccountController extends Controller
         $userId = (int)($request->user()?->id ?? 0);
 
         $changeRequestRequirementSummaryMap = $this->accountChangeRequestRequirementService->summaryMap($accountIds);
+        $supportsCustomerFactorDefault = $this->supportsCustomerFactorDefault();
         $canCreateAccount = $userId > 0
             && $this->canUserAccessPath(
                 $userId,
@@ -150,7 +152,7 @@ final class AccountController extends Controller
             );
         foreach ($accounts as $account) {
             $aid = (int)$account->id;
-            $account->change_request_requirement_summary = $changeRequestRequirementSummaryMap[$aid] ?? 'すべて必須';
+            $account->change_request_requirement_summary = $changeRequestRequirementSummaryMap[$aid] ?? '作成・更新はすべて必須';
             $account->can_request_delete = $userId > 0
                 && $this->canUserAccessPath(
                     $userId,
@@ -175,6 +177,7 @@ final class AccountController extends Controller
             ],
             'accountTypeOptions' => ['B2B', 'B2C'],
             'roleOptions' => ['admin', 'sales', 'customer'],
+            'supportsCustomerFactorDefault' => $supportsCustomerFactorDefault,
             'presenceOptions' => [
                 'with' => 'あり',
                 'without' => 'なし',
@@ -212,6 +215,10 @@ final class AccountController extends Controller
             'account' => $account,
             'members' => $members,
             'roleCounts' => $roleCounts,
+            'supportsCustomerFactorDefault' => $this->supportsCustomerFactorDefault(),
+            'customerFactorDefaultValue' => $this->formatCustomerFactorDefault(
+                property_exists($account, 'customer_factor_default') ? $account->customer_factor_default : null
+            ),
         ]);
     }
 
@@ -230,18 +237,46 @@ final class AccountController extends Controller
         $account = DB::table('accounts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$account) abort(404);
 
+        if (!$this->accountChangeRequestRequirementService->storageAvailable()) {
+            return redirect()
+                ->route('work.accounts.permissions', $id)
+                ->withErrors(['required_entity_types' => '変更申請必須設定の保存先テーブルを利用できません。']);
+        }
+
         $data = $request->validate([
             'required_entity_types' => 'nullable|array',
             'required_entity_types.*' => 'string|max:100',
         ]);
 
-        $this->accountChangeRequestRequirementService->sync(
-            $id,
-            $data['required_entity_types'] ?? [],
-            (int)($request->user()?->id ?? 0)
+        $selectedEntityTypes = $this->accountChangeRequestRequirementService->normalizeRequiredEntityTypes(
+            is_array($data['required_entity_types'] ?? null) ? $data['required_entity_types'] : []
         );
 
-        return redirect()->route('work.accounts.permissions', $id)->with('status', '変更申請必須設定を更新しました');
+        $before = [
+            'account_id' => $id,
+            'required_entity_types' => $this->accountChangeRequestRequirementService->selectedRequiredEntityTypes($id),
+        ];
+        $after = [
+            'account_id' => $id,
+            'required_entity_types' => $selectedEntityTypes,
+        ];
+
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
+            'account_change_request_requirement',
+            $id,
+            $before,
+            $after,
+            (int)($request->user()?->id ?? 0),
+            (string)$request->input('comment', ''),
+            ['account_id' => $id]
+        );
+
+        return redirect()->route('work.accounts.permissions', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '変更申請必須設定を更新しました',
+            '変更申請必須設定の更新申請を送信しました'
+        ));
     }
 
     public function update(Request $request, int $id)
@@ -254,6 +289,7 @@ final class AccountController extends Controller
             'internal_name' => 'nullable|string|max:255',
             'memo' => 'nullable|string|max:5000',
             'assignee_name' => 'nullable|string|max:255',
+            'customer_factor_default' => 'nullable|numeric|min:0|max:999999.999999',
         ]);
 
         $internal = trim((string)($data['internal_name'] ?? ''));
@@ -269,6 +305,11 @@ final class AccountController extends Controller
             'memo' => $memo,
             'assignee_name' => $assigneeName,
         ];
+        if ($this->supportsCustomerFactorDefault()) {
+            $after['customer_factor_default'] = $this->normalizeCustomerFactorDefault(
+                $data['customer_factor_default'] ?? null
+            );
+        }
 
         $changeRequestService = app(WorkChangeRequestService::class);
         $submission = $changeRequestService->queueUpdate(
@@ -294,6 +335,7 @@ final class AccountController extends Controller
             'internal_name' => 'nullable|string|max:255',
             'memo' => 'nullable|string|max:5000',
             'assignee_name' => 'nullable|string|max:255',
+            'customer_factor_default' => 'nullable|numeric|min:0|max:999999.999999',
             'user_name' => 'required|string|max:255',
             'user_email' => 'required|string|email|max:255',
             'user_password' => 'required|string|min:8|max:255',
@@ -331,6 +373,11 @@ final class AccountController extends Controller
             'user_email' => $userEmail,
             'user_password_hash' => $userPasswordHash,
         ];
+        if ($this->supportsCustomerFactorDefault()) {
+            $after['customer_factor_default'] = $this->normalizeCustomerFactorDefault(
+                $data['customer_factor_default'] ?? null
+            );
+        }
 
         $changeRequestService = app(WorkChangeRequestService::class);
         $submission = $changeRequestService->queueCreate(
@@ -616,6 +663,31 @@ final class AccountController extends Controller
         }
 
         return true;
+    }
+
+    private function supportsCustomerFactorDefault(): bool
+    {
+        static $supported;
+        if ($supported === null) {
+            $supported = Schema::hasTable('accounts') && Schema::hasColumn('accounts', 'customer_factor_default');
+        }
+
+        return $supported;
+    }
+
+    private function normalizeCustomerFactorDefault(mixed $value): float
+    {
+        if (!is_numeric($value)) {
+            return 1.0;
+        }
+
+        return max(0.0, (float)$value);
+    }
+
+    private function formatCustomerFactorDefault(mixed $value): string
+    {
+        $formatted = rtrim(rtrim(number_format($this->normalizeCustomerFactorDefault($value), 6, '.', ''), '0'), '.');
+        return $formatted !== '' ? $formatted : '0';
     }
 
     /**
@@ -954,7 +1026,7 @@ final class AccountController extends Controller
             '/work/sessions' => ['sessions', '仕様書セッション', 20],
             '/work/quotes' => ['quotes', '仕様書見積', 30],
             '/quotes' => ['quotes_public', '仕様書公開', 40],
-            '/work/skus' => ['skus', 'パーツ(SKU)', 50],
+            '/work/parts' => ['parts', 'Parts', 50],
             '/work/price-books' => ['price_books', '価格表', 60],
             '/work/templates' => ['templates', 'テンプレート', 70],
             '/work/change-requests' => ['change_requests', '編集承認変更申請', 80],
@@ -998,7 +1070,7 @@ final class AccountController extends Controller
             '/work/quotes' => '仕様書見積',
             '/quotes' => '仕様書',
             '/work/change-requests' => '変更申請',
-            '/work/skus' => 'パーツSKU',
+            '/work/parts' => 'Parts',
             '/work/price-books' => '価格表',
             '/work/templates' => 'テンプレート',
             '/work/audit-logs' => '監査ログ',
@@ -1155,7 +1227,7 @@ final class AccountController extends Controller
             'work.quotes' => '仕様書見積',
             'work.change-requests' => '変更申請',
             'work.change-requests' => '変更申請',
-            'work.skus' => 'パーツ(SKU)',
+            'work.parts' => 'Parts',
             'work.price-books' => '価格表',
             'work.templates' => 'テンプレート',
             'work.audit-logs' => '監査ログ',

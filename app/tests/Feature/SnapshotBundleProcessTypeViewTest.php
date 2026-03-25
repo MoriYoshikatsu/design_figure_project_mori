@@ -38,7 +38,7 @@ final class SnapshotBundleProcessTypeViewTest extends TestCase
                 'price_book_id' => 1,
                 'totals' => ['subtotal' => 1000, 'tax' => 100, 'total' => 1100],
                 'bom' => [
-                    ['sku_code' => 'PROC_TEC20', 'quantity' => 1, 'source_path' => '$.processType', 'sort_order' => 0],
+                    ['part_code' => 'PROC_TEC20', 'quantity' => 1, 'source_path' => '$.processType', 'sort_order' => 0],
                 ],
                 'pricing' => [
                     ['sort_order' => 0, 'unit_price' => 500, 'line_total' => 500],
@@ -83,7 +83,7 @@ final class SnapshotBundleProcessTypeViewTest extends TestCase
                 'price_book_id' => 1,
                 'totals' => ['subtotal' => 1000, 'tax' => 100, 'total' => 1100],
                 'bom' => [
-                    ['sku_code' => 'PROC_MFD_CONVERSION', 'quantity' => 1, 'source_path' => '$.processType', 'sort_order' => 0],
+                    ['part_code' => 'PROC_MFD_CONVERSION', 'quantity' => 1, 'source_path' => '$.processType', 'sort_order' => 0],
                 ],
                 'pricing' => [
                     ['sort_order' => 0, 'unit_price' => 2000, 'line_total' => 2000],

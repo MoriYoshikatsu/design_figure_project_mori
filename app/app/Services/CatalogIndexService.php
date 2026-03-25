@@ -38,7 +38,7 @@ final class CatalogIndexService
      */
     public function resolveSkuFilters(Request $request, bool $allowLegacyTopLevel = true): array
     {
-        $raw = $request->query('sku');
+        $raw = $request->query('part', $request->query('sku'));
         $source = is_array($raw) ? $raw : [];
 
         $keys = [
@@ -98,11 +98,11 @@ final class CatalogIndexService
         $updatedFrom = (string)($filters['updated_from'] ?? '');
         $updatedTo = (string)($filters['updated_to'] ?? '');
 
-        $query = DB::table('skus')->whereNull('deleted_at');
+        $query = DB::table('parts')->whereNull('deleted_at');
         if ($q !== '') {
             $query->where(function ($sub) use ($q) {
                 $sub->whereRaw('cast(id as text) ilike ?', ["%{$q}%"])
-                    ->orWhere('sku_code', 'ilike', "%{$q}%")
+                    ->orWhere('part_code', 'ilike', "%{$q}%")
                     ->orWhere('name', 'ilike', "%{$q}%")
                     ->orWhere('category', 'ilike', "%{$q}%")
                     ->orWhere('memo', 'ilike', "%{$q}%");
@@ -139,7 +139,7 @@ final class CatalogIndexService
         $skus = $query->orderBy('id', 'desc')->limit(200)->get();
 
         $pendingCreates = DB::table('change_requests')
-            ->where('entity_type', 'sku')
+            ->whereIn('entity_type', ['part', 'sku'])
             ->where('operation', 'CREATE')
             ->where('status', 'PENDING')
             ->orderBy('id', 'desc')
@@ -154,7 +154,7 @@ final class CatalogIndexService
             $after = is_array($payload['after'] ?? null) ? $payload['after'] : [];
             $virtual = (object)[
                 'id' => 'REQ-' . $req->id,
-                'sku_code' => (string)($after['sku_code'] ?? ''),
+                'part_code' => (string)($after['part_code'] ?? ($after['sku_code'] ?? '')),
                 'name' => (string)($after['name'] ?? ''),
                 'category' => (string)($after['category'] ?? ''),
                 'active' => (bool)($after['active'] ?? true),
@@ -176,7 +176,7 @@ final class CatalogIndexService
 
         if (!empty($realSkuIds)) {
             $pendingBySku = DB::table('change_requests')
-                ->where('entity_type', 'sku')
+                ->whereIn('entity_type', ['part', 'sku'])
                 ->where('status', 'PENDING')
                 ->whereIn('operation', ['UPDATE', 'DELETE'])
                 ->whereIn('entity_id', $realSkuIds)

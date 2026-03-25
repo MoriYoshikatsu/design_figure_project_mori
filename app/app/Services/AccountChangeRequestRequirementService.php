@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -13,7 +14,7 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'account',
             'label' => 'アカウント',
             'short_label' => 'アカウント',
-            'description' => 'アカウントの作成・更新・削除に変更申請を要求します。',
+            'description' => 'アカウントの作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'account',
             'group_label' => 'アカウント',
             'group_order' => 10,
@@ -30,6 +31,16 @@ final class AccountChangeRequestRequirementService
             'sort_order' => 20,
         ],
         [
+            'entity_type' => 'account_change_request_requirement',
+            'label' => '変更申請必須設定',
+            'short_label' => '申請設定',
+            'description' => 'このページで更新する変更申請必須設定の変更に変更申請を要求します。削除は常に変更申請が必要です。',
+            'group_key' => 'account',
+            'group_label' => 'アカウント',
+            'group_order' => 10,
+            'sort_order' => 30,
+        ],
+        [
             'entity_type' => 'quote',
             'label' => '見積・仕様書',
             'short_label' => '見積',
@@ -40,12 +51,12 @@ final class AccountChangeRequestRequirementService
             'sort_order' => 10,
         ],
         [
-            'entity_type' => 'sku',
-            'label' => 'SKU',
-            'short_label' => 'SKU',
-            'description' => 'SKU マスタの作成・更新・削除に変更申請を要求します。',
+            'entity_type' => 'part',
+            'label' => 'Part',
+            'short_label' => 'Part',
+            'description' => 'Part マスタの作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'catalog',
-            'group_label' => 'SKU・価格',
+            'group_label' => 'Parts & Pricing',
             'group_order' => 30,
             'sort_order' => 10,
         ],
@@ -53,9 +64,9 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'price_book',
             'label' => '価格表',
             'short_label' => '価格表',
-            'description' => '価格表本体の作成・更新・削除に変更申請を要求します。',
+            'description' => '価格表本体の作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'catalog',
-            'group_label' => 'SKU・価格',
+            'group_label' => 'Parts & Pricing',
             'group_order' => 30,
             'sort_order' => 20,
         ],
@@ -63,9 +74,9 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'price_book_item',
             'label' => '価格表明細',
             'short_label' => '価格表明細',
-            'description' => '価格表明細の作成・更新・削除に変更申請を要求します。',
+            'description' => '価格表明細の作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'catalog',
-            'group_label' => 'SKU・価格',
+            'group_label' => 'Parts & Pricing',
             'group_order' => 30,
             'sort_order' => 30,
         ],
@@ -73,7 +84,7 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'product_template',
             'label' => 'テンプレート',
             'short_label' => 'テンプレート',
-            'description' => '納品規則テンプレートの作成・更新・削除に変更申請を要求します。',
+            'description' => '納品規則テンプレートの作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'template',
             'group_label' => 'テンプレート',
             'group_order' => 40,
@@ -83,7 +94,7 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'product_template_version',
             'label' => 'テンプレート版',
             'short_label' => 'テンプレ版',
-            'description' => 'テンプレート版の作成・更新・削除に変更申請を要求します。',
+            'description' => 'テンプレート版の作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'template',
             'group_label' => 'テンプレート',
             'group_order' => 40,
@@ -103,7 +114,7 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'labor_process',
             'label' => '加工工程',
             'short_label' => '加工工程',
-            'description' => '加工工程の作成・更新・削除に変更申請を要求します。',
+            'description' => '加工工程の作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'labor',
             'group_label' => '作業費管理',
             'group_order' => 50,
@@ -113,7 +124,7 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'labor_process_element',
             'label' => '工程要素',
             'short_label' => '工程要素',
-            'description' => '工程要素の作成・更新・削除に変更申請を要求します。',
+            'description' => '工程要素の作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'labor',
             'group_label' => '作業費管理',
             'group_order' => 50,
@@ -123,7 +134,7 @@ final class AccountChangeRequestRequirementService
             'entity_type' => 'labor_auto_rule',
             'label' => '自動適用ルール',
             'short_label' => '自動ルール',
-            'description' => '自動適用ルールの作成・更新・削除に変更申請を要求します。',
+            'description' => '自動適用ルールの作成・更新に変更申請を要求します。削除は常に変更申請が必要です。',
             'group_key' => 'labor',
             'group_label' => '作業費管理',
             'group_order' => 50,
@@ -145,6 +156,52 @@ final class AccountChangeRequestRequirementService
     public function toggleableEntityTypes(): array
     {
         return array_column(self::CATALOG, 'entity_type');
+    }
+
+    public function storageAvailable(): bool
+    {
+        return $this->storageReady();
+    }
+
+    /**
+     * @param array<int, mixed> $requiredEntityTypes
+     * @return array<int, string>
+     */
+    public function normalizeRequiredEntityTypes(array $requiredEntityTypes): array
+    {
+        $selected = [];
+        $selectedMap = [];
+        foreach ($requiredEntityTypes as $entityType) {
+            $normalized = $this->normalizeEntityType((string)$entityType);
+            if ($normalized === '' || isset($selectedMap[$normalized])) {
+                continue;
+            }
+            $selectedMap[$normalized] = true;
+        }
+
+        foreach ($this->toggleableEntityTypes() as $entityType) {
+            if (isset($selectedMap[$entityType])) {
+                $selected[] = $entityType;
+            }
+        }
+
+        return $selected;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function selectedRequiredEntityTypes(int $accountId): array
+    {
+        $stateMap = $this->stateMap($accountId);
+        $selected = [];
+        foreach ($this->toggleableEntityTypes() as $entityType) {
+            if (($stateMap[$entityType] ?? true) === true) {
+                $selected[] = $entityType;
+            }
+        }
+
+        return $selected;
     }
 
     /**
@@ -199,7 +256,7 @@ final class AccountChangeRequestRequirementService
 
         $rows = DB::table('account_change_request_requirements')
             ->where('account_id', $accountId)
-            ->whereIn('entity_type', array_keys($stateMap))
+            ->whereIn('entity_type', array_unique(array_merge(array_keys($stateMap), ['sku'])))
             ->get(['entity_type', 'is_required']);
 
         foreach ($rows as $row) {
@@ -231,7 +288,7 @@ final class AccountChangeRequestRequirementService
         if ($this->storageReady()) {
             $rows = DB::table('account_change_request_requirements')
                 ->whereIn('account_id', $accountIds)
-                ->whereIn('entity_type', $this->toggleableEntityTypes())
+                ->whereIn('entity_type', array_unique(array_merge($this->toggleableEntityTypes(), ['sku'])))
                 ->get(['account_id', 'entity_type', 'is_required']);
 
             foreach ($rows as $row) {
@@ -256,7 +313,7 @@ final class AccountChangeRequestRequirementService
     public function sync(int $accountId, array $requiredEntityTypes, int $updatedBy = 0): void
     {
         if ($accountId <= 0 || !$this->storageReady()) {
-            return;
+            throw new \RuntimeException('account_change_request_requirements storage is not ready.');
         }
 
         $stateMap = [];
@@ -264,10 +321,9 @@ final class AccountChangeRequestRequirementService
             $stateMap[$entityType] = false;
         }
 
-        foreach ($requiredEntityTypes as $entityType) {
-            $normalized = $this->normalizeEntityType((string)$entityType);
-            if (array_key_exists($normalized, $stateMap)) {
-                $stateMap[$normalized] = true;
+        foreach ($this->normalizeRequiredEntityTypes($requiredEntityTypes) as $entityType) {
+            if (array_key_exists($entityType, $stateMap)) {
+                $stateMap[$entityType] = true;
             }
         }
 
@@ -295,8 +351,13 @@ final class AccountChangeRequestRequirementService
         int $requestedBy,
         mixed $before,
         mixed $after,
-        array $meta = []
+        array $meta = [],
+        string $operation = 'UPDATE'
     ): bool {
+        if (strtoupper(trim($operation)) === 'DELETE') {
+            return true;
+        }
+
         $entityType = $this->normalizeEntityType($entityType);
         if (!in_array($entityType, $this->toggleableEntityTypes(), true)) {
             return true;
@@ -349,16 +410,16 @@ final class AccountChangeRequestRequirementService
         $totalCount = count(self::CATALOG);
 
         if ($requiredCount === $totalCount) {
-            return 'すべて必須';
+            return '作成・更新はすべて必須';
         }
         if ($requiredCount === 0) {
-            return '必須なし';
+            return '作成・更新は即時反映';
         }
         if ($requiredCount <= 3) {
-            return implode(' / ', $requiredLabels);
+            return '作成・更新: ' . implode(' / ', $requiredLabels);
         }
 
-        return implode(' / ', array_slice($requiredLabels, 0, 3)) . ' 他' . ($requiredCount - 3) . '件';
+        return '作成・更新: ' . implode(' / ', array_slice($requiredLabels, 0, 3)) . ' 他' . ($requiredCount - 3) . '件';
     }
 
     private function resolveAccountId(
@@ -386,6 +447,10 @@ final class AccountChangeRequestRequirementService
         }
 
         if ($entityType === 'account' && $entityId > 0) {
+            return $entityId;
+        }
+
+        if ($entityType === 'account_change_request_requirement' && $entityId > 0) {
             return $entityId;
         }
 
@@ -424,11 +489,32 @@ final class AccountChangeRequestRequirementService
 
     private function normalizeEntityType(string $entityType): string
     {
-        return strtolower(trim($entityType));
+        $entityType = strtolower(trim($entityType));
+        return $entityType === 'sku' ? 'part' : $entityType;
     }
 
     private function storageReady(): bool
     {
+        if (Schema::hasTable('account_change_request_requirements')) {
+            return true;
+        }
+
+        try {
+            Schema::create('account_change_request_requirements', function (Blueprint $table): void {
+                $table->id();
+                $table->foreignId('account_id')->constrained('accounts')->cascadeOnDelete();
+                $table->string('entity_type', 100);
+                $table->boolean('is_required')->default(true);
+                $table->unsignedBigInteger('updated_by')->nullable();
+                $table->timestamps();
+
+                $table->unique(['account_id', 'entity_type'], 'acct_change_req_unique');
+                $table->index('entity_type', 'acct_change_req_entity_idx');
+            });
+        } catch (\Throwable $e) {
+            // Another process may have created the table, or the DB user may lack schema permissions.
+        }
+
         return Schema::hasTable('account_change_request_requirements');
     }
 }

@@ -1,12 +1,12 @@
 <div class="catalog-segment" data-catalog-tab-switch>
     <button
         type="button"
-        class="catalog-segment-btn @if($activeTab === 'skus') is-active @endif"
-        data-catalog-tab="skus"
+        class="catalog-segment-btn @if($activeTab === 'parts') is-active @endif"
+        data-catalog-tab="parts"
         data-catalog-tab-url="{{ $skuTabUrl }}"
         @if(!$canAccessSkus) disabled @endif
     >
-        <span>SKU管理</span>
+        <span>Parts</span>
         <span class="catalog-segment-count">{{ $skuCount }}</span>
         @if(!$canAccessSkus)
             <span class="catalog-segment-note">権限なし</span>

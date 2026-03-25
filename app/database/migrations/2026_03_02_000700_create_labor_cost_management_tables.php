@@ -58,8 +58,8 @@ return new class extends Migration
             $table->integer('priority')->default(100)->index();
             $table->jsonb('include_tags_json')->default('[]');
             $table->jsonb('exclude_tags_json')->default('[]');
-            $table->jsonb('required_sku_categories_json')->default('[]');
-            $table->jsonb('required_sku_codes_json')->default('[]');
+            $table->jsonb('required_part_categories_json')->default('[]');
+            $table->jsonb('required_part_codes_json')->default('[]');
             $table->boolean('always_apply')->default(false)->index();
             $table->boolean('active')->default(true)->index();
             $table->text('memo')->nullable();
@@ -180,8 +180,8 @@ return new class extends Migration
                 'priority' => $priority,
                 'include_tags_json' => json_encode(array_values($includeTags), JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode(array_values($excludeTags), JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => $alwaysApply,
                 'active' => true,
                 'memo' => null,

@@ -57,8 +57,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 10,
                 'include_tags_json' => json_encode(['connector', 'pm', 'apc'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -71,8 +71,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 20,
                 'include_tags_json' => json_encode(['connector'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -80,15 +80,15 @@ final class LaborCostEngineTest extends TestCase
             ],
         ]);
 
-        DB::table('skus')->insert([
-            'sku_code' => 'CONN_A',
+        DB::table('parts')->insert([
+            'part_code' => 'CONN_A',
             'category' => 'CONNECTOR',
             'attributes' => json_encode(['process_tags' => ['connector', 'pm', 'apc']], JSON_UNESCAPED_UNICODE),
         ]);
 
         $result = app(LaborCostEngine::class)->calculate([
             [
-                'sku_code' => 'CONN_A',
+                'part_code' => 'CONN_A',
                 'quantity' => 1,
                 'sort_order' => 0,
             ],
@@ -139,22 +139,22 @@ final class LaborCostEngineTest extends TestCase
             'priority' => 10,
             'include_tags_json' => json_encode(['mfd'], JSON_UNESCAPED_UNICODE),
             'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'always_apply' => false,
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::table('skus')->insert([
-            'sku_code' => 'PROC_MFD',
+        DB::table('parts')->insert([
+            'part_code' => 'PROC_MFD',
             'category' => 'PROC',
             'attributes' => json_encode(['process_tags' => ['mfd']], JSON_UNESCAPED_UNICODE),
         ]);
 
         $result = app(LaborCostEngine::class)->calculate([
             [
-                'sku_code' => 'PROC_MFD',
+                'part_code' => 'PROC_MFD',
                 'quantity' => 1,
                 'sort_order' => 0,
             ],
@@ -217,15 +217,15 @@ final class LaborCostEngineTest extends TestCase
             'priority' => 10,
             'include_tags_json' => json_encode(['mfd'], JSON_UNESCAPED_UNICODE),
             'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'always_apply' => false,
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::table('skus')->insert([
-            'sku_code' => 'PROC_MFD',
+        DB::table('parts')->insert([
+            'part_code' => 'PROC_MFD',
             'category' => 'PROC',
             'attributes' => json_encode(['process_tags' => ['mfd']], JSON_UNESCAPED_UNICODE),
         ]);
@@ -233,7 +233,7 @@ final class LaborCostEngineTest extends TestCase
         $engine = app(LaborCostEngine::class);
         $resultRatioMissingOrder = $engine->calculate([
             [
-                'sku_code' => 'PROC_MFD',
+                'part_code' => 'PROC_MFD',
                 'quantity' => 1,
                 'sort_order' => 0,
             ],
@@ -259,7 +259,7 @@ final class LaborCostEngineTest extends TestCase
 
         $resultInvalidYield = $engine->calculate([
             [
-                'sku_code' => 'PROC_MFD',
+                'part_code' => 'PROC_MFD',
                 'quantity' => 1,
                 'sort_order' => 0,
             ],
@@ -284,7 +284,7 @@ final class LaborCostEngineTest extends TestCase
         );
     }
 
-    public function test_infers_missing_tags_from_sku_code_and_attributes_for_rule_matching(): void
+    public function test_infers_missing_tags_from_part_code_and_attributes_for_rule_matching(): void
     {
         DB::table('labor_cost_settings')->insert([
             'id' => 1,
@@ -349,8 +349,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 10,
                 'include_tags_json' => json_encode(['tec20', 'high_precision'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -363,8 +363,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 20,
                 'include_tags_json' => json_encode(['connector', 'pm', 'apc'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -372,29 +372,29 @@ final class LaborCostEngineTest extends TestCase
             ],
         ]);
 
-        // process_tags を持たないSKUでも、sku_code/category/polish から推論してルール一致させる
-        DB::table('skus')->insert([
+        // process_tags を持たないSKUでも、part_code/category/polish から推論してルール一致させる
+        DB::table('parts')->insert([
             [
-                'sku_code' => 'PROC_TEC20_HP',
+                'part_code' => 'PROC_TEC20_HP',
                 'category' => 'PROC',
                 'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
             ],
             [
-                'sku_code' => 'FIBER_PMF',
+                'part_code' => 'FIBER_PMF',
                 'category' => 'FIBER',
                 'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
             ],
             [
-                'sku_code' => 'CONN_SC_APC',
+                'part_code' => 'CONN_SC_APC',
                 'category' => 'CONNECTOR',
                 'attributes' => json_encode(['polish' => 'APC'], JSON_UNESCAPED_UNICODE),
             ],
         ]);
 
         $result = app(LaborCostEngine::class)->calculate([
-            ['sku_code' => 'PROC_TEC20_HP', 'quantity' => 1, 'sort_order' => 0],
-            ['sku_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 1],
-            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 2],
+            ['part_code' => 'PROC_TEC20_HP', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 1],
+            ['part_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 2],
         ], 2, []);
 
         $matchedCodes = is_array($result['matched_process_codes'] ?? null) ? $result['matched_process_codes'] : [];
@@ -468,8 +468,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 70,
                 'include_tags_json' => json_encode(['connector'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode(['pm'], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -482,8 +482,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 80,
                 'include_tags_json' => json_encode(['connector', 'pm'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode(['apc'], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -496,8 +496,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 90,
                 'include_tags_json' => json_encode(['connector', 'pm', 'apc'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -505,24 +505,24 @@ final class LaborCostEngineTest extends TestCase
             ],
         ]);
 
-        DB::table('skus')->insert([
+        DB::table('parts')->insert([
             [
-                'sku_code' => 'FIBER_SMF28E+',
+                'part_code' => 'FIBER_SMF28E+',
                 'category' => 'FIBER',
                 'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
             ],
             [
-                'sku_code' => 'FIBER_PMF',
+                'part_code' => 'FIBER_PMF',
                 'category' => 'FIBER',
                 'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
             ],
             [
-                'sku_code' => 'CONN_SC_PC',
+                'part_code' => 'CONN_SC_PC',
                 'category' => 'CONNECTOR',
                 'attributes' => json_encode(['polish' => 'PC'], JSON_UNESCAPED_UNICODE),
             ],
             [
-                'sku_code' => 'CONN_SC_APC',
+                'part_code' => 'CONN_SC_APC',
                 'category' => 'CONNECTOR',
                 'attributes' => json_encode(['polish' => 'APC'], JSON_UNESCAPED_UNICODE),
             ],
@@ -531,20 +531,20 @@ final class LaborCostEngineTest extends TestCase
         $engine = app(LaborCostEngine::class);
 
         $normal = $engine->calculate([
-            ['sku_code' => 'FIBER_SMF28E+', 'quantity' => 1, 'sort_order' => 0],
-            ['sku_code' => 'CONN_SC_PC', 'quantity' => 1, 'sort_order' => 1],
+            ['part_code' => 'FIBER_SMF28E+', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'CONN_SC_PC', 'quantity' => 1, 'sort_order' => 1],
         ], 1, []);
         $normalApc = $engine->calculate([
-            ['sku_code' => 'FIBER_SMF28E+', 'quantity' => 1, 'sort_order' => 0],
-            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 1],
+            ['part_code' => 'FIBER_SMF28E+', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 1],
         ], 1, []);
         $pm = $engine->calculate([
-            ['sku_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 0],
-            ['sku_code' => 'CONN_SC_PC', 'quantity' => 1, 'sort_order' => 1],
+            ['part_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'CONN_SC_PC', 'quantity' => 1, 'sort_order' => 1],
         ], 1, []);
         $pmApc = $engine->calculate([
-            ['sku_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 0],
-            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 1],
+            ['part_code' => 'FIBER_PMF', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 1],
         ], 1, []);
 
         $this->assertSame(['CONN_NORMAL'], array_values($normal['matched_process_codes'] ?? []));
@@ -592,29 +592,29 @@ final class LaborCostEngineTest extends TestCase
             'priority' => 10,
             'include_tags_json' => json_encode(['fusion'], JSON_UNESCAPED_UNICODE),
             'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-            'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
             'always_apply' => false,
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        DB::table('skus')->insert([
-            'sku_code' => 'SLEEVE_RECOTE',
+        DB::table('parts')->insert([
+            'part_code' => 'SLEEVE_RECOTE',
             'category' => 'SLEEVE',
             'attributes' => json_encode([], JSON_UNESCAPED_UNICODE),
         ]);
 
         $result = app(LaborCostEngine::class)->calculate([
-            ['sku_code' => 'SLEEVE_RECOTE', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'SLEEVE_RECOTE', 'quantity' => 1, 'sort_order' => 0],
         ], 1, []);
 
         $matchedCodes = is_array($result['matched_process_codes'] ?? null) ? $result['matched_process_codes'] : [];
         $this->assertContains('FUSION', $matchedCodes);
     }
 
-    public function test_required_sku_codes_are_primary_and_exact_code_tags_no_longer_match(): void
+    public function test_required_part_codes_are_primary_and_exact_code_tags_no_longer_match(): void
     {
         DB::table('labor_cost_settings')->insert([
             'id' => 1,
@@ -676,8 +676,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 10,
                 'include_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode(['CONN_SC_APC'], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode(['CONN_SC_APC'], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -690,8 +690,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 20,
                 'include_tags_json' => json_encode(['conn_sc_apc'], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -704,8 +704,8 @@ final class LaborCostEngineTest extends TestCase
                 'priority' => 30,
                 'include_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'exclude_tags_json' => json_encode([], JSON_UNESCAPED_UNICODE),
-                'required_sku_categories_json' => json_encode(['CONNECTOR'], JSON_UNESCAPED_UNICODE),
-                'required_sku_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode(['CONNECTOR'], JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode([], JSON_UNESCAPED_UNICODE),
                 'always_apply' => false,
                 'active' => true,
                 'created_at' => now(),
@@ -713,14 +713,14 @@ final class LaborCostEngineTest extends TestCase
             ],
         ]);
 
-        DB::table('skus')->insert([
-            'sku_code' => 'CONN_SC_APC',
+        DB::table('parts')->insert([
+            'part_code' => 'CONN_SC_APC',
             'category' => 'CONNECTOR',
             'attributes' => json_encode(['polish' => 'APC'], JSON_UNESCAPED_UNICODE),
         ]);
 
         $result = app(LaborCostEngine::class)->calculate([
-            ['sku_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 0],
+            ['part_code' => 'CONN_SC_APC', 'quantity' => 1, 'sort_order' => 0],
         ], 1, []);
 
         $this->assertSame(['CODE_MATCH'], array_values($result['matched_process_codes'] ?? []));
@@ -732,11 +732,11 @@ final class LaborCostEngineTest extends TestCase
         Schema::dropIfExists('labor_process_elements');
         Schema::dropIfExists('labor_processes');
         Schema::dropIfExists('labor_cost_settings');
-        Schema::dropIfExists('skus');
+        Schema::dropIfExists('parts');
 
-        Schema::create('skus', function (Blueprint $table) {
+        Schema::create('parts', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('sku_code')->unique();
+            $table->string('part_code')->unique();
             $table->string('category');
             $table->text('attributes')->nullable();
         });
@@ -783,8 +783,8 @@ final class LaborCostEngineTest extends TestCase
             $table->integer('priority')->default(100);
             $table->text('include_tags_json')->nullable();
             $table->text('exclude_tags_json')->nullable();
-            $table->text('required_sku_categories_json')->nullable();
-            $table->text('required_sku_codes_json')->nullable();
+            $table->text('required_part_categories_json')->nullable();
+            $table->text('required_part_codes_json')->nullable();
             $table->boolean('always_apply')->default(false);
             $table->boolean('active')->default(true);
             $table->timestamp('deleted_at')->nullable();

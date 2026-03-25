@@ -37,7 +37,7 @@
         'labor_breakdown' => '作業費内訳',
         'matched_labor_rules' => '適用ルール',
         'matched_process_codes' => '適用工程コード',
-        'sku_code' => '品目コード',
+        'part_code' => '品目コード',
         'category' => 'カテゴリ',
         'quantity' => '数量',
         'line_total' => '行合計',
@@ -488,7 +488,7 @@
                     @foreach($partsBreakdown as $row)
                         @if(is_array($row))
                             <tr>
-                                <td class="quote-breakdown-mono">{{ $toText($row['sku_code'] ?? null) }}</td>
+                                <td class="quote-breakdown-mono">{{ $toText($row['part_code'] ?? ($row['sku_code'] ?? null)) }}</td>
                                 <td>{{ $toText($row['category'] ?? null) }}</td>
                                 <td>{{ $toText($row['quantity'] ?? null) }}</td>
                                 <td>{{ $toDisplay('line_total', $row['line_total'] ?? null) }}</td>

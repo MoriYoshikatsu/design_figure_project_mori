@@ -5,7 +5,7 @@ namespace App\Services;
 final class BomBuilder
 {
     /**
-     * @return array<int, array{sku_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}>
+     * @return array<int, array{part_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}>
      */
     public function build(array $config, array $derived, array $dsl): array
     {
@@ -61,7 +61,7 @@ final class BomBuilder
                     $sourcePath = $sourceTpl !== '' ? str_replace('{index}', (string)$idx, $sourceTpl) : null;
 
                     $items[] = $this->normalizeItem([
-                        'sku_code' => (string)$skuCode,
+                        'part_code' => (string)$skuCode,
                         'quantity' => $this->evalExpr($def['qtyExpr'] ?? 1, $config, $derived, $row, (int)$idx),
                         'options' => $options,
                         'source_path' => $sourcePath,
@@ -88,7 +88,7 @@ final class BomBuilder
         }
 
         return $this->normalizeItem([
-            'sku_code' => (string)$skuCode,
+            'part_code' => (string)$skuCode,
             'quantity' => $this->evalExpr($def['qtyExpr'] ?? 1, $config, $derived, $item, $index),
             'options' => $options,
             'source_path' => $sourcePath,
@@ -118,7 +118,7 @@ final class BomBuilder
         }
 
         $items[] = $this->normalizeItem([
-            'sku_code' => $processSkuCode,
+            'part_code' => $processSkuCode,
             'quantity' => $processQty,
             'options' => $processOptions,
             'source_path' => '$.processType',
@@ -131,7 +131,7 @@ final class BomBuilder
             $skuCode = $s['skuCode'] ?? null;
             if ($this->isEmpty($skuCode)) continue;
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$skuCode,
+                'part_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [],
                 'source_path' => "\$.sleeves[$i]",
@@ -145,7 +145,7 @@ final class BomBuilder
             $skuCode = $f['skuCode'] ?? null;
             if ($this->isEmpty($skuCode)) continue;
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$skuCode,
+                'part_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [
                     'lengthM' => $this->extractLengthM($f, 'lengthM', 'lengthMm'),
@@ -163,7 +163,7 @@ final class BomBuilder
             if ($this->isEmpty($skuCode)) continue;
             $tubeLen = $this->resolveTubeLengthM($t, $config);
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$skuCode,
+                'part_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [
                     'startFiberIndex' => $t['startFiberIndex'] ?? null,
@@ -183,7 +183,7 @@ final class BomBuilder
         $conns = $config['connectors'] ?? [];
         if (!empty($conns['leftSkuCode'])) {
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$conns['leftSkuCode'],
+                'part_code' => (string)$conns['leftSkuCode'],
                 'quantity' => 1,
                 'options' => [],
                 'source_path' => "\$.connectors.leftSkuCode",
@@ -193,7 +193,7 @@ final class BomBuilder
         }
         if (!empty($conns['rightSkuCode'])) {
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$conns['rightSkuCode'],
+                'part_code' => (string)$conns['rightSkuCode'],
                 'quantity' => 1,
                 'options' => [],
                 'source_path' => "\$.connectors.rightSkuCode",
@@ -272,7 +272,7 @@ final class BomBuilder
 
     private function normalizeItem(array $item, array $config, array $derived): array
     {
-        $sku = (string)($item['sku_code'] ?? '');
+        $sku = (string)($item['part_code'] ?? '');
         if ($sku === '') return $item;
 
         if ($sku === 'PROC_MFD_CONVERSION') {

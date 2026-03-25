@@ -6,6 +6,7 @@ use Livewire\Component;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Models\ConfiguratorSession;
+use App\Services\SkuDisplayNameService;
 use App\Services\WorkChangeRequestService;
 use Illuminate\Support\Facades\Cookie;
 use Throwable;
@@ -17,8 +18,8 @@ final class Configurator extends Component
         'quote_id' => '見積ID',
         'status' => 'ステータス',
         'order_qty' => '注文数量',
-        'account_internal_name' => 'accounts.internal_name',
-        'account_user_name' => 'users.name',
+        'account_internal_name' => 'アカウント表示名',
+        'account_user_name' => 'ユーザー登録名',
         'assignee_name' => '担当者',
         'customer_emails' => '登録メールアドレス',
         'request_count' => '承認変更申請件数',
@@ -339,63 +340,29 @@ final class Configurator extends Component
 
     private function buildSkuOptions(): array
     {
-        $rows = DB::table('skus')
-            ->where('active', true)
-            ->orderBy('category')
-            ->orderBy('sku_code')
-            ->get(['sku_code', 'name', 'category']);
-
-        $byCategory = [
-            'SLEEVE' => [],
-            'FIBER' => [],
-            'TUBE' => [],
-            'CONNECTOR' => [],
-        ];
-
-        foreach ($rows as $r) {
-            $cat = strtoupper((string)($r->category ?? ''));
-            if (!array_key_exists($cat, $byCategory)) {
-                continue;
-            }
-            $byCategory[$cat][] = [
-                'code' => (string)$r->sku_code,
-                'label' => (string)$r->name,
-            ];
-        }
-
-        return [
-            'sleeve' => $byCategory['SLEEVE'],
-            'fiber' => $byCategory['FIBER'],
-            'tube' => $byCategory['TUBE'],
-            'connector' => $byCategory['CONNECTOR'],
-        ];
+        return app(SkuDisplayNameService::class)->buildOptionsByCategory(
+            $this->shouldUseEnglishUi() ? 'en' : 'ja',
+            true
+        );
     }
 
     private function buildSkuNameMap(): array
     {
-        $rows = DB::table('skus')
-            ->where('active', true)
-            ->get(['sku_code', 'name']);
-
-        $map = [];
-        foreach ($rows as $r) {
-            $code = (string)$r->sku_code;
-            if ($code === '') continue;
-            $map[$code] = (string)$r->name;
-        }
-
-        return $map;
+        return app(SkuDisplayNameService::class)->buildNameMap(
+            $this->shouldUseEnglishUi() ? 'en' : 'ja',
+            true
+        );
     }
 
     private function buildSkuSvgMap(): array
     {
-        $rows = DB::table('skus')
+        $rows = DB::table('parts')
             ->where('active', true)
-            ->get(['sku_code']);
+            ->get(['part_code']);
 
         $map = [];
         foreach ($rows as $r) {
-            $code = (string)$r->sku_code;
+            $code = (string)$r->part_code;
             if ($code === '') continue;
             $rel = 'sku-svg/' . $code . '.svg';
             $abs = public_path($rel);

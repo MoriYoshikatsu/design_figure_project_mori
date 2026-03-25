@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+  <defs>
+    <style>
+      .title { font: 700 28px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .sub { font: 500 16px 'Noto Sans JP', sans-serif; fill: #334155; }
+      .label { font: 700 18px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .text { font: 500 14px 'Noto Sans JP', sans-serif; fill: #1e293b; }
+      .small { font: 500 12px 'Noto Sans JP', sans-serif; fill: #475569; }
+      .panel { fill: #fff; stroke: #cbd5e1; stroke-width: 2; rx: 18; ry: 18; }
+      .current { fill: #ecfdf5; stroke: #22c55e; }
+      .pending { fill: #fef3c7; stroke: #f59e0b; }
+      .rejected { fill: #fee2e2; stroke: #ef4444; }
+      .neutral { fill: #eff6ff; stroke: #60a5fa; }
+      .arrow { stroke: #475569; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .soft { stroke: #94a3b8; stroke-width: 2.5; fill: none; marker-end: url(#arrowSoft); }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#475569"/>
+    </marker>
+    <marker id="arrowSoft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="760" fill="#f8fafc"/>
+  <text x="50" y="55" class="title">図3 見積ライフサイクルと「現行版」</text>
+  <text x="50" y="85" class="sub">承認待ち・却下・承認済みの履歴が混在しても、どの履歴が現行版になるかを整理した図です。</text>
+
+  <rect x="70" y="170" width="220" height="100" class="panel neutral"/>
+  <text x="180" y="208" text-anchor="middle" class="label">1. 仕様入力</text>
+  <text x="180" y="235" text-anchor="middle" class="text">/configurator</text>
+  <text x="180" y="257" text-anchor="middle" class="small">セッション保存・プレビュー確認</text>
+
+  <rect x="360" y="170" width="260" height="100" class="panel current"/>
+  <text x="490" y="208" text-anchor="middle" class="label">2. 見積発行</text>
+  <text x="490" y="235" text-anchor="middle" class="text">ISSUE</text>
+  <text x="490" y="257" text-anchor="middle" class="small">最初の現行版が作られる</text>
+
+  <rect x="700" y="110" width="270" height="100" class="panel pending"/>
+  <text x="835" y="148" text-anchor="middle" class="label">3-A. 変更申請送信</text>
+  <text x="835" y="175" text-anchor="middle" class="text">EDIT_REQUEST_SUBMIT</text>
+  <text x="835" y="197" text-anchor="middle" class="small">履歴には残るが、まだ現行版ではない</text>
+
+  <rect x="700" y="250" width="270" height="100" class="panel current"/>
+  <text x="835" y="288" text-anchor="middle" class="label">3-B. 即時反映</text>
+  <text x="835" y="315" text-anchor="middle" class="text">EDIT_DIRECT_APPLY</text>
+  <text x="835" y="337" text-anchor="middle" class="small">その時点で現行版が更新される</text>
+
+  <rect x="1060" y="110" width="260" height="100" class="panel current"/>
+  <text x="1190" y="148" text-anchor="middle" class="label">4-A. 承認</text>
+  <text x="1190" y="175" text-anchor="middle" class="text">EDIT_REQUEST_APPROVE</text>
+  <text x="1190" y="197" text-anchor="middle" class="small">承認された run が新しい現行版</text>
+
+  <rect x="1060" y="250" width="260" height="100" class="panel rejected"/>
+  <text x="1190" y="288" text-anchor="middle" class="label">4-B. 却下</text>
+  <text x="1190" y="315" text-anchor="middle" class="text">EDIT_REQUEST_REJECT</text>
+  <text x="1190" y="337" text-anchor="middle" class="small">旧現行版を維持したまま履歴だけ増える</text>
+
+  <path d="M290 220 H340" class="arrow"/>
+  <path d="M620 220 H680 V160 H690" class="arrow"/>
+  <path d="M620 220 H690" class="arrow"/>
+  <path d="M970 160 H1040" class="arrow"/>
+  <path d="M970 160 H1010 V300 H1040" class="soft"/>
+
+  <rect x="120" y="470" width="1160" height="170" class="panel"/>
+  <text x="160" y="515" class="label">計算履歴画面での見え方</text>
+  <text x="160" y="548" class="text">- 現行版: 実際に見積へ反映済みの最新履歴。ISSUE / 即時反映 / 承認済み変更申請のどれかになる。</text>
+  <text x="160" y="578" class="text">- 未反映: 承認待ちの変更申請。履歴としては残るが、現在の見積内容そのものではない。</text>
+  <text x="160" y="608" class="text">- 却下: 却下結果の履歴。承認前の現行版をそのまま維持する。</text>
+  <text x="160" y="638" class="text">- 旧版: 過去に現行版だった run。比較や監査のために残る。</text>
+</svg>

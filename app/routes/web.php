@@ -246,7 +246,7 @@ Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, Sn
         'total' => (float)($quote->total ?? 0),
     ];
 
-    $svg = $renderer->render($config, $derived, $errors);
+    $svg = $renderer->render($config, $derived, $errors, 'en');
 
     $filename = $pdfService->buildFilename(
         'quote',
@@ -278,15 +278,25 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::put('/accounts/{id}/members/{userId}/memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.update');
     Route::post('/accounts/{id}/members/{userId}/edit-request/update-memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.edit-request.update');
 
-    Route::get('/skus', [CatalogController::class, 'index'])->name('skus.index');
-    Route::get('/skus/create', [SkuController::class, 'create'])->name('skus.create');
-    Route::post('/skus', [SkuController::class, 'store'])->name('skus.store');
-    Route::post('/skus/edit-request/create', [SkuController::class, 'store'])->name('skus.edit-request.create');
-    Route::get('/skus/{id}/edit', [SkuController::class, 'edit'])->name('skus.edit');
-    Route::put('/skus/{id}', [SkuController::class, 'update'])->name('skus.update');
-    Route::post('/skus/{id}/edit-request/update', [SkuController::class, 'update'])->name('skus.edit-request.update');
-    Route::delete('/skus/{id}', [SkuController::class, 'destroy'])->name('skus.destroy');
-    Route::post('/skus/{id}/edit-request/delete', [SkuController::class, 'destroy'])->name('skus.edit-request.delete');
+    Route::get('/parts', [CatalogController::class, 'index'])->name('parts.index');
+    Route::get('/parts/create', [SkuController::class, 'create'])->name('parts.create');
+    Route::post('/parts', [SkuController::class, 'store'])->name('parts.store');
+    Route::post('/parts/edit-request/create', [SkuController::class, 'store'])->name('parts.edit-request.create');
+    Route::get('/parts/{id}/edit', [SkuController::class, 'edit'])->name('parts.edit');
+    Route::put('/parts/{id}', [SkuController::class, 'update'])->name('parts.update');
+    Route::post('/parts/{id}/edit-request/update', [SkuController::class, 'update'])->name('parts.edit-request.update');
+    Route::delete('/parts/{id}', [SkuController::class, 'destroy'])->name('parts.destroy');
+    Route::post('/parts/{id}/edit-request/delete', [SkuController::class, 'destroy'])->name('parts.edit-request.delete');
+
+    Route::get('/skus', [CatalogController::class, 'index']);
+    Route::get('/skus/create', [SkuController::class, 'create']);
+    Route::post('/skus', [SkuController::class, 'store']);
+    Route::post('/skus/edit-request/create', [SkuController::class, 'store']);
+    Route::get('/skus/{id}/edit', [SkuController::class, 'edit']);
+    Route::put('/skus/{id}', [SkuController::class, 'update']);
+    Route::post('/skus/{id}/edit-request/update', [SkuController::class, 'update']);
+    Route::delete('/skus/{id}', [SkuController::class, 'destroy']);
+    Route::post('/skus/{id}/edit-request/delete', [SkuController::class, 'destroy']);
 
     Route::get('/price-books', [CatalogController::class, 'index'])->name('price-books.index');
     Route::get('/price-books/create', [PriceBookController::class, 'create'])->name('price-books.create');

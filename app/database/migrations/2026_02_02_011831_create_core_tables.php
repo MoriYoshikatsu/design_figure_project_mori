@@ -29,9 +29,9 @@ return new class extends Migration
             $table->foreign('user_id')->references('id')->on('users');
         });
 
-        Schema::create('skus', function (Blueprint $table) {
+        Schema::create('parts', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('sku_code')->unique(); // 例: FIBER_A
+            $table->string('part_code')->unique(); // 例: FIBER_A
             $table->string('name');
             $table->enum('category', ['PROC', 'SLEEVE', 'FIBER', 'TUBE', 'CONNECTOR']);
             $table->boolean('active')->default(true);
@@ -58,7 +58,7 @@ return new class extends Migration
         Schema::create('price_book_items', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->unsignedBigInteger('price_book_id');
-            $table->unsignedBigInteger('sku_id');
+            $table->unsignedBigInteger('part_id');
 
             $table->enum('pricing_model', ['FIXED', 'PER_M', 'FORMULA']);
             $table->decimal('unit_price', 12, 2)->nullable();     // FIXED
@@ -70,10 +70,10 @@ return new class extends Migration
             $table->timestampsTz();
 
             $table->foreign('price_book_id')->references('id')->on('price_books');
-            $table->foreign('sku_id')->references('id')->on('skus');
+            $table->foreign('part_id')->references('id')->on('parts');
 
             $table->index(['price_book_id']);
-            $table->index(['sku_id']);
+            $table->index(['part_id']);
         });
 
         Schema::create('product_templates', function (Blueprint $table) {
@@ -146,7 +146,7 @@ return new class extends Migration
         Schema::create('quote_items', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->unsignedBigInteger('quote_id');
-            $table->unsignedBigInteger('sku_id');
+            $table->unsignedBigInteger('part_id');
 
             $table->decimal('quantity', 12, 3);
             $table->decimal('unit_price', 12, 6);
@@ -159,7 +159,7 @@ return new class extends Migration
             $table->timestampsTz();
 
             $table->foreign('quote_id')->references('id')->on('quotes');
-            $table->foreign('sku_id')->references('id')->on('skus');
+            $table->foreign('part_id')->references('id')->on('parts');
 
             $table->index('quote_id');
         });
@@ -191,7 +191,7 @@ return new class extends Migration
         Schema::dropIfExists('product_templates');
         Schema::dropIfExists('price_book_items');
         Schema::dropIfExists('price_books');
-        Schema::dropIfExists('skus');
+        Schema::dropIfExists('parts');
         Schema::dropIfExists('account_user');
         Schema::dropIfExists('accounts');
     }

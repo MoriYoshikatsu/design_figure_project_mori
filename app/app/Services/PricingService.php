@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 final class PricingService
 {
     /**
-     * @param array<int, array{sku_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}> $bom
+     * @param array<int, array{part_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}> $bom
      * @return array{
      *   price_book_id:?int,
      *   currency:?string,
@@ -30,15 +30,15 @@ final class PricingService
         $subtotal = 0.0;
 
         $skuCodes = array_values(array_unique(array_filter(array_map(
-            fn ($r) => is_array($r) ? ($r['sku_code'] ?? null) : null,
+            fn ($r) => is_array($r) ? ($r['part_code'] ?? ($r['sku_code'] ?? null)) : null,
             $bom
         ))));
 
         $skuIdByCode = [];
         if (!empty($skuCodes)) {
-            $skuIdByCode = DB::table('skus')
-                ->whereIn('sku_code', $skuCodes)
-                ->pluck('id', 'sku_code')
+            $skuIdByCode = DB::table('parts')
+                ->whereIn('part_code', $skuCodes)
+                ->pluck('id', 'part_code')
                 ->all();
         }
 
@@ -46,16 +46,16 @@ final class PricingService
         if ($priceBookId && !empty($skuIdByCode)) {
             $pbiBySkuId = DB::table('price_book_items')
                 ->where('price_book_id', $priceBookId)
-                ->whereIn('sku_id', array_values($skuIdByCode))
+                ->whereIn('part_id', array_values($skuIdByCode))
                 ->get()
-                ->keyBy('sku_id')
+                ->keyBy('part_id')
                 ->map(fn ($row) => (array)$row)
                 ->all();
         }
 
         foreach ($bom as $row) {
             if (!is_array($row)) continue;
-            $skuCode = (string)($row['sku_code'] ?? '');
+            $skuCode = (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
             if ($skuCode === '') continue;
 
             $qty = $this->asNumber($row['quantity'] ?? 1);
@@ -78,7 +78,7 @@ final class PricingService
             }
 
             $items[] = [
-                'sku_code' => $skuCode,
+                'part_code' => $skuCode,
                 'quantity' => $qty,
                 'unit_price' => $unitPrice,
                 'line_total' => $lineTotal,
