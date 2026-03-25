@@ -68,4 +68,38 @@ final class BomBuilderProcessTypeTest extends TestCase
             ['TEC30_HP', 'PROC_TEC30_HP', 1],
         ];
     }
+
+    public function test_build_default_adds_dual_tec_process_items_for_both_ends(): void
+    {
+        $builder = app(BomBuilder::class);
+
+        $config = [
+            'processType' => 'TEC',
+            'mfdCount' => 1,
+            'tubeCount' => 0,
+            'tecSide' => 'both',
+            'tecLeftProcessType' => 'TEC20',
+            'tecRightProcessType' => 'TEC30_HP',
+            'sleeves' => [],
+            'fibers' => [
+                ['skuCode' => 'FIBER_A', 'lengthM' => 0.5, 'toleranceM' => 0.005],
+            ],
+            'tubes' => [],
+            'connectors' => [
+                'mode' => 'none',
+                'leftSkuCode' => null,
+                'rightSkuCode' => null,
+            ],
+        ];
+
+        $bom = $builder->build($config, [], []);
+
+        $this->assertSame('PROC_TEC20', (string)($bom[0]['part_code'] ?? ''));
+        $this->assertSame('$.tecLeftProcessType', (string)($bom[0]['source_path'] ?? ''));
+        $this->assertSame('left', (string)($bom[0]['options']['tecSide'] ?? ''));
+
+        $this->assertSame('PROC_TEC30_HP', (string)($bom[1]['part_code'] ?? ''));
+        $this->assertSame('$.tecRightProcessType', (string)($bom[1]['source_path'] ?? ''));
+        $this->assertSame('right', (string)($bom[1]['options']['tecSide'] ?? ''));
+    }
 }

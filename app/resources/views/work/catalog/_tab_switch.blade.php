@@ -6,7 +6,7 @@
         data-catalog-tab-url="{{ $skuTabUrl }}"
         @if(!$canAccessSkus) disabled @endif
     >
-        <span>Parts</span>
+        <span>パーツ</span>
         <span class="catalog-segment-count">{{ $skuCount }}</span>
         @if(!$canAccessSkus)
             <span class="catalog-segment-note">権限なし</span>

@@ -7,7 +7,7 @@
 @endphp
 
 <div class="actions" style="margin:8px 0;">
-    <a href="{{ route('work.parts.create') }}">Create Part</a>
+    <a href="{{ route('work.parts.create') }}">パーツ作成</a>
 </div>
 
 <form method="GET" action="{{ route($indexRouteName) }}" style="margin:12px 0;">

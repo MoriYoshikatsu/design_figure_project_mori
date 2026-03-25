@@ -136,7 +136,7 @@
                                             <input type="number" step="1" min="1" name="batch_size" value="{{ $element['batch_size'] ?? 1 }}" aria-label="1回の作業数量">
                                         </label>
                                         <label class="labor-field">
-                                            <span class="labor-field-label">減価償却費</span>
+                                            <span class="labor-field-label">足し算の定数項</span>
                                             <input type="number" step="0.01" min="0" name="depreciation_amount" value="{{ $element['depreciation_amount'] ?? 0 }}" aria-label="減価償却費">
                                         </label>
                                         <label class="labor-field">
@@ -200,7 +200,7 @@
                                         <input type="number" min="1" step="1" name="batch_size" value="1" aria-label="1回の作業数量">
                                     </label>
                                     <label class="labor-field">
-                                        <span class="labor-field-label">減価償却費</span>
+                                        <span class="labor-field-label">足し算の定数項</span>
                                         <input type="number" min="0" step="0.01" name="depreciation_amount" value="0" aria-label="減価償却費">
                                     </label>
                                     <label class="labor-field">

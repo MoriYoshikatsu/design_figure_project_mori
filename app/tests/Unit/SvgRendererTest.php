@@ -276,4 +276,36 @@ final class SvgRendererTest extends TestCase
             $svg
         );
     }
+
+    public function test_dual_tec_setup_renders_both_side_labels(): void
+    {
+        $renderer = new SvgRenderer();
+
+        $svg = $renderer->render(
+            [
+                'processType' => 'TEC',
+                'tecSide' => 'both',
+                'tecLeftProcessType' => 'TEC20',
+                'tecRightProcessType' => 'TEC30_HP',
+                'fibers' => [
+                    ['lengthM' => 1.0],
+                ],
+                'tubes' => [],
+                'connectors' => [
+                    'mode' => 'none',
+                    'leftSkuCode' => null,
+                    'rightSkuCode' => null,
+                ],
+            ],
+            [
+                'fiberCount' => 1,
+                'totalLengthM' => 1.0,
+                'displaySegmentLens' => [1.0],
+            ]
+        );
+
+        $this->assertStringContainsString('TEC20 (Left End) / TEC30_HP (Right End)', $svg);
+        $this->assertStringContainsString('TEC20: Left End', $svg);
+        $this->assertStringContainsString('TEC30_HP: Right End', $svg);
+    }
 }

@@ -8,6 +8,12 @@ use Illuminate\Support\Facades\Schema;
 
 final class AccountChangeRequestRequirementService
 {
+    /** @var array<int, string> */
+    private const UI_HIDDEN_ENTITY_TYPES = [
+        'product_template',
+        'product_template_version',
+    ];
+
     /** @var array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}> */
     private const CATALOG = [
         [
@@ -158,6 +164,14 @@ final class AccountChangeRequestRequirementService
         return array_column(self::CATALOG, 'entity_type');
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function uiToggleableEntityTypes(): array
+    {
+        return array_column($this->uiCatalog(), 'entity_type');
+    }
+
     public function storageAvailable(): bool
     {
         return $this->storageReady();
@@ -169,23 +183,7 @@ final class AccountChangeRequestRequirementService
      */
     public function normalizeRequiredEntityTypes(array $requiredEntityTypes): array
     {
-        $selected = [];
-        $selectedMap = [];
-        foreach ($requiredEntityTypes as $entityType) {
-            $normalized = $this->normalizeEntityType((string)$entityType);
-            if ($normalized === '' || isset($selectedMap[$normalized])) {
-                continue;
-            }
-            $selectedMap[$normalized] = true;
-        }
-
-        foreach ($this->toggleableEntityTypes() as $entityType) {
-            if (isset($selectedMap[$entityType])) {
-                $selected[] = $entityType;
-            }
-        }
-
-        return $selected;
+        return $this->normalizeEntityTypesAgainstAllowedList($requiredEntityTypes, $this->toggleableEntityTypes());
     }
 
     /**
@@ -205,12 +203,58 @@ final class AccountChangeRequestRequirementService
     }
 
     /**
+     * @param array<int, mixed> $requiredEntityTypes
+     * @return array<int, string>
+     */
+    public function mergeUiSelectionForSync(int $accountId, array $requiredEntityTypes): array
+    {
+        $visibleSelectedMap = array_fill_keys(
+            $this->normalizeEntityTypesAgainstAllowedList($requiredEntityTypes, $this->uiToggleableEntityTypes()),
+            true
+        );
+        $existingSelectedMap = array_fill_keys($this->selectedRequiredEntityTypes($accountId), true);
+
+        $merged = [];
+        foreach ($this->toggleableEntityTypes() as $entityType) {
+            if (in_array($entityType, self::UI_HIDDEN_ENTITY_TYPES, true)) {
+                if (isset($existingSelectedMap[$entityType])) {
+                    $merged[] = $entityType;
+                }
+                continue;
+            }
+
+            if (isset($visibleSelectedMap[$entityType])) {
+                $merged[] = $entityType;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
      * @return array<int, array{group_key:string,group_label:string,items:array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}>}>
      */
     public function catalogGroups(): array
     {
+        return $this->catalogGroupsFromCatalog(self::CATALOG);
+    }
+
+    /**
+     * @return array<int, array{group_key:string,group_label:string,items:array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}>}>
+     */
+    public function uiCatalogGroups(): array
+    {
+        return $this->catalogGroupsFromCatalog($this->uiCatalog());
+    }
+
+    /**
+     * @param array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}> $catalog
+     * @return array<int, array{group_key:string,group_label:string,items:array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}>}>
+     */
+    private function catalogGroupsFromCatalog(array $catalog): array
+    {
         $groups = [];
-        foreach (self::CATALOG as $item) {
+        foreach ($catalog as $item) {
             $groupKey = $item['group_key'];
             if (!isset($groups[$groupKey])) {
                 $groups[$groupKey] = [
@@ -304,7 +348,10 @@ final class AccountChangeRequestRequirementService
             foreach ($this->toggleableEntityTypes() as $entityType) {
                 $stateMap[$entityType] = $stateRowsByAccount[$accountId][$entityType] ?? true;
             }
-            $summaryMap[$accountId] = $this->buildSummaryFromStateMap($stateMap);
+            $summaryMap[$accountId] = $this->buildSummaryFromStateMap(
+                $this->filterStateMapByAllowedEntityTypes($stateMap, $this->uiToggleableEntityTypes()),
+                $this->uiCatalog()
+            );
         }
 
         return $summaryMap;
@@ -382,24 +429,28 @@ final class AccountChangeRequestRequirementService
      */
     public function buildViewData(int $accountId): array
     {
-        $stateMap = $this->stateMap($accountId);
+        $stateMap = $this->filterStateMapByAllowedEntityTypes(
+            $this->stateMap($accountId),
+            $this->uiToggleableEntityTypes()
+        );
 
         return [
-            'changeRequestRequirementGroups' => $this->catalogGroups(),
+            'changeRequestRequirementGroups' => $this->uiCatalogGroups(),
             'changeRequestRequirementStateMap' => $stateMap,
             'changeRequestRequiredCount' => count(array_filter($stateMap, static fn (bool $isRequired): bool => $isRequired)),
             'changeRequestToggleableCount' => count($stateMap),
-            'changeRequestRequirementSummary' => $this->buildSummaryFromStateMap($stateMap),
+            'changeRequestRequirementSummary' => $this->buildSummaryFromStateMap($stateMap, $this->uiCatalog()),
         ];
     }
 
     /**
      * @param array<string, bool> $stateMap
+     * @param array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}> $catalog
      */
-    private function buildSummaryFromStateMap(array $stateMap): string
+    private function buildSummaryFromStateMap(array $stateMap, array $catalog): string
     {
         $requiredLabels = [];
-        foreach (self::CATALOG as $item) {
+        foreach ($catalog as $item) {
             $entityType = $item['entity_type'];
             if (($stateMap[$entityType] ?? true) === true) {
                 $requiredLabels[] = $item['short_label'];
@@ -407,7 +458,7 @@ final class AccountChangeRequestRequirementService
         }
 
         $requiredCount = count($requiredLabels);
-        $totalCount = count(self::CATALOG);
+        $totalCount = count($catalog);
 
         if ($requiredCount === $totalCount) {
             return '作成・更新はすべて必須';
@@ -455,6 +506,11 @@ final class AccountChangeRequestRequirementService
         }
 
         if ($entityType === 'quote' && $entityId > 0) {
+            $actorAccountId = $this->resolvePrimaryAccountIdForUser($requestedBy);
+            if ($actorAccountId > 0) {
+                return $actorAccountId;
+            }
+
             $accountId = (int)DB::table('quotes')
                 ->whereNull('deleted_at')
                 ->where('id', $entityId)
@@ -465,6 +521,11 @@ final class AccountChangeRequestRequirementService
         }
 
         return $this->resolvePrimaryAccountIdForUser($requestedBy);
+    }
+
+    public function primaryAccountIdForUser(int $userId): int
+    {
+        return $this->resolvePrimaryAccountIdForUser($userId);
     }
 
     private function resolvePrimaryAccountIdForUser(int $userId): int
@@ -491,6 +552,57 @@ final class AccountChangeRequestRequirementService
     {
         $entityType = strtolower(trim($entityType));
         return $entityType === 'sku' ? 'part' : $entityType;
+    }
+
+    /**
+     * @param array<int, mixed> $requiredEntityTypes
+     * @param array<int, string> $allowedEntityTypes
+     * @return array<int, string>
+     */
+    private function normalizeEntityTypesAgainstAllowedList(array $requiredEntityTypes, array $allowedEntityTypes): array
+    {
+        $selected = [];
+        $selectedMap = [];
+        foreach ($requiredEntityTypes as $entityType) {
+            $normalized = $this->normalizeEntityType((string)$entityType);
+            if ($normalized === '' || isset($selectedMap[$normalized])) {
+                continue;
+            }
+            $selectedMap[$normalized] = true;
+        }
+
+        foreach ($allowedEntityTypes as $entityType) {
+            if (isset($selectedMap[$entityType])) {
+                $selected[] = $entityType;
+            }
+        }
+
+        return $selected;
+    }
+
+    /**
+     * @return array<int, array{entity_type:string,label:string,short_label:string,description:string,group_key:string,group_label:string,group_order:int,sort_order:int}>
+     */
+    private function uiCatalog(): array
+    {
+        return array_values(array_filter(self::CATALOG, static function (array $item): bool {
+            return !in_array((string)$item['entity_type'], self::UI_HIDDEN_ENTITY_TYPES, true);
+        }));
+    }
+
+    /**
+     * @param array<string, bool> $stateMap
+     * @param array<int, string> $allowedEntityTypes
+     * @return array<string, bool>
+     */
+    private function filterStateMapByAllowedEntityTypes(array $stateMap, array $allowedEntityTypes): array
+    {
+        $filtered = [];
+        foreach ($allowedEntityTypes as $entityType) {
+            $filtered[$entityType] = $stateMap[$entityType] ?? true;
+        }
+
+        return $filtered;
     }
 
     private function storageReady(): bool

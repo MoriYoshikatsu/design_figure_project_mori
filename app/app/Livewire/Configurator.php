@@ -6,6 +6,7 @@ use Livewire\Component;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Models\ConfiguratorSession;
+use App\Services\AccountChangeRequestRequirementService;
 use App\Services\SkuDisplayNameService;
 use App\Services\WorkChangeRequestService;
 use Illuminate\Support\Facades\Cookie;
@@ -46,13 +47,22 @@ final class Configurator extends Component
         'total',
     ];
     private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
     private const PROCESS_TYPE_TEC20 = 'TEC20';
     private const PROCESS_TYPE_TEC30 = 'TEC30';
     private const PROCESS_TYPE_TEC20_HP = 'TEC20_HP';
     private const PROCESS_TYPE_TEC30_HP = 'TEC30_HP';
     /** @var array<int, string> */
+    private const CONCRETE_TEC_PROCESS_TYPES = [
+        self::PROCESS_TYPE_TEC20,
+        self::PROCESS_TYPE_TEC30,
+        self::PROCESS_TYPE_TEC20_HP,
+        self::PROCESS_TYPE_TEC30_HP,
+    ];
+    /** @var array<int, string> */
     private const PROCESS_TYPES = [
         self::PROCESS_TYPE_MFD,
+        self::PROCESS_TYPE_TEC,
         self::PROCESS_TYPE_TEC20,
         self::PROCESS_TYPE_TEC30,
         self::PROCESS_TYPE_TEC20_HP,
@@ -78,6 +88,9 @@ final class Configurator extends Component
     public array $templateDsl = [];
     public ?int $quoteEditId = null;
     public ?int $quoteAccountId = null;
+    public ?int $effectiveQuoteAccountId = null;
+    public ?int $quoteEditDecisionAccountId = null;
+    public ?bool $quoteEditApprovalRequired = null;
     public ?array $initialConfig = null;
     public ?int $initialTemplateVersionId = null;
     public ?string $initialMemo = null;
@@ -155,6 +168,7 @@ final class Configurator extends Component
         $this->summaryFields = $this->normalizeSummaryFields(
             is_array($this->initialSummaryFields) ? $this->initialSummaryFields : self::SUMMARY_DEFAULT_FIELDS
         );
+        $this->syncQuoteEditApprovalState();
 
         // 見積編集モードでは configurator_sessions を新規作成しない
         if ($this->quoteEditId && is_array($this->initialConfig)) {
@@ -173,7 +187,7 @@ final class Configurator extends Component
             $this->skuNameMap = $this->buildSkuNameMap();
             $this->skuSvgMap = $this->buildSkuSvgMap();
             $defaultPricingInput = app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount(
-                (int)($this->quoteAccountId ?: $this->resolveAccountId())
+                (int)($this->effectiveQuoteAccountId ?: $this->quoteAccountId ?: $this->resolveAccountId())
             );
             $this->applyPricingInput(
                 is_array($this->initialPricingInput) && !empty($this->initialPricingInput)
@@ -310,6 +324,8 @@ final class Configurator extends Component
             'mfdCount' => self::FIXED_MFD_COUNT,
             'mfdAdjustments' => [],
             'tecSide' => null,
+            'tecLeftProcessType' => null,
+            'tecRightProcessType' => null,
             'sleeves' => [
                 ['skuCode' => 'SLEEVE_RECOTE'],
             ],
@@ -333,7 +349,7 @@ final class Configurator extends Component
             'connectors' => [
                 'mode' => 'both',
                 'leftSkuCode' => 'CONN_SC_PC',
-                'rightSkuCode' => null,
+                'rightSkuCode' => 'CONN_SC_PC',
             ],
         ];
     }
@@ -690,10 +706,20 @@ final class Configurator extends Component
     {
         if (!$this->quoteEditId) return;
         $this->saveError = null;
+        $this->syncQuoteEditApprovalState();
         $editComment = trim((string)$this->editComment);
         $this->resetErrorBag('editComment');
 
         $this->recompute(true);
+
+        if (!empty($this->errors)) {
+            $this->saveError = $this->uiText(
+                '入力エラーがあるため、見積変更は申請できません。エラーを修正してください。',
+                'The quote update cannot be submitted while input errors remain. Please fix the errors first.'
+            );
+            $this->saveStatus = $this->uiText('見積変更申請不可', 'Quote update blocked') . '(TOKYO): ' . now()->format('H:i:s');
+            return;
+        }
 
         $dsl = $this->templateDsl;
         /** @var \App\Services\DslEngine $engine */
@@ -794,7 +820,8 @@ final class Configurator extends Component
         );
 
         $requestId = $changeRequestService->requestId($submission);
-        $eventType = $changeRequestService->approvalRequired($submission)
+        $approvalRequired = $changeRequestService->approvalRequired($submission);
+        $eventType = $approvalRequired
             ? 'EDIT_REQUEST_SUBMIT'
             : 'EDIT_DIRECT_APPLY';
 
@@ -811,9 +838,10 @@ final class Configurator extends Component
             ['channel' => 'configurator']
         );
 
-        $this->saveStatus = $changeRequestService->approvalRequired($submission)
-            ? $this->uiText('見積変更申請', 'Quote change request') . '(TOKYO): ' . now()->format('H:i:s')
-            : $this->uiText('見積更新', 'Quote updated') . '(TOKYO): ' . now()->format('H:i:s');
+        $this->quoteEditApprovalRequired = $approvalRequired;
+        $this->saveStatus = $approvalRequired
+            ? $this->uiText('見積変更申請（承認後反映）', 'Quote change request (approval required)') . '(TOKYO): ' . now()->format('H:i:s')
+            : $this->uiText('見積更新（即時反映）', 'Quote updated (applied immediately)') . '(TOKYO): ' . now()->format('H:i:s');
     }
 
     private function autoSaveIfDue(): void
@@ -842,7 +870,6 @@ final class Configurator extends Component
         }
 
         $processType = $this->normalizeProcessType($this->config['processType'] ?? self::PROCESS_TYPE_MFD);
-        $this->config['processType'] = $processType;
         $isTecMode = $this->isTecProcessType($processType);
 
         // MFD変換個数は仕様で常に1固定（旧データ互換のためフィールドは残す）
@@ -868,9 +895,47 @@ final class Configurator extends Component
             $this->ensureArraySize('sleeves', self::FIXED_MFD_COUNT, ['skuCode' => null]);
         }
         $this->config['mfdAdjustments'] = [];
-        $this->config['tecSide'] = $isTecMode
-            ? $this->normalizeTecSide($this->config['tecSide'] ?? null)
-            : null;
+        if ($isTecMode) {
+            $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+            $tecSide = $this->normalizeTecSide($this->config['tecSide'] ?? null);
+            $leftTecType = $this->normalizeConcreteTecProcessType($this->config['tecLeftProcessType'] ?? null);
+            $rightTecType = $this->normalizeConcreteTecProcessType($this->config['tecRightProcessType'] ?? null);
+
+            if ($tecSide === null) {
+                if ($leftTecType !== null && $rightTecType !== null) {
+                    $tecSide = 'both';
+                } elseif ($rightTecType !== null && $leftTecType === null) {
+                    $tecSide = 'right';
+                } else {
+                    $tecSide = 'left';
+                }
+            }
+
+            if ($tecSide === 'left') {
+                $leftTecType = $leftTecType ?? $legacyTecType ?? self::PROCESS_TYPE_TEC20;
+                $rightTecType = null;
+            } elseif ($tecSide === 'right') {
+                $rightTecType = $rightTecType ?? $legacyTecType ?? self::PROCESS_TYPE_TEC20;
+                $leftTecType = null;
+            } else {
+                $leftTecType = $leftTecType ?? $legacyTecType ?? self::PROCESS_TYPE_TEC20;
+                $rightTecType = $rightTecType ?? $legacyTecType ?? $leftTecType ?? self::PROCESS_TYPE_TEC20;
+            }
+
+            $this->config['tecSide'] = $tecSide;
+            $this->config['tecLeftProcessType'] = $leftTecType;
+            $this->config['tecRightProcessType'] = $rightTecType;
+            $this->config['processType'] = $tecSide === 'left'
+                ? ($leftTecType ?? self::PROCESS_TYPE_TEC)
+                : ($tecSide === 'right'
+                    ? ($rightTecType ?? self::PROCESS_TYPE_TEC)
+                    : self::PROCESS_TYPE_TEC);
+        } else {
+            $this->config['tecSide'] = null;
+            $this->config['tecLeftProcessType'] = null;
+            $this->config['tecRightProcessType'] = null;
+            $this->config['processType'] = self::PROCESS_TYPE_MFD;
+        }
 
         $tubes = is_array($this->config['tubes'] ?? null) ? $this->config['tubes'] : [];
         $maxFiberIndex = max(0, $fiberCount - 1);
@@ -1095,12 +1160,8 @@ final class Configurator extends Component
 
     private function isTecProcessType(string $processType): bool
     {
-        return in_array($processType, [
-            self::PROCESS_TYPE_TEC20,
-            self::PROCESS_TYPE_TEC30,
-            self::PROCESS_TYPE_TEC20_HP,
-            self::PROCESS_TYPE_TEC30_HP,
-        ], true);
+        return $processType === self::PROCESS_TYPE_TEC
+            || in_array($processType, self::CONCRETE_TEC_PROCESS_TYPES, true);
     }
 
     private function resolveRequiredFiberCount(string $processType, int $mfdCount): int
@@ -1115,11 +1176,21 @@ final class Configurator extends Component
     private function normalizeTecSide(mixed $rawSide): ?string
     {
         $side = strtolower(trim((string)$rawSide));
-        if (!in_array($side, ['left', 'right'], true)) {
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
             return null;
         }
 
         return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::CONCRETE_TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
     }
 
     private function normalizeConnectorMode(mixed $rawMode, bool $allowBoth): string
@@ -1825,6 +1896,44 @@ final class Configurator extends Component
         return !$this->quoteEditId;
     }
 
+    private function syncQuoteEditApprovalState(): void
+    {
+        if (!$this->quoteEditId) {
+            $this->effectiveQuoteAccountId = null;
+            $this->quoteEditDecisionAccountId = null;
+            $this->quoteEditApprovalRequired = null;
+            return;
+        }
+
+        $quoteAccountId = (int)DB::table('quotes')
+            ->whereNull('deleted_at')
+            ->where('id', (int)$this->quoteEditId)
+            ->value('account_id');
+        if ($quoteAccountId <= 0) {
+            $quoteAccountId = (int)($this->quoteAccountId ?? 0);
+        }
+
+        $this->effectiveQuoteAccountId = $quoteAccountId > 0 ? $quoteAccountId : null;
+        if ($quoteAccountId > 0) {
+            $this->quoteAccountId = $quoteAccountId;
+        }
+
+        $requirementService = app(AccountChangeRequestRequirementService::class);
+        $decisionAccountId = $requirementService->primaryAccountIdForUser((int)auth()->id());
+        if ($decisionAccountId <= 0) {
+            $decisionAccountId = $quoteAccountId;
+        }
+
+        $this->quoteEditDecisionAccountId = $decisionAccountId > 0 ? $decisionAccountId : null;
+        if ($decisionAccountId <= 0) {
+            $this->quoteEditApprovalRequired = true;
+            return;
+        }
+
+        $stateMap = $requirementService->stateMap($decisionAccountId);
+        $this->quoteEditApprovalRequired = (bool)($stateMap['quote'] ?? true);
+    }
+
     private function uiText(string $ja, string $en): string
     {
         return $this->shouldUseEnglishUi() ? $en : $ja;
@@ -1837,13 +1946,20 @@ final class Configurator extends Component
         }
 
         $exact = [
-            'processTypeは MFD / TEC20 / TEC30 / TEC20_HP / TEC30_HP のいずれかです' => 'processType must be one of MFD / TEC20 / TEC30 / TEC20_HP / TEC30_HP.',
-            'TECモードではtecSide（left/right）の指定が必須です' => 'TEC mode requires tecSide (left/right).',
+            'processTypeは MFD / TEC / TEC20 / TEC30 / TEC20_HP / TEC30_HP のいずれかです' => 'processType must be one of MFD / TEC / TEC20 / TEC30 / TEC20_HP / TEC30_HP.',
+            'TECモードではtecSide（left/right/both）の指定が必須です' => 'TEC mode requires tecSide (left/right/both).',
+            '左端TEC種別を選択してください' => 'Please select the left TEC type.',
+            '右端TEC種別を選択してください' => 'Please select the right TEC type.',
             'fibers配列の個数が不正です' => 'The number of fibers is invalid.',
             'tubeCountは0〜2です' => 'tubeCount must be between 0 and 2.',
             'connectors.modeが不正です' => 'connectors.mode is invalid.',
             'TECモードではsleevesを設定できません' => 'Sleeves cannot be set in TEC mode.',
             'tubesは最大2件です' => 'You can set up to 2 tubes.',
+            'ファイバを選択してください' => 'Please select a fiber.',
+            'チューブを選択してください' => 'Please select a tube.',
+            'コネクタを選択してください' => 'Please select a connector.',
+            '左側コネクタを選択してください' => 'Please select the left connector.',
+            '右側コネクタを選択してください' => 'Please select the right connector.',
             'ファイバ長さが数値ではありません' => 'Fiber length must be numeric.',
             'ファイバ長さは0.2〜2.0mです' => 'Fiber length must be between 0.2m and 2.0m.',
             'ファイバ長さは0.1m刻みで入力してください' => 'Fiber length must be entered in 0.1m increments.',

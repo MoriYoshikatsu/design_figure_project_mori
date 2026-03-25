@@ -4,6 +4,10 @@ namespace App\Services;
 
 final class DslEngine
 {
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
+    /** @var array<int, string> */
+    private const TEC_PROCESS_TYPES = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
     private const MIN_LENGTH_M = 0.2;
     private const MAX_LENGTH_M = 2.0;
     private const FIBER_LENGTH_STEP_M = 0.1;
@@ -19,22 +23,37 @@ final class DslEngine
     {
         $errors = [];
 
-        $processType = $this->normalizeProcessType($config['processType'] ?? 'MFD');
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
         if ($processType === null) {
-            $errors[] = ['path' => 'processType', 'message' => 'processTypeは MFD / TEC20 / TEC30 / TEC20_HP / TEC30_HP のいずれかです'];
-            $processType = 'MFD';
+            $errors[] = ['path' => 'processType', 'message' => 'processTypeは MFD / TEC / TEC20 / TEC30 / TEC20_HP / TEC30_HP のいずれかです'];
+            $processType = self::PROCESS_TYPE_MFD;
         }
-        $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+        $isTecMode = $processType !== self::PROCESS_TYPE_MFD;
         $mfdCount = self::FIXED_MFD_COUNT;
         $fiberCount = $this->resolveRequiredFiberCount($isTecMode, $mfdCount);
         $tecSide = $this->normalizeTecSide($config['tecSide'] ?? null);
         if ($isTecMode && $tecSide === null) {
-            $errors[] = ['path' => 'tecSide', 'message' => 'TECモードではtecSide（left/right）の指定が必須です'];
+            $errors[] = ['path' => 'tecSide', 'message' => 'TECモードではtecSide（left/right/both）の指定が必須です'];
+        }
+        $tecProcessSelections = $this->resolveTecProcessSelections($config, $processType, $tecSide);
+        if ($isTecMode) {
+            if ($tecSide === 'left' || $tecSide === 'both') {
+                if (($tecProcessSelections['left'] ?? null) === null) {
+                    $errors[] = ['path' => 'tecLeftProcessType', 'message' => '左端TEC種別を選択してください'];
+                }
+            }
+            if ($tecSide === 'right' || $tecSide === 'both') {
+                if (($tecProcessSelections['right'] ?? null) === null) {
+                    $errors[] = ['path' => 'tecRightProcessType', 'message' => '右端TEC種別を選択してください'];
+                }
+            }
         }
 
         $this->validateFiberCount($config, $fiberCount, $errors);
+        $this->validateFiberSelections($config, $fiberCount, $errors);
         $this->validateFiberLengths($config, $errors);
         $this->validateTubeCount($config, $fiberCount, $isTecMode, $errors);
+        $this->validateTubeSelections($config, $errors);
         $this->validateConnectors($config, $isTecMode, $errors);
         $this->validateTubeArraySize($config, $errors);
         if ($isTecMode) {
@@ -47,6 +66,8 @@ final class DslEngine
                 'fiberCount' => $fiberCount,
                 'processType' => $processType,
                 'tecSide' => $tecSide,
+                'tecLeftProcessType' => $tecProcessSelections['left'] ?? null,
+                'tecRightProcessType' => $tecProcessSelections['right'] ?? null,
             ],
             'errors' => $errors,
         ];
@@ -103,6 +124,7 @@ final class DslEngine
     {
         $connectors = $config['connectors'] ?? [];
         if (!is_array($connectors)) {
+            $errors[] = ['path' => 'connectors.mode', 'message' => 'コネクタを選択してください'];
             return;
         }
         $mode = strtolower(trim((string)($connectors['mode'] ?? 'none')));
@@ -110,6 +132,21 @@ final class DslEngine
         if (!in_array($mode, $allowed, true)) {
             $errors[] = ['path' => 'connectors.mode', 'message' => 'connectors.modeが不正です'];
             return;
+        }
+        if ($mode === 'none') {
+            $left = trim((string)($connectors['leftSkuCode'] ?? ''));
+            $right = trim((string)($connectors['rightSkuCode'] ?? ''));
+            if ($left === '' && $right === '') {
+                $errors[] = ['path' => 'connectors.mode', 'message' => 'コネクタを選択してください'];
+            }
+            return;
+        }
+
+        if (in_array($mode, ['left', 'both'], true) && trim((string)($connectors['leftSkuCode'] ?? '')) === '') {
+            $errors[] = ['path' => 'connectors.leftSkuCode', 'message' => '左側コネクタを選択してください'];
+        }
+        if (in_array($mode, ['right', 'both'], true) && trim((string)($connectors['rightSkuCode'] ?? '')) === '') {
+            $errors[] = ['path' => 'connectors.rightSkuCode', 'message' => '右側コネクタを選択してください'];
         }
     }
 
@@ -161,10 +198,52 @@ final class DslEngine
         }
     }
 
+    private function validateFiberSelections(array $config, int $fiberCount, array &$errors): void
+    {
+        $fibers = $config['fibers'] ?? [];
+        if (!is_array($fibers)) {
+            for ($i = 0; $i < $fiberCount; $i++) {
+                $errors[] = ['path' => "fibers.$i.skuCode", 'message' => 'ファイバを選択してください'];
+            }
+            return;
+        }
+
+        for ($i = 0; $i < $fiberCount; $i++) {
+            $fiber = $fibers[$i] ?? null;
+            if (!is_array($fiber) || trim((string)($fiber['skuCode'] ?? '')) === '') {
+                $errors[] = ['path' => "fibers.$i.skuCode", 'message' => 'ファイバを選択してください'];
+            }
+        }
+    }
+
+    private function validateTubeSelections(array $config, array &$errors): void
+    {
+        $tubeCount = is_numeric($config['tubeCount'] ?? null) ? (int)$config['tubeCount'] : 0;
+        if ($tubeCount <= 0) {
+            $errors[] = ['path' => 'tubeCount', 'message' => 'チューブを選択してください'];
+            return;
+        }
+
+        $tubes = $config['tubes'] ?? [];
+        if (!is_array($tubes)) {
+            for ($i = 0; $i < $tubeCount; $i++) {
+                $errors[] = ['path' => "tubes.$i.skuCode", 'message' => 'チューブを選択してください'];
+            }
+            return;
+        }
+
+        for ($i = 0; $i < $tubeCount; $i++) {
+            $tube = $tubes[$i] ?? null;
+            if (!is_array($tube) || trim((string)($tube['skuCode'] ?? '')) === '') {
+                $errors[] = ['path' => "tubes.$i.skuCode", 'message' => 'チューブを選択してください'];
+            }
+        }
+    }
+
     private function normalizeProcessType(mixed $raw): ?string
     {
         $value = strtoupper(trim((string)$raw));
-        if (in_array($value, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+        if (in_array($value, array_merge([self::PROCESS_TYPE_MFD, self::PROCESS_TYPE_TEC], self::TEC_PROCESS_TYPES), true)) {
             return $value;
         }
 
@@ -174,11 +253,43 @@ final class DslEngine
     private function normalizeTecSide(mixed $raw): ?string
     {
         $side = strtolower(trim((string)$raw));
-        if (!in_array($side, ['left', 'right'], true)) {
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
             return null;
         }
 
         return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array{left:?string,right:?string}
+     */
+    private function resolveTecProcessSelections(array $config, string $processType, ?string $tecSide): array
+    {
+        $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+        $leftType = $this->normalizeConcreteTecProcessType($config['tecLeftProcessType'] ?? null);
+        $rightType = $this->normalizeConcreteTecProcessType($config['tecRightProcessType'] ?? null);
+
+        if ($tecSide === 'left') {
+            return ['left' => $leftType ?? $legacyTecType, 'right' => null];
+        }
+        if ($tecSide === 'right') {
+            return ['left' => null, 'right' => $rightType ?? $legacyTecType];
+        }
+        if ($tecSide === 'both') {
+            return ['left' => $leftType ?? $legacyTecType, 'right' => $rightType ?? $legacyTecType];
+        }
+
+        return ['left' => null, 'right' => null];
     }
 
     /**

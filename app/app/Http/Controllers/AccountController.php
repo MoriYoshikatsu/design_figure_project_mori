@@ -248,13 +248,16 @@ final class AccountController extends Controller
             'required_entity_types.*' => 'string|max:100',
         ]);
 
-        $selectedEntityTypes = $this->accountChangeRequestRequirementService->normalizeRequiredEntityTypes(
+        $selectedEntityTypes = $this->accountChangeRequestRequirementService->mergeUiSelectionForSync(
+            $id,
             is_array($data['required_entity_types'] ?? null) ? $data['required_entity_types'] : []
         );
 
+        $currentRequiredEntityTypes = $this->accountChangeRequestRequirementService->selectedRequiredEntityTypes($id);
+
         $before = [
             'account_id' => $id,
-            'required_entity_types' => $this->accountChangeRequestRequirementService->selectedRequiredEntityTypes($id),
+            'required_entity_types' => $currentRequiredEntityTypes,
         ];
         $after = [
             'account_id' => $id,
@@ -272,11 +275,19 @@ final class AccountController extends Controller
             ['account_id' => $id]
         );
 
-        return redirect()->route('work.accounts.permissions', $id)->with('status', $changeRequestService->outcomeMessage(
+        $statusMessage = $changeRequestService->outcomeMessage(
             $submission,
             '変更申請必須設定を更新しました',
             '変更申請必須設定の更新申請を送信しました'
-        ));
+        );
+
+        $selfSettingWasRequired = in_array('account_change_request_requirement', $currentRequiredEntityTypes, true);
+        $selfSettingWillBeOptional = !in_array('account_change_request_requirement', $selectedEntityTypes, true);
+        if ($changeRequestService->approvalRequired($submission) && $selfSettingWasRequired && $selfSettingWillBeOptional) {
+            $statusMessage .= '（現在この設定ページ自体が申請必須のため、今回の変更は承認後に反映されます。承認後、次回以降は即時反映になります。）';
+        }
+
+        return redirect()->route('work.accounts.permissions', $id)->with('status', $statusMessage);
     }
 
     public function update(Request $request, int $id)

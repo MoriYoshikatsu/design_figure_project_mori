@@ -102,6 +102,13 @@ final class WorkPermissionService
         }
 
         $path = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
+        if ($this->userHasSalesRole($userId)) {
+            if ($this->isChangeRequestPath($path)) {
+                return false;
+            }
+            return true;
+        }
+
         $method = strtoupper($request->method());
         $pathsToMatch = [$path];
         if ($method === 'GET') {
@@ -405,6 +412,24 @@ final class WorkPermissionService
             ->where('user_id', $userId)
             ->where('role', 'admin')
             ->exists();
+    }
+
+    private function userHasSalesRole(int $userId): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+
+        return DB::table('account_user')
+            ->where('user_id', $userId)
+            ->where('role', 'sales')
+            ->exists();
+    }
+
+    private function isChangeRequestPath(string $path): bool
+    {
+        return $path === '/work/change-requests'
+            || str_starts_with($path, '/work/change-requests/');
     }
 
     private function isWorkRoute(string $uri): bool

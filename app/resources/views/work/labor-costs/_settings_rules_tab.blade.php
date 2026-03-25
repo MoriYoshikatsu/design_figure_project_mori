@@ -64,7 +64,7 @@
                         </select>
                     </label>
                     <label class="labor-field">
-                        <span class="labor-field-label">優先度</span>
+                        <span class="labor-field-label">並び順</span>
                         <input type="number" name="priority" value="100" aria-label="優先度">
                     </label>
                     <label class="labor-field">
@@ -185,7 +185,7 @@
                             </select>
                         </label>
                         <label class="labor-field">
-                            <span class="labor-field-label">優先度</span>
+                            <span class="labor-field-label">並び順</span>
                             <input type="number" name="priority" value="{{ $rule['priority'] ?? 100 }}" aria-label="優先度">
                         </label>
                         <label class="labor-field">

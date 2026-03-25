@@ -1,7 +1,7 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>Parts</h1>
+    <h1>パーツ</h1>
     <div class="actions" style="margin:8px 0;">
         <a href="{{ route('work.parts.create') }}">Create Part</a>
     </div>

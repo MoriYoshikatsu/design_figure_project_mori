@@ -131,7 +131,7 @@
     </style>
 
     <div data-catalog-root data-active-tab="{{ $activeTab }}">
-        <h1>Parts & Pricing</h1>
+        <h1>パーツ価格</h1>
 
         @include('work.catalog._tab_switch', [
             'activeTab' => $activeTab,

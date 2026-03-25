@@ -3,6 +3,10 @@
 @section('content')
     <h1>アカウント #{{ $account->id }} 変更申請必須設定</h1>
 
+    @php
+        $selfSettingRequired = (bool)($changeRequestRequirementStateMap['account_change_request_requirement'] ?? true);
+    @endphp
+
     <div class="actions" style="margin-bottom:12px;">
         <a href="{{ route('work.accounts.edit', $account->id) }}">アカウント詳細へ戻る</a>
         <a href="{{ route('work.accounts.index') }}">一覧へ戻る</a>
@@ -14,6 +18,13 @@
             チェックが入っている項目は、作成・更新で変更申請が必要です。チェックを外した項目は、作成・更新のみ即時反映されます。
             削除は設定に関係なく常に変更申請が必要です。この設定ページ自体の更新も、対象項目として設定できます。
         </div>
+        @if($selfSettingRequired)
+            <div style="margin-top:8px; color:#92400e; background:#fffbeb; border:1px solid #fcd34d; border-radius:6px; padding:8px 10px;">
+                現在は「変更申請必須設定」自体が申請必須です。
+                そのため、このページでチェックを外して保存しても、今回の変更は承認後に反映されます。
+                承認後、次回以降から即時反映になります。
+            </div>
+        @endif
     </div>
 
     <form method="POST" action="{{ route('work.accounts.permissions.update', $account->id) }}" id="change-request-settings-form">
@@ -45,7 +56,7 @@
                             <tr>
                                 <th style="width:72px;">必須</th>
                                 <th style="width:220px;">対象項目</th>
-                                <th>対象操作（削除は常に必須）</th>
+                                <th>説明</th>
                             </tr>
                         </thead>
                         <tbody>

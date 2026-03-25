@@ -4,6 +4,11 @@ namespace App\Services;
 
 final class BomBuilder
 {
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
+    /** @var array<int, string> */
+    private const TEC_PROCESS_TYPES = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
+
     /**
      * @return array<int, array{part_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}>
      */
@@ -101,30 +106,35 @@ final class BomBuilder
         $items = [];
         $sort = 0;
 
-        $processType = $this->normalizeProcessType($config['processType'] ?? 'MFD');
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
         $totalFiberLengthM = $this->sumLengths($config['fibers'] ?? []);
-        $processSkuCode = $this->resolveProcessSkuCode($processType);
-        $processQty = 1;
-        $processOptions = [];
-        if ($processType === 'MFD') {
-            $processOptions = [
-                'mfdCount' => 1,
-                'totalFiberLengthM' => $totalFiberLengthM,
-            ];
+        if ($processType === self::PROCESS_TYPE_MFD) {
+            $items[] = $this->normalizeItem([
+                'part_code' => $this->resolveProcessSkuCode($processType),
+                'quantity' => 1,
+                'options' => [
+                    'mfdCount' => 1,
+                    'totalFiberLengthM' => $totalFiberLengthM,
+                ],
+                'source_path' => '$.processType',
+                'sort_order' => $sort,
+            ], $config, $derived);
+            $sort++;
         } else {
-            $processOptions = [
-                'tecSide' => $this->normalizeTecSide($config['tecSide'] ?? null),
-            ];
+            foreach ($this->resolveTecProcessSelections($config, $processType) as $selection) {
+                $items[] = $this->normalizeItem([
+                    'part_code' => $this->resolveProcessSkuCode($selection['processType']),
+                    'quantity' => 1,
+                    'options' => [
+                        'tecSide' => $selection['side'],
+                        'processType' => $selection['processType'],
+                    ],
+                    'source_path' => $selection['source_path'],
+                    'sort_order' => $sort,
+                ], $config, $derived);
+                $sort++;
+            }
         }
-
-        $items[] = $this->normalizeItem([
-            'part_code' => $processSkuCode,
-            'quantity' => $processQty,
-            'options' => $processOptions,
-            'source_path' => '$.processType',
-            'sort_order' => $sort,
-        ], $config, $derived);
-        $sort++;
 
         $sleeves = $config['sleeves'] ?? [];
         foreach ($sleeves as $i => $s) {
@@ -208,8 +218,8 @@ final class BomBuilder
     private function normalizeProcessType(mixed $raw): string
     {
         $value = strtoupper(trim((string)$raw));
-        if (!in_array($value, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
-            return 'MFD';
+        if (!in_array($value, array_merge([self::PROCESS_TYPE_MFD, self::PROCESS_TYPE_TEC], self::TEC_PROCESS_TYPES), true)) {
+            return self::PROCESS_TYPE_MFD;
         }
 
         return $value;
@@ -292,7 +302,7 @@ final class BomBuilder
         }
         if ($this->isTecProcessSku($sku)) {
             $options = is_array($item['options'] ?? null) ? $item['options'] : [];
-            $options['tecSide'] = $this->normalizeTecSide($config['tecSide'] ?? ($options['tecSide'] ?? null));
+            $options['tecSide'] = $this->normalizeTecSide($options['tecSide'] ?? ($config['tecSide'] ?? null));
             $item['options'] = $options;
         }
 
@@ -406,11 +416,66 @@ final class BomBuilder
     private function normalizeTecSide(mixed $raw): ?string
     {
         $side = strtolower(trim((string)$raw));
-        if (!in_array($side, ['left', 'right'], true)) {
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
             return null;
         }
 
         return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<int, array{side:string,processType:string,source_path:string}>
+     */
+    private function resolveTecProcessSelections(array $config, string $processType): array
+    {
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? null);
+        $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+        $leftType = $this->normalizeConcreteTecProcessType($config['tecLeftProcessType'] ?? null);
+        $rightType = $this->normalizeConcreteTecProcessType($config['tecRightProcessType'] ?? null);
+
+        if ($tecSide === null) {
+            if ($leftType !== null && $rightType !== null) {
+                $tecSide = 'both';
+            } elseif ($rightType !== null && $leftType === null) {
+                $tecSide = 'right';
+            } elseif ($leftType !== null || $legacyTecType !== null) {
+                $tecSide = 'left';
+            }
+        }
+
+        $rows = [];
+        if ($tecSide === 'left') {
+            $type = $leftType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $type, 'source_path' => $leftType !== null ? '$.tecLeftProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'right') {
+            $type = $rightType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $type, 'source_path' => $rightType !== null ? '$.tecRightProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'both') {
+            $left = $leftType ?? $legacyTecType;
+            $right = $rightType ?? $legacyTecType;
+            if ($left !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $left, 'source_path' => '$.tecLeftProcessType'];
+            }
+            if ($right !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $right, 'source_path' => '$.tecRightProcessType'];
+            }
+        }
+
+        return $rows;
     }
 
     private function isTecProcessSku(string $skuCode): bool

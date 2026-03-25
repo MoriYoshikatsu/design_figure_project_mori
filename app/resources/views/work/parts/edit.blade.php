@@ -1,7 +1,16 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>Edit Part</h1>
+    <h1>パーツ編集</h1>
+    @if($errors->any())
+        <div style="margin:8px 0; padding:8px; border:1px solid #fca5a5; background:#fef2f2; color:#991b1b;">
+            <ul style="margin:0; padding-left:18px;">
+                @foreach($errors->all() as $message)
+                    <li>{{ $message }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
     <form method="POST" action="{{ route('work.parts.edit-request.update', $sku->id) }}">
         @csrf
         <input type="hidden" name="_mode" value="submit">
@@ -11,8 +20,11 @@
                 <input type="text" name="part_code" value="{{ old('part_code', $sku->part_code) }}">
             </div>
             <div class="col">
-                <label>名称</label>
+                <label>Part Name</label>
                 <input type="text" name="name" value="{{ old('name', $sku->name) }}">
+                @error('name')
+                    <div style="color:#dc2626; font-size:12px; margin-top:4px;">{{ $message }}</div>
+                @enderror
             </div>
         </div>
         <div class="row" style="margin-top:8px;">
@@ -37,10 +49,12 @@
                 </div>
             </div>
         </div>
-        <div style="margin-top:8px;">
-            <label>attributes（JSON）</label>
-            <textarea name="attributes">{{ old('attributes', $attributesJson) }}</textarea>
-        </div>
+        <details style="margin-top:8px;" @if($errors->has('attributes')) open @endif>
+            <summary style="cursor:pointer;">attributes（JSON，編集不要）</summary>
+            <div style="margin-top:8px;">
+                <textarea name="attributes">{{ old('attributes', $attributesJson) }}</textarea>
+            </div>
+        </details>
         <div style="margin-top:8px;">
             <label>メモ</label>
             <textarea name="memo">{{ old('memo', $sku->memo) }}</textarea>

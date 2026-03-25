@@ -6,8 +6,18 @@
         return match (strtolower(trim((string)$side))) {
             'left' => $t('左端', 'Left End'),
             'right' => $t('右端', 'Right End'),
+            'both' => $t('両端', 'Both Ends'),
             default => $t('未指定', 'Not Set'),
         };
+    };
+    $tecProcessTypes = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
+    $normalizeTecProcessType = static function (mixed $value) use ($tecProcessTypes): ?string {
+        $normalized = strtoupper(trim((string)$value));
+        return in_array($normalized, $tecProcessTypes, true) ? $normalized : null;
+    };
+    $normalizeTecSide = static function (mixed $value): ?string {
+        $normalized = strtolower(trim((string)$value));
+        return in_array($normalized, ['left', 'right', 'both'], true) ? $normalized : null;
     };
 
     $panelTitle = $panelTitle ?? $t('スナップショット', 'Snapshot');
@@ -128,10 +138,47 @@
     $tubes = is_array($config['tubes'] ?? null) ? $config['tubes'] : [];
     $connectors = is_array($config['connectors'] ?? null) ? $config['connectors'] : [];
     $processType = strtoupper((string)($config['processType'] ?? 'MFD'));
-    if (!in_array($processType, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+    if (!in_array($processType, ['MFD', 'TEC', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
         $processType = 'MFD';
     }
-    $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+    $isTecMode = $processType !== 'MFD';
+    $tecSide = $normalizeTecSide($config['tecSide'] ?? null);
+    $legacyTecType = $normalizeTecProcessType($processType);
+    $tecLeftProcessType = $normalizeTecProcessType($config['tecLeftProcessType'] ?? null);
+    $tecRightProcessType = $normalizeTecProcessType($config['tecRightProcessType'] ?? null);
+    $tecSelections = [];
+    if ($isTecMode) {
+        if ($tecSide === null) {
+            if ($tecLeftProcessType !== null && $tecRightProcessType !== null) {
+                $tecSide = 'both';
+            } elseif ($tecRightProcessType !== null && $tecLeftProcessType === null) {
+                $tecSide = 'right';
+            } elseif ($tecLeftProcessType !== null || $legacyTecType !== null) {
+                $tecSide = 'left';
+            }
+        }
+
+        if ($tecSide === 'left') {
+            $resolvedType = $tecLeftProcessType ?? $legacyTecType;
+            if ($resolvedType !== null) {
+                $tecSelections[] = ['side' => 'left', 'process_type' => $resolvedType, 'source_path' => $tecLeftProcessType !== null ? '$.tecLeftProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'right') {
+            $resolvedType = $tecRightProcessType ?? $legacyTecType;
+            if ($resolvedType !== null) {
+                $tecSelections[] = ['side' => 'right', 'process_type' => $resolvedType, 'source_path' => $tecRightProcessType !== null ? '$.tecRightProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'both') {
+            $resolvedLeftType = $tecLeftProcessType ?? $legacyTecType;
+            $resolvedRightType = $tecRightProcessType ?? $legacyTecType;
+            if ($resolvedLeftType !== null) {
+                $tecSelections[] = ['side' => 'left', 'process_type' => $resolvedLeftType, 'source_path' => '$.tecLeftProcessType'];
+            }
+            if ($resolvedRightType !== null) {
+                $tecSelections[] = ['side' => 'right', 'process_type' => $resolvedRightType, 'source_path' => '$.tecRightProcessType'];
+            }
+        }
+    }
 
     $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
     $bom = is_array($snapshot['bom'] ?? null) ? $snapshot['bom'] : [];
@@ -156,6 +203,7 @@
     ];
     $selectedProcessSkuCode = (string)($processSkuCodeByType[$processType] ?? 'PROC_MFD_CONVERSION');
     $processBom = null;
+    $processBomRows = [];
     foreach ($bom as $b) {
         if (!is_array($b)) continue;
         $sortKey = (int)($b['sort_order'] ?? 0);
@@ -166,6 +214,7 @@
             'part_code' => $skuCode,
             'quantity' => $b['quantity'] ?? '',
             'source_path' => $path,
+            'sort_order' => $sortKey,
             'unit_price' => $priceRow['unit_price'] ?? '',
             'line_total' => $priceRow['line_total'] ?? '',
         ];
@@ -173,6 +222,12 @@
             $processBom = $row;
         } elseif ($processBom === null && $processType === 'MFD' && $skuCode === 'PROC_MFD_CONVERSION') {
             $processBom = $row;
+        }
+        if (
+            in_array($path, ['$.processType', '$.tecLeftProcessType', '$.tecRightProcessType'], true)
+            || in_array($skuCode, array_values($processSkuCodeByType), true)
+        ) {
+            $processBomRows[] = $row;
         }
         if ($path !== '') {
             $bomByPath[$path] = $row;
@@ -189,22 +244,52 @@
 
     $rows = [];
     if ($isTecMode) {
-        $processSelectedSku = $selectedProcessSkuCode;
-        $processPricedSku = is_array($processBom) ? $bomPartCode($processBom) : '';
-        $rows[] = [
-            'type' => $t('TEC工程', 'TEC Process'),
-            'index' => '',
-            'part_code' => $processSelectedSku,
-            'priced_part_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
-            'sku_name' => $toSkuName($processSelectedSku),
-            'priced_sku_name' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $toSkuName($processPricedSku) : '',
-            'source_path' => $processBom['source_path'] ?? '$.processType',
-            'range' => $processType,
-            'tolerance' => '-',
-            'quantity' => $processBom['quantity'] ?? '1',
-            'unit_price' => $processBom['unit_price'] ?? '',
-            'line_total' => $processBom['line_total'] ?? '',
-        ];
+        $usedProcessSortKeys = [];
+        foreach ($tecSelections as $selection) {
+            $processSelectedSku = (string)($processSkuCodeByType[$selection['process_type']] ?? '');
+            $matchedProcessBom = null;
+            foreach ($processBomRows as $candidate) {
+                $candidateSort = (int)($candidate['sort_order'] ?? -1);
+                if (in_array($candidateSort, $usedProcessSortKeys, true)) {
+                    continue;
+                }
+                if ((string)($candidate['source_path'] ?? '') === (string)$selection['source_path'] && $bomPartCode($candidate) === $processSelectedSku) {
+                    $matchedProcessBom = $candidate;
+                    break;
+                }
+            }
+            if ($matchedProcessBom === null) {
+                foreach ($processBomRows as $candidate) {
+                    $candidateSort = (int)($candidate['sort_order'] ?? -1);
+                    if (in_array($candidateSort, $usedProcessSortKeys, true)) {
+                        continue;
+                    }
+                    if ($bomPartCode($candidate) === $processSelectedSku) {
+                        $matchedProcessBom = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            if ($matchedProcessBom !== null) {
+                $usedProcessSortKeys[] = (int)($matchedProcessBom['sort_order'] ?? -1);
+            }
+            $processPricedSku = is_array($matchedProcessBom) ? $bomPartCode($matchedProcessBom) : '';
+            $rows[] = [
+                'type' => $t('TEC工程', 'TEC Process'),
+                'index' => '['.$translateTecSide($selection['side']).']',
+                'part_code' => $processSelectedSku,
+                'priced_part_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
+                'sku_name' => $toSkuName($processSelectedSku),
+                'priced_sku_name' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $toSkuName($processPricedSku) : '',
+                'source_path' => $matchedProcessBom['source_path'] ?? $selection['source_path'],
+                'range' => $selection['process_type'].' / '.$translateTecSide($selection['side']),
+                'tolerance' => '-',
+                'quantity' => $matchedProcessBom['quantity'] ?? '1',
+                'unit_price' => $matchedProcessBom['unit_price'] ?? '',
+                'line_total' => $matchedProcessBom['line_total'] ?? '',
+            ];
+        }
     } else {
         for ($i = 0; $i < $mfdCount; $i++) {
             $mfdSkuCode = is_array($processBom) ? $bomPartCode($processBom) : '';
@@ -376,12 +461,23 @@
         ];
     }
 
+    $tecSetupSummary = '-';
+    if ($isTecMode) {
+        $tecSetupParts = [];
+        foreach ($tecSelections as $selection) {
+            $tecSetupParts[] = ($selection['process_type'] ?? 'TEC') . ' / ' . $translateTecSide($selection['side'] ?? '');
+        }
+        if (!empty($tecSetupParts)) {
+            $tecSetupSummary = implode(' / ', $tecSetupParts);
+        }
+    }
+
     $summaryAuto = [
         ['label' => $t('ルールテンプレ', 'Rule Template'), 'value' => $snapshot['template_version_id'] ?? ''],
         ['label' => $t('納品物価格表', 'Price Book'), 'value' => $snapshot['price_book_id'] ?? ''],
         ['label' => $t('注文数量', 'Order Quantity'), 'value' => $orderQtySummary],
         ['label' => $t('工程種別', 'Process Type'), 'value' => $processType],
-        ['label' => $t('TEC位置', 'TEC Position'), 'value' => $isTecMode ? $translateTecSide($config['tecSide'] ?? '') : '-'],
+        ['label' => $t('TEC構成', 'TEC Setup'), 'value' => $tecSetupSummary],
         ['label' => $t('MFD数', 'MFD Count'), 'value' => $isTecMode ? '-' : '1'],
         ['label' => $t('チューブ数', 'Tube Count'), 'value' => $config['tubeCount'] ?? ''],
         ['label' => $t('エラー件数', 'Error Count'), 'value' => is_array($errors) ? count($errors) : 0],

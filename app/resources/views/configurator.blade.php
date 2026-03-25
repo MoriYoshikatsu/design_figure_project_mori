@@ -1,12 +1,13 @@
 <div>
     @php
         $processType = strtoupper((string)($config['processType'] ?? 'MFD'));
-        $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
+        $isTecMode = in_array($processType, ['TEC', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
         $isMfdMode = !$isTecMode;
         $fiberCount = max(1, count($config['fibers'] ?? []));
         $maxFiberIndex = max(0, $fiberCount - 1);
         $publicEnglish = !$quoteEditId;
         $tr = static fn(string $ja, string $en): string => $publicEnglish ? $en : $ja;
+        $componentErrors = is_array($this->errors ?? null) ? $this->errors : [];
     @endphp
     <div style="display:flex; gap:0; padding:16px; align-items:flex-start;">
         <div
@@ -19,6 +20,7 @@
                 <label>{{ $tr('加工種別', 'Process Type') }}</label>
                 <select wire:model.live.debounce.200ms="config.processType" style="width:100%;">
                     <option value="MFD">MFD</option>
+                    <option value="TEC">TEC</option>
                     <option value="TEC20">TEC20</option>
                     <option value="TEC30">TEC30</option>
                     <option value="TEC20_HP">TEC20_HP</option>
@@ -33,8 +35,35 @@
                         <option value="">{{ $tr('（選択してください）', '(Please select)') }}</option>
                         <option value="left">{{ $tr('左端', 'Left End') }}</option>
                         <option value="right">{{ $tr('右端', 'Right End') }}</option>
+                        <option value="both">{{ $tr('両端', 'Both Ends') }}</option>
                     </select>
                 </div>
+
+                @if(in_array(($config['tecSide'] ?? null), ['left', 'both'], true))
+                    <div style="margin-top:12px;">
+                        <label>{{ $tr('左端TEC種別', 'Left TEC Type') }}</label>
+                        <select wire:model.live.debounce.200ms="config.tecLeftProcessType" style="width:100%;">
+                            <option value="">{{ $tr('（選択してください）', '(Please select)') }}</option>
+                            <option value="TEC20">TEC20</option>
+                            <option value="TEC30">TEC30</option>
+                            <option value="TEC20_HP">TEC20_HP</option>
+                            <option value="TEC30_HP">TEC30_HP</option>
+                        </select>
+                    </div>
+                @endif
+
+                @if(in_array(($config['tecSide'] ?? null), ['right', 'both'], true))
+                    <div style="margin-top:12px;">
+                        <label>{{ $tr('右端TEC種別', 'Right TEC Type') }}</label>
+                        <select wire:model.live.debounce.200ms="config.tecRightProcessType" style="width:100%;">
+                            <option value="">{{ $tr('（選択してください）', '(Please select)') }}</option>
+                            <option value="TEC20">TEC20</option>
+                            <option value="TEC30">TEC30</option>
+                            <option value="TEC20_HP">TEC20_HP</option>
+                            <option value="TEC30_HP">TEC30_HP</option>
+                        </select>
+                    </div>
+                @endif
             @endif
 
             @if($isMfdMode)
@@ -157,20 +186,31 @@
                 <button wire:click="newSession" type="button">{{ $tr('新規ファイバ作成（新規セッション）', 'Create New Fiber (New Session)') }}</button>
             @endif
             @if($quoteEditId)
-                <button type="button" wire:click="requestQuoteEdit">
+                <button
+                    type="button"
+                    wire:click="requestQuoteEdit"
+                    @disabled(!empty($componentErrors))
+                    style="{{ !empty($componentErrors) ? 'opacity:0.5; cursor:not-allowed;' : '' }}"
+                    title="{{ !empty($componentErrors) ? $tr('エラーを解消すると見積変更を申請できます', 'Resolve the errors to submit the quote update.') : '' }}"
+                >
                     見積変更を申請
                 </button>
+                @if(!empty($componentErrors))
+                    <div style="color:#dc2626; font-size:12px; margin-top:4px;">
+                        {{ $tr('エラーがあるため、見積変更は申請できません。', 'The quote update cannot be submitted while errors remain.') }}
+                    </div>
+                @endif
             @else
                 <button
                     type="button"
                     wire:click="issueQuote"
-                    @disabled(!empty($errors))
-                    style="{{ !empty($errors) ? 'opacity:0.5; cursor:not-allowed;' : '' }}"
-                    title="{{ !empty($errors) ? $tr('エラーを解消すると仕様書発行できます', 'Resolve the errors to issue the spec sheet') : '' }}"
+                    @disabled(!empty($componentErrors))
+                    style="{{ !empty($componentErrors) ? 'opacity:0.5; cursor:not-allowed;' : '' }}"
+                    title="{{ !empty($componentErrors) ? $tr('エラーを解消すると仕様書発行できます', 'Resolve the errors to issue the spec sheet') : '' }}"
                 >
                     {{ $tr('仕様書発行', 'Issue Spec Sheet') }}
                 </button>
-                @if(!empty($errors))
+                @if(!empty($componentErrors))
                     <div style="color:#dc2626; font-size:12px; margin-top:4px;">
                         {{ $tr('エラーがあるため、仕様書発行はできません。', 'The spec sheet cannot be issued while errors remain.') }}
                     </div>
@@ -195,6 +235,21 @@
             @endif
 
             @if($quoteEditId)
+                <div style="margin-top:12px; border:1px solid {{ ($quoteEditApprovalRequired ?? true) ? '#fcd34d' : '#86efac' }}; border-radius:8px; padding:12px; background:{{ ($quoteEditApprovalRequired ?? true) ? '#fffbeb' : '#f0fdf4' }};">
+                    <div style="font-weight:700;">
+                        現在の反映方式:
+                        {{ ($quoteEditApprovalRequired ?? true) ? '承認後に反映' : '即時反映' }}
+                    </div>
+                    <div style="font-size:12px; color:#475569; margin-top:4px;">
+                        判定対象はログイン中アカウント #{{ $quoteEditDecisionAccountId ?? '?' }} の「見積・仕様書」設定です。
+                    </div>
+                    @if($quoteEditApprovalRequired ?? true)
+                        <div style="font-size:12px; color:#475569; margin-top:4px;">
+                            直前に設定を外していても、その設定変更自体が承認待ちなら、この見積編集はまだ即時反映になりません。
+                        </div>
+                    @endif
+                </div>
+
                 <div style="margin-top:12px; border:1px solid #d1d5db; border-radius:8px; padding:12px; background:#f8fafc;">
                     <h2 style="font-weight:700; margin:0;">見積編集用設定</h2>
                     <details style="border:1px solid #e5e7eb; border-radius:6px; background:#fff; padding:8px; margin-bottom:8px;" @if(($specSheetNumber ?? null) || trim((string)($editComment ?? '')) !== '') open @endif>
@@ -365,14 +420,16 @@
                 {!! $svg !!}
             </div>
 
-            <hr style="margin:12px 0;">
+            @if(!empty($componentErrors))
+                <hr style="margin:12px 0;">
 
-            <h2 style="font-weight:700;">{{ $tr('エラー', 'Errors') }}</h2>
-            <ul>
-                @foreach($errors as $e)
-                    <li><b>{{ $e['path'] ?? '' }}</b>{{ $publicEnglish ? ': ' : '：' }}{{ $this->displayErrorMessage($e) }}</li>
-                @endforeach
-            </ul>
+                <h2 style="font-weight:700;">{{ $tr('エラー', 'Error') }}</h2>
+                <ul>
+                    @foreach($componentErrors as $e)
+                        <li><b>{{ $e['path'] ?? '' }}</b>{{ $publicEnglish ? ': ' : '：' }}{{ $this->displayErrorMessage($e) }}</li>
+                    @endforeach
+                </ul>
+            @endif
         </div>
     </div>
 </div>

@@ -13,7 +13,7 @@
 | 対象範囲 | 公開側 `/configurator` と `/quotes/*`、業務側 `/work/*`、ユーザー設定 |
 | 利用前提 | ログイン済みであること。業務ページは `admin` または `sales` 相当の権限を前提とする |
 | Word 対応 | `17_Webアプリ説明書_Word用.html` を Microsoft Word で直接開ける版として同梱する |
-| 図版について | 図版は SVG で同梱している。Word 版を開くときも `assets/web_app_manual/` を同じ相対配置で維持すること |
+| 図版について | 図版は PNG を配布用に同梱し、元データの SVG も保持している。Word 版を開くときも `assets/web_app_manual/` を同じ相対配置で維持すること |
 
 ## 本書の読み方
 
@@ -66,7 +66,7 @@
 
 ### 1.3 全体図
 
-![図1 システム全体概要](assets/web_app_manual/01_system_overview.svg)
+![図1 システム全体概要](assets/web_app_manual/01_system_overview.png)
 
 図1では、公開側の仕様入力と、業務側の各メニュー、さらに見積計算を支える主要テーブルとサービスの関係を示しています。  
 実務では「見積だけを見る」「価格表だけを更新する」と感じやすいですが、実際には各画面はひと続きの流れでつながっています。
@@ -107,7 +107,7 @@
 
 ### 2.1 サイドバー全体フロー
 
-![図2 業務ページ UI フロー](assets/web_app_manual/02_work_sidebar_flow.svg)
+![図2 業務ページ UI フロー](assets/web_app_manual/02_work_sidebar_flow.png)
 
 ### 2.2 メニュー別の入口と主な遷移
 
@@ -131,7 +131,7 @@
 
 ### 2.4 見積の現行版を理解する
 
-![図3 見積ライフサイクルと現行版](assets/web_app_manual/03_quote_lifecycle.svg)
+![図3 見積ライフサイクルと現行版](assets/web_app_manual/03_quote_lifecycle.png)
 
 **補足**  
 見積の計算履歴では、承認待ちや却下の履歴も残ります。  
@@ -569,7 +569,7 @@ Configurator が持つ入力欄、派生値、版の切替を管理するペー�
 
 ### 4.12 マスタ変更が見積へどう効くか確認する
 
-![図4 マスタと見積計算のつながり](assets/web_app_manual/04_master_pricing_flow.svg)
+![図4 マスタと見積計算のつながり](assets/web_app_manual/04_master_pricing_flow.png)
 
 **補足**  
 Part、価格表、作業費、DSL のどこを直すかで、確認すべき次画面が変わります。  
@@ -598,7 +598,7 @@ Part、価格表、作業費、DSL のどこを直すかで、確認すべき次
 
 ### 5.2 変更申請フローの読み方
 
-![図5 変更申請フロー](assets/web_app_manual/05_change_request_flow.svg)
+![図5 変更申請フロー](assets/web_app_manual/05_change_request_flow.png)
 
 **注意**  
 「送信した」「申請中」と「反映された」は別の状態です。  
@@ -618,7 +618,7 @@ Part、価格表、作業費、DSL のどこを直すかで、確認すべき次
 本章は、保守や調査のために「どの画面がどのコードに対応するか」を追うための対応表です。  
 深いロジック解説ではなく、調査の入口を最短距離で示すことを目的とします。
 
-![図6 生コードとの対応レイヤー](assets/web_app_manual/06_code_mapping_layers.svg)
+![図6 生コードとの対応レイヤー](assets/web_app_manual/06_code_mapping_layers.png)
 
 ### 6.1 公開導線
 

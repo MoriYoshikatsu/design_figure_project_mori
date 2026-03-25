@@ -4,6 +4,11 @@ namespace App\Services;
 
 final class SvgRenderer
 {
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
+    /** @var array<int, string> */
+    private const TEC_PROCESS_TYPES = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
+
     /**
      * @param array $config  config（構成データ）
      * @param array $derived derived（導出値）
@@ -15,15 +20,10 @@ final class SvgRenderer
         $isEnglish = strtolower(trim($uiLanguage)) === 'en';
         $t = static fn(string $ja, string $en): string => $isEnglish ? $en : $ja;
 
-        $processType = strtoupper(trim((string)($config['processType'] ?? 'MFD')));
-        if (!in_array($processType, ['MFD', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
-            $processType = 'MFD';
-        }
-        $isTecMode = in_array($processType, ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true);
-        $tecSide = strtolower(trim((string)($config['tecSide'] ?? ($derived['tecSide'] ?? ''))));
-        if (!in_array($tecSide, ['left', 'right'], true)) {
-            $tecSide = null;
-        }
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
+        $isTecMode = $processType !== self::PROCESS_TYPE_MFD;
+        $tecSelections = $this->resolveTecProcessSelections($config, $derived, $processType);
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? ($derived['tecSide'] ?? null));
 
         $mfdCount = $isTecMode ? 0 : 1;
         $drawMfdCount = $isTecMode ? 0 : $mfdCount;
@@ -201,12 +201,19 @@ final class SvgRenderer
 
         // ヘッダ（情報）
         if ($isTecMode) {
-            $tecSideLabel = $tecSide === 'left'
-                ? $t('左端', 'Left End')
-                : ($tecSide === 'right' ? $t('右端', 'Right End') : $t('未指定', 'Not Set'));
+            $tecSummaryParts = [];
+            foreach ($tecSelections as $selection) {
+                $sideLabel = ($selection['side'] ?? '') === 'left'
+                    ? $t('左端', 'Left End')
+                    : $t('右端', 'Right End');
+                $tecSummaryParts[] = ($selection['processType'] ?? 'TEC') . ' (' . $sideLabel . ')';
+            }
+            $tecSummary = !empty($tecSummaryParts)
+                ? implode(' / ', $tecSummaryParts)
+                : $t('未指定', 'Not Set');
             $svg[] = '<text x="'.$margin.'" y="18" class="label">'
                 . $t('工程種別', 'Process Type').': '.$esc($processType)
-                .' / '.$t('TEC位置', 'TEC Position').': '.$esc($tecSideLabel)
+                .' / '.$t('TEC構成', 'TEC Setup').': '.$esc($tecSummary)
                 .' / '.$t('ファイバーの数', 'Fiber Count').': '.$esc($fiberCount)
                 . '</text>';
         } else {
@@ -479,20 +486,22 @@ final class SvgRenderer
         $overallToleranceTxt = (is_numeric($overallFiberToleranceM)) ? ' ± '.$overallFiberToleranceM.'m' : '';
         $svg[] = '<text x="'.(($leftTipX + $rightTipX) / 2).'" y="'.$belowLabelY.'" class="small" text-anchor="middle">'. $esc(round($totalLen, 3).'m'.$overallToleranceTxt) .'</text>';
 
-        if ($isTecMode && $tecSide !== null) {
-            $tecX = $tecSide === 'left' ? $leftTipX : $rightTipX;
-            $tecLabel = $tecSide === 'left'
-                ? 'TEC: '.$t('左端', 'Left End')
-                : 'TEC: '.$t('右端', 'Right End');
-            $tecMarkerLine = $this->buildUpperMarkerLine($tecX, $axisY, $fiberH, 30.0, $markerGapFromFiber, [
-                'stroke' => '#2563eb',
-                'stroke-width' => '2',
-                'stroke-dasharray' => '3 3',
-            ]);
-            if ($tecMarkerLine !== null) {
-                $svg[] = $tecMarkerLine;
+        if ($isTecMode && !empty($tecSelections)) {
+            foreach ($tecSelections as $selection) {
+                $side = (string)($selection['side'] ?? '');
+                $tecX = $side === 'left' ? $leftTipX : $rightTipX;
+                $sideLabel = $side === 'left' ? $t('左端', 'Left End') : $t('右端', 'Right End');
+                $tecLabel = ((string)($selection['processType'] ?? 'TEC')) . ': ' . $sideLabel;
+                $tecMarkerLine = $this->buildUpperMarkerLine($tecX, $axisY, $fiberH, 30.0, $markerGapFromFiber, [
+                    'stroke' => '#2563eb',
+                    'stroke-width' => '2',
+                    'stroke-dasharray' => '3 3',
+                ]);
+                if ($tecMarkerLine !== null) {
+                    $svg[] = $tecMarkerLine;
+                }
+                $svg[] = '<text x="'.$tecX.'" y="'.$mfdLabelY.'" class="small" text-anchor="middle" fill="#1d4ed8">'.$esc($tecLabel).'</text>';
             }
-            $svg[] = '<text x="'.$tecX.'" y="'.$mfdLabelY.'" class="small" text-anchor="middle" fill="#1d4ed8">'.$esc($tecLabel).'</text>';
         }
 
         $svg[] = '</svg>';
@@ -674,5 +683,80 @@ final class SvgRenderer
 
         $normalized = strtoupper(trim($sleeveCode));
         return str_contains($normalized, 'RECOTE') || str_contains($normalized, 'RECOAT');
+    }
+
+    private function normalizeProcessType(mixed $raw): string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, array_merge([self::PROCESS_TYPE_MFD, self::PROCESS_TYPE_TEC], self::TEC_PROCESS_TYPES), true)) {
+            return self::PROCESS_TYPE_MFD;
+        }
+
+        return $value;
+    }
+
+    private function normalizeTecSide(mixed $raw): ?string
+    {
+        $side = strtolower(trim((string)$raw));
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
+            return null;
+        }
+
+        return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<int, array{side:string,processType:string}>
+     */
+    private function resolveTecProcessSelections(array $config, array $derived, string $processType): array
+    {
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? ($derived['tecSide'] ?? null));
+        $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+        $leftType = $this->normalizeConcreteTecProcessType($config['tecLeftProcessType'] ?? ($derived['tecLeftProcessType'] ?? null));
+        $rightType = $this->normalizeConcreteTecProcessType($config['tecRightProcessType'] ?? ($derived['tecRightProcessType'] ?? null));
+
+        if ($tecSide === null) {
+            if ($leftType !== null && $rightType !== null) {
+                $tecSide = 'both';
+            } elseif ($rightType !== null && $leftType === null) {
+                $tecSide = 'right';
+            } elseif ($leftType !== null || $legacyTecType !== null) {
+                $tecSide = 'left';
+            }
+        }
+
+        $rows = [];
+        if ($tecSide === 'left') {
+            $type = $leftType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $type];
+            }
+        } elseif ($tecSide === 'right') {
+            $type = $rightType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $type];
+            }
+        } elseif ($tecSide === 'both') {
+            $left = $leftType ?? $legacyTecType;
+            $right = $rightType ?? $legacyTecType;
+            if ($left !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $left];
+            }
+            if ($right !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $right];
+            }
+        }
+
+        return $rows;
     }
 }

@@ -173,4 +173,127 @@ final class DslEngineProcessTypeModeTest extends TestCase
         $this->assertContains('tubes.0.startOffsetM', $paths);
         $this->assertContains('tubes.0.endOffsetM', $paths);
     }
+
+    public function test_tec_mode_allows_different_types_on_both_ends(): void
+    {
+        $engine = app(DslEngine::class);
+
+        $config = [
+            'processType' => 'TEC',
+            'mfdCount' => 1,
+            'tubeCount' => 0,
+            'tecSide' => 'both',
+            'tecLeftProcessType' => 'TEC20',
+            'tecRightProcessType' => 'TEC30_HP',
+            'sleeves' => [],
+            'fibers' => [
+                ['skuCode' => 'FIBER_A', 'lengthM' => 0.5],
+            ],
+            'tubes' => [],
+            'connectors' => [
+                'mode' => 'both',
+                'leftSkuCode' => 'CONN_A',
+                'rightSkuCode' => 'CONN_B',
+            ],
+        ];
+
+        $result = $engine->evaluate($config, []);
+        $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
+        $paths = array_map(static fn(array $e): string => (string)($e['path'] ?? ''), $errors);
+
+        $this->assertNotContains('tecSide', $paths);
+        $this->assertNotContains('tecLeftProcessType', $paths);
+        $this->assertNotContains('tecRightProcessType', $paths);
+        $this->assertSame('TEC20', (string)($result['derived']['tecLeftProcessType'] ?? ''));
+        $this->assertSame('TEC30_HP', (string)($result['derived']['tecRightProcessType'] ?? ''));
+    }
+
+    public function test_missing_selection_errors_are_reported_for_fiber_tube_and_connector(): void
+    {
+        $engine = app(DslEngine::class);
+
+        $config = [
+            'processType' => 'MFD',
+            'mfdCount' => 1,
+            'tubeCount' => 1,
+            'sleeves' => [
+                ['skuCode' => 'SLEEVE_RECOTE'],
+            ],
+            'fibers' => [
+                ['skuCode' => null, 'lengthM' => 0.5],
+                ['skuCode' => 'FIBER_B', 'lengthM' => 0.5],
+            ],
+            'tubes' => [
+                ['skuCode' => null, 'startFiberIndex' => 0, 'endFiberIndex' => 1, 'startOffsetM' => 0.0, 'endOffsetM' => 0.2],
+            ],
+            'connectors' => [
+                'mode' => 'both',
+                'leftSkuCode' => null,
+                'rightSkuCode' => 'CONN_B',
+            ],
+        ];
+
+        $result = $engine->evaluate($config, []);
+        $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
+        $paths = array_map(static fn(array $e): string => (string)($e['path'] ?? ''), $errors);
+
+        $this->assertContains('fibers.0.skuCode', $paths);
+        $this->assertContains('tubes.0.skuCode', $paths);
+        $this->assertContains('connectors.leftSkuCode', $paths);
+    }
+
+    public function test_missing_selection_errors_are_reported_even_when_arrays_are_missing(): void
+    {
+        $engine = app(DslEngine::class);
+
+        $config = [
+            'processType' => 'MFD',
+            'mfdCount' => 1,
+            'tubeCount' => 1,
+            'fibers' => null,
+            'tubes' => null,
+            'connectors' => null,
+        ];
+
+        $result = $engine->evaluate($config, []);
+        $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
+        $paths = array_map(static fn(array $e): string => (string)($e['path'] ?? ''), $errors);
+
+        $this->assertContains('fibers.0.skuCode', $paths);
+        $this->assertContains('fibers.1.skuCode', $paths);
+        $this->assertContains('tubes.0.skuCode', $paths);
+        $this->assertContains('connectors.mode', $paths);
+    }
+
+    public function test_missing_connector_selection_is_reported_when_mode_is_none(): void
+    {
+        $engine = app(DslEngine::class);
+
+        $config = [
+            'processType' => 'MFD',
+            'mfdCount' => 1,
+            'tubeCount' => 1,
+            'sleeves' => [
+                ['skuCode' => 'SLEEVE_RECOTE'],
+            ],
+            'fibers' => [
+                ['skuCode' => 'FIBER_A', 'lengthM' => 0.5],
+                ['skuCode' => 'FIBER_B', 'lengthM' => 0.5],
+            ],
+            'tubes' => [
+                ['skuCode' => 'TUBE_A', 'startFiberIndex' => 0, 'endFiberIndex' => 1, 'startOffsetM' => 0.0, 'endOffsetM' => 0.2],
+            ],
+            'connectors' => [
+                'mode' => 'none',
+                'leftSkuCode' => null,
+                'rightSkuCode' => null,
+            ],
+        ];
+
+        $result = $engine->evaluate($config, []);
+        $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
+        $paths = array_map(static fn(array $e): string => (string)($e['path'] ?? ''), $errors);
+
+        $this->assertContains('connectors.mode', $paths);
+    }
 }

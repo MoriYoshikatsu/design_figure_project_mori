@@ -496,11 +496,13 @@ final class QuoteController extends Controller
             );
         }
 
-        return redirect()->route('work.quotes.show', $id)->with('status', $changeRequestService->outcomeMessage(
+        $statusMessage = $changeRequestService->outcomeMessage(
             $submission,
-            '見積を更新しました',
-            '承認変更申請を送信しました'
-        ));
+            '見積を更新しました（即時反映）',
+            '承認変更申請を送信しました（承認後反映）'
+        );
+
+        return redirect()->route('work.quotes.show', $id)->with('status', $statusMessage);
     }
 
     public function updateMemo(Request $request, int $id)
@@ -529,11 +531,13 @@ final class QuoteController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.quotes.show', $id)->with('status', $changeRequestService->outcomeMessage(
+        $statusMessage = $changeRequestService->outcomeMessage(
             $submission,
-            '見積メモを更新しました',
-            '見積メモの更新申請を送信しました'
-        ));
+            '見積メモを更新しました（即時反映）',
+            '見積メモの更新申請を送信しました（承認後反映）'
+        );
+
+        return redirect()->route('work.quotes.show', $id)->with('status', $statusMessage);
     }
 
     private function decodeJson(mixed $value): ?array

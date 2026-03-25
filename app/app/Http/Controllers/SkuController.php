@@ -29,6 +29,12 @@ final class SkuController extends Controller
 
     public function store(Request $request)
     {
+        $request->merge([
+            'part_code' => trim((string)$request->input('part_code')),
+            'name' => trim((string)$request->input('name')),
+            'name_en' => trim((string)$request->input('name_en', '')),
+        ]);
+
         $data = $request->validate([
             'part_code' => 'required|string|max:255|unique:parts,part_code',
             'name' => 'required|string|max:255',
@@ -36,6 +42,9 @@ final class SkuController extends Controller
             'category' => 'required|string',
             'attributes' => 'nullable|string',
             'memo' => 'nullable|string|max:5000',
+        ], [
+            'part_code.required' => 'Part codeを入力してください',
+            'name.required' => 'Part Nameを入力してください',
         ]);
 
         if (!in_array($data['category'], self::CATEGORIES, true)) {
@@ -105,6 +114,12 @@ final class SkuController extends Controller
         $sku = DB::table('parts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$sku) abort(404);
 
+        $request->merge([
+            'part_code' => trim((string)$request->input('part_code')),
+            'name' => trim((string)$request->input('name')),
+            'name_en' => trim((string)$request->input('name_en', '')),
+        ]);
+
         $data = $request->validate([
             'part_code' => 'required|string|max:255|unique:parts,part_code,' . $id,
             'name' => 'required|string|max:255',
@@ -112,6 +127,9 @@ final class SkuController extends Controller
             'category' => 'required|string',
             'attributes' => 'nullable|string',
             'memo' => 'nullable|string|max:5000',
+        ], [
+            'part_code.required' => 'Part codeを入力してください',
+            'name.required' => 'Part Nameを入力してください',
         ]);
 
         if (!in_array($data['category'], self::CATEGORIES, true)) {

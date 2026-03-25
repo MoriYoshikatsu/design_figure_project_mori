@@ -56,4 +56,32 @@ final class AccountChangeRequestRequirementServiceTest extends TestCase
 
         $this->assertSame('作成・更新はすべて必須', $viewData['changeRequestRequirementSummary']);
     }
+
+    public function test_build_view_data_hides_template_requirement_items_from_ui(): void
+    {
+        $service = new AccountChangeRequestRequirementService();
+
+        $viewData = $service->buildViewData(0);
+        $entityTypes = [];
+        foreach ($viewData['changeRequestRequirementGroups'] as $group) {
+            foreach ($group['items'] as $item) {
+                $entityTypes[] = $item['entity_type'];
+            }
+        }
+
+        $this->assertNotContains('product_template', $entityTypes);
+        $this->assertNotContains('product_template_version', $entityTypes);
+    }
+
+    public function test_merge_ui_selection_for_sync_preserves_hidden_template_settings(): void
+    {
+        $service = new AccountChangeRequestRequirementService();
+
+        $merged = $service->mergeUiSelectionForSync(0, ['quote']);
+
+        $this->assertContains('quote', $merged);
+        $this->assertContains('product_template', $merged);
+        $this->assertContains('product_template_version', $merged);
+        $this->assertNotContains('account', $merged);
+    }
 }
