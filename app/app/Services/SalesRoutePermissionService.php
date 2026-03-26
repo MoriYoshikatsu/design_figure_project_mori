@@ -89,16 +89,7 @@ final class SalesRoutePermissionService
         if (!$this->userHasSalesRole($userId)) {
             return false;
         }
-
-        $originalPath = $this->normalizePath('/' . ltrim((string)$request->path(), '/'));
-        $workPath = $this->toWorkPathForPermission($originalPath);
-
-        /** @var WorkPermissionService $service */
-        $service = app(WorkPermissionService::class);
-        $proxy = Request::create($workPath, $method);
-        $proxy->setUserResolver(static fn () => $request->user());
-
-        return $service->allowsRequest($proxy, $userId);
+        return true;
     }
 
     public function resolveAccountContextId(Request $request): ?int
@@ -202,6 +193,9 @@ final class SalesRoutePermissionService
 
         if ($path !== '/' && str_ends_with($path, '/')) {
             $path = rtrim($path, '/');
+        }
+        if ($path === '/work/skus' || str_starts_with($path, '/work/skus/')) {
+            $path = '/work/parts' . substr($path, strlen('/work/skus'));
         }
 
         return $path;

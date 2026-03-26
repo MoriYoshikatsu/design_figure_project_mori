@@ -7,7 +7,7 @@
         <div class="row">
             <div class="col">
                 <label>フリーワード</label>
-                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / アカウント / メール / 担当者 / ステータス / 合計 / メモ">
+                <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ID / 仕様書番号 / アカウント / メール / 担当者 / ステータス / 合計 / メモ">
             </div>
             <div class="col">
                 <label>ステータス</label>
@@ -28,67 +28,41 @@
                 </select>
             </div>
             <div class="col">
-                <label>アカウントID</label>
-                <input type="text" name="account_id" value="{{ $filters['account_id'] ?? '' }}" placeholder="数値で指定">
-            </div>
-            <div class="col">
-                <label>アカウント種別</label>
-                <select name="account_type">
-                    <option value="">すべて</option>
-                    @foreach($accountTypeOptions as $opt)
-                        <option value="{{ $opt }}" @if(($filters['account_type'] ?? '') === $opt) selected @endif>{{ $opt }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col">
                 <label>担当者</label>
                 <input type="text" name="assignee_name" value="{{ $filters['assignee_name'] ?? '' }}" placeholder="部分一致">
             </div>
-        </div>
-        <div class="row" style="margin-top:8px;">
-            <div class="col">
-                <label>合計（最小）</label>
-                <input type="number" step="0.01" name="total_min" value="{{ $filters['total_min'] ?? '' }}">
+            <div class="col range-field">
+                <label>合計（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="number" step="0.01" name="total_min" value="{{ $filters['total_min'] ?? '' }}" placeholder="最小" aria-label="合計 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="number" step="0.01" name="total_max" value="{{ $filters['total_max'] ?? '' }}" placeholder="最大" aria-label="合計 終点">
+                </div>
             </div>
-            <div class="col">
-                <label>合計（最大）</label>
-                <input type="number" step="0.01" name="total_max" value="{{ $filters['total_max'] ?? '' }}">
+            <div class="col range-field">
+                <label>作成日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+                </div>
             </div>
-            <div class="col">
-                <label>メモ</label>
-                <select name="has_memo">
-                    <option value="">すべて</option>
-                    @foreach($presenceOptions as $key => $label)
-                        <option value="{{ $key }}" @if(($filters['has_memo'] ?? '') === $key) selected @endif>{{ $label }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col">
-                <label>作成日（開始）</label>
-                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>作成日（終了）</label>
-                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>更新日（開始）</label>
-                <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>更新日（終了）</label>
-                <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}">
+            <div class="col range-field">
+                <label>更新日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+                </div>
             </div>
         </div>
         <div class="actions" style="margin-top:8px;">
             <button type="submit">絞り込み</button>
             <a href="{{ route('work.quotes.index') }}">クリア</a>
+            <div class="muted" style="margin:8px 0;">{{ count($quotes) }}件</div>
         </div>
     </form>
 
-    <div class="muted" style="margin:8px 0;">
-        表示件数: {{ count($quotes) }}件（最大200件）
-    </div>
 
     <table>
         <thead>
@@ -99,6 +73,7 @@
                 <th>担当者</th>
                 <th>ステータス</th>
                 <th>通貨</th>
+                <th>仕様書番号</th>
                 <th>合計</th>
                 <th>メモ</th>
                 <th>更新日</th>
@@ -117,7 +92,8 @@
                     <td>{{ $q->assignee_name ?? '-' }}</td>
                     <td>{{ $q->status }}</td>
                     <td>{{ $q->currency }}</td>
-                    <td>{{ $q->total }}</td>
+                    <td>{{ $q->spec_sheet_number ?? '-' }}</td>
+                    <td>{{ format_amount($q->total) }}</td>
                     <td>{{ $q->memo ?? '-' }}</td>
                     <td>{{ $q->updated_at }}</td>
                     <td class="actions">

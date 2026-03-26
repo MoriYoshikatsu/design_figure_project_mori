@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ja">
+<html lang="{{ $htmlLang ?? 'ja' }}">
 <head>
     <meta charset="utf-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? '受注販売管理システム' }}</title>
+    <title>{{ $title ?? 'Deltafiber受注販管システム' }}</title>
     @livewireStyles
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; margin: 0; }
@@ -60,6 +60,23 @@
             stroke-width: 1.8;
             stroke-linecap: round;
             stroke-linejoin: round;
+        }
+        .sidebar-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            border-radius: 999px;
+            background: #dc2626;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 18px;
+            text-align: center;
+            box-sizing: border-box;
+            box-shadow: 0 0 0 2px #fff;
         }
         .sidebar-item[data-label]::after,
         .sidebar-trigger[data-label]::after {
@@ -139,6 +156,26 @@
         .col { flex: 1; }
         .muted { color: #6b7280; }
         .actions { display: flex; gap: 8px; align-items: center; }
+        .range-field {
+            min-width: 260px;
+        }
+        .range-inputs {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+        }
+        .range-inputs > input,
+        .range-inputs > select {
+            flex: 1;
+            min-width: 0;
+        }
+        .range-sep {
+            color: #6b7280;
+            font-size: 12px;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
         @media (max-width: 900px) {
             .sidebar {
                 width: 56px;
@@ -157,15 +194,28 @@
     @php
         $showSidebar = \App\Support\RoleHelper::currentHasRole(['admin', 'sales']);
         $catalogMenuUrl = null;
+        $laborCostMenuUrl = null;
+        $canChangeRequests = false;
+        $pendingChangeRequestCount = 0;
         if ($showSidebar && auth()->check()) {
             $permissionService = app(\App\Services\WorkPermissionService::class);
             $currentUserId = (int)auth()->id();
-            $canSku = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/skus', 'GET'), $currentUserId);
+            $canSku = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/parts', 'GET'), $currentUserId);
             $canPriceBook = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/price-books', 'GET'), $currentUserId);
+            $canLaborCosts = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/labor-costs', 'GET'), $currentUserId);
+            $canChangeRequests = $permissionService->allowsRequest(\Illuminate\Http\Request::create('/work/change-requests', 'GET'), $currentUserId);
+            if ($canChangeRequests) {
+                $pendingChangeRequestCount = (int) \Illuminate\Support\Facades\DB::table('change_requests')
+                    ->where('status', 'PENDING')
+                    ->count();
+            }
             if ($canSku) {
-                $catalogMenuUrl = route('work.skus.index');
+                $catalogMenuUrl = route('work.parts.index');
             } elseif ($canPriceBook) {
                 $catalogMenuUrl = route('work.price-books.index');
+            }
+            if ($canLaborCosts) {
+                $laborCostMenuUrl = route('work.labor-costs.index');
             }
         }
     @endphp
@@ -186,16 +236,23 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
                     </a>
                     @if($catalogMenuUrl)
-                        <a href="{{ $catalogMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.skus.*') || request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ・価格">
+                        <a href="{{ $catalogMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.parts.*') || request()->routeIs('work.price-books.*')) is-active @endif" data-label="パーツ価格マスタ">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5-8 4.5-8-4.5Z"/><path d="M4 9.5V15l8 4 8-4V9.5"/><rect x="4.5" y="14.5" width="15" height="5" rx="1"/></svg>
                         </a>
                     @endif
-                    <a href="{{ route('work.templates.index') }}" class="sidebar-item @if(request()->routeIs('work.templates.*')) is-active @endif" data-label="納品規則テンプレ(DSL)">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 4 12l4 6M16 6l4 6-4 6M13.5 4l-3 16"/></svg>
-                    </a>
-                    <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="承認変更申請">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v11h-15z"/><path d="M8 10.5h8M8 14.5h5"/><path d="m15.5 4 1.5 2"/></svg>
-                    </a>
+                    @if($laborCostMenuUrl)
+                        <a href="{{ $laborCostMenuUrl }}" class="sidebar-item @if(request()->routeIs('work.labor-costs.*')) is-active @endif" data-label="作業費マスタ">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h17v11h-17z"/><path d="M7 10h4M7 14h2M13 10h4M13 14h4"/></svg>
+                        </a>
+                    @endif
+                    @if($canChangeRequests)
+                        <a href="{{ route('work.change-requests.index') }}" class="sidebar-item @if(request()->routeIs('work.change-requests.*')) is-active @endif" data-label="変更申請">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v11h-15z"/><path d="M8 10.5h8M8 14.5h5"/><path d="m15.5 4 1.5 2"/></svg>
+                            @if($pendingChangeRequestCount > 0)
+                                <span class="sidebar-badge" aria-label="保留中の変更申請 {{ $pendingChangeRequestCount }} 件">{{ $pendingChangeRequestCount > 99 ? '99+' : $pendingChangeRequestCount }}</span>
+                            @endif
+                        </a>
+                    @endif
                     <a href="{{ route('work.audit-logs.index') }}" class="sidebar-item @if(request()->routeIs('work.audit-logs.*')) is-active @endif" data-label="監査ログ">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v7l4 2"/><circle cx="12" cy="12" r="8"/></svg>
                     </a>
@@ -266,6 +323,7 @@
         @endif
         </main>
     </div>
+    @include('partials.back_to_top')
     @livewireScripts
 </body>
 </html>

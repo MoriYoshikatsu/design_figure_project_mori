@@ -123,7 +123,7 @@
                 <tr><th>価格内訳件数</th><td>{{ count($basePricing) }}</td><td>{{ count($newPricing) }}</td></tr>
                 <tr><th>申請者</th><td>{{ $req->requested_by_account_display_name ?? '-' }}</td><td>{{ $req->requested_by_account_display_name ?? '-' }}</td></tr>
                 @if(($req->entity_type ?? '') === 'quote')
-                    <tr><th>合計</th><td>{{ $baseTotals['total'] ?? '-' }}</td><td>{{ $newTotals['total'] ?? '-' }}</td></tr>
+                    <tr><th>合計</th><td>{{ format_amount($baseTotals['total'] ?? null) }}</td><td>{{ format_amount($newTotals['total'] ?? null) }}</td></tr>
                 @endif
                 <tr><th>担当者</th><td>{{ $req->requested_by_assignee_name ?? '-' }}</td><td>{{ $req->requested_by_assignee_name ?? '-' }}</td></tr>
             </tbody>

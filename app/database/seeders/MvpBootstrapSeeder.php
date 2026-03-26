@@ -30,8 +30,10 @@ class MvpBootstrapSeeder extends Seeder
                 'dsl_version' => '0.2',
                 'dsl_json' => json_encode([
                     'default_config' => [
-                        'mfdCount' => 2,
+                        'processType' => 'MFD',
+                        'mfdCount' => 1,
                         'tubeCount' => 1,
+                        'tecSide' => null,
                     ],
                 ], JSON_UNESCAPED_UNICODE),
                 'active' => true,

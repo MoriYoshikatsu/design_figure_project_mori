@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860">
+  <defs>
+    <style>
+      .title { font: 700 28px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .sub { font: 500 16px 'Noto Sans JP', sans-serif; fill: #334155; }
+      .label { font: 700 18px 'Noto Sans JP', sans-serif; fill: #0f172a; }
+      .text { font: 500 14px 'Noto Sans JP', sans-serif; fill: #1e293b; }
+      .small { font: 500 12px 'Noto Sans JP', sans-serif; fill: #475569; }
+      .panel { fill: #fff; stroke: #cbd5e1; stroke-width: 2; rx: 16; ry: 16; }
+      .menu { fill: #eff6ff; stroke: #60a5fa; }
+      .detail { fill: #f8fafc; stroke: #94a3b8; }
+      .arrow { stroke: #64748b; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="860" fill="#f8fafc"/>
+  <text x="50" y="55" class="title">図2 業務ページ UI フロー</text>
+  <text x="50" y="85" class="sub">サイドバーの主要メニューから、実務でよく使う詳細ページへ遷移する流れをまとめた図です。</text>
+
+  <rect x="55" y="135" width="220" height="650" class="panel menu"/>
+  <text x="165" y="175" text-anchor="middle" class="label">サイドバー</text>
+
+  <g class="text" text-anchor="middle">
+    <rect x="85" y="205" width="160" height="48" class="panel"/><text x="165" y="235">アカウント</text>
+    <rect x="85" y="275" width="160" height="48" class="panel"/><text x="165" y="305">仕様書セッション</text>
+    <rect x="85" y="345" width="160" height="48" class="panel"/><text x="165" y="375">仕様書見積</text>
+    <rect x="85" y="415" width="160" height="48" class="panel"/><text x="165" y="445">パーツ価格マスタ</text>
+    <rect x="85" y="485" width="160" height="48" class="panel"/><text x="165" y="515">作業費マスタ</text>
+    <rect x="85" y="555" width="160" height="48" class="panel"/><text x="165" y="585">納品規則テンプレ(DSL)</text>
+    <rect x="85" y="625" width="160" height="48" class="panel"/><text x="165" y="655">変更申請</text>
+    <rect x="85" y="695" width="160" height="48" class="panel"/><text x="165" y="725">監査ログ</text>
+  </g>
+
+  <g>
+    <rect x="360" y="170" width="290" height="110" class="panel detail"/>
+    <text x="390" y="205" class="label">アカウント</text>
+    <text x="390" y="232" class="text">一覧 → 編集 → 変更申請必須設定</text>
+    <text x="390" y="255" class="small">顧客別仕切係数、担当者、権限メモを扱う</text>
+    <path d="M245 229 H345" class="arrow"/>
+
+    <rect x="360" y="300" width="290" height="110" class="panel detail"/>
+    <text x="390" y="335" class="label">仕様書セッション</text>
+    <text x="390" y="362" class="text">一覧 → 詳細 → PDF</text>
+    <text x="390" y="385" class="small">発行前の構成とエラー確認に使う</text>
+    <path d="M245 299 H345" class="arrow"/>
+
+    <rect x="360" y="430" width="290" height="130" class="panel detail"/>
+    <text x="390" y="465" class="label">仕様書見積</text>
+    <text x="390" y="492" class="text">一覧 → 詳細 → 編集 / 計算履歴 / PDF</text>
+    <text x="390" y="515" class="small">見積スナップショット、現行版、承認申請を確認</text>
+    <path d="M245 369 H345" class="arrow"/>
+
+    <rect x="360" y="580" width="290" height="130" class="panel detail"/>
+    <text x="390" y="615" class="label">変更申請・監査ログ</text>
+    <text x="390" y="642" class="text">一覧 → 詳細 → 承認 / 却下 / 差分確認</text>
+    <text x="390" y="665" class="small">だれが何を変えたかを追跡する</text>
+    <path d="M245 649 H345" class="arrow"/>
+  </g>
+
+  <g>
+    <rect x="760" y="170" width="570" height="170" class="panel detail"/>
+    <text x="790" y="205" class="label">パーツ価格マスタ</text>
+    <text x="790" y="232" class="text">タブ切替で「Part」と「価格表」を移動する</text>
+    <text x="790" y="260" class="small">Part: 一覧 / 詳細Drawer / 作成 / 編集 / 削除申請</text>
+    <text x="790" y="284" class="small">価格表: 一覧 / 詳細 / 明細一覧 / 作成 / 編集 / 明細編集</text>
+    <text x="790" y="308" class="small">見積計算の土台になる部材名と単価を管理する</text>
+    <path d="M245 439 H740" class="arrow"/>
+
+    <rect x="760" y="380" width="570" height="150" class="panel detail"/>
+    <text x="790" y="415" class="label">作業費マスタ</text>
+    <text x="790" y="442" class="text">タブ切替で「工程」と「全体変数 / 自動選択ルール」を移動する</text>
+    <text x="790" y="470" class="small">工程: process / element を申請ベースで追加・更新・削除</text>
+    <text x="790" y="494" class="small">全体変数: 時間チャージ、ルール: 自動適用条件</text>
+    <path d="M245 509 H740" class="arrow"/>
+
+    <rect x="760" y="570" width="570" height="150" class="panel detail"/>
+    <text x="790" y="605" class="label">納品規則テンプレ(DSL)</text>
+    <text x="790" y="632" class="text">テンプレート一覧 → 詳細 → 版編集</text>
+    <text x="790" y="660" class="small">どの入力欄を持つか、派生値をどう作るかを版単位で管理する</text>
+    <text x="790" y="684" class="small">Configurator の UI と派生計算の入口になる</text>
+    <path d="M245 579 H740" class="arrow"/>
+  </g>
+</svg>

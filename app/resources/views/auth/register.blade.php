@@ -45,6 +45,7 @@
     <div style="margin-top:12px;">
         <a href="{{ route('login') }}">ログインへ戻る</a>
     </div>
+    @include('partials.back_to_top')
     @livewireScripts
 </body>
 </html>

@@ -18,7 +18,7 @@ final class PriceBookItemController extends Controller
         if (!$book) abort(404);
 
         $data = $request->validate([
-            'sku_id' => 'required|integer',
+            'part_id' => 'required|integer',
             'pricing_model' => 'required|string',
             'unit_price' => 'nullable|numeric',
             'price_per_m' => 'nullable|numeric',
@@ -36,9 +36,9 @@ final class PriceBookItemController extends Controller
             return back()->withErrors(['pricing_model' => 'pricing_modelが不正です'])->withInput();
         }
 
-        $skuExists = DB::table('skus')->whereNull('deleted_at')->where('id', (int)$data['sku_id'])->exists();
+        $skuExists = DB::table('parts')->whereNull('deleted_at')->where('id', (int)$data['part_id'])->exists();
         if (!$skuExists) {
-            return back()->withErrors(['sku_id' => 'SKUが存在しません'])->withInput();
+            return back()->withErrors(['part_id' => 'Partが存在しません'])->withInput();
         }
 
         [$unitPrice, $pricePerM, $formula] = $this->normalizePricing($data);
@@ -51,7 +51,7 @@ final class PriceBookItemController extends Controller
 
         $after = [
             'price_book_id' => $priceBookId,
-            'sku_id' => (int)$data['sku_id'],
+            'part_id' => (int)$data['part_id'],
             'pricing_model' => $data['pricing_model'],
             'unit_price' => $unitPrice,
             'price_per_m' => $pricePerM,
@@ -60,14 +60,19 @@ final class PriceBookItemController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'price_book_item',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.edit', $priceBookId)->with('status', '明細の作成申請を送信しました');
+        return redirect()->route('work.price-books.edit', $priceBookId)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '明細を作成しました',
+            '明細の作成申請を送信しました'
+        ));
     }
 
     public function edit(int $priceBookId, int $itemId)
@@ -90,10 +95,10 @@ final class PriceBookItemController extends Controller
             }
         }
 
-        $skus = DB::table('skus')
+        $skus = DB::table('parts')
             ->whereNull('deleted_at')
-            ->orderBy('sku_code')
-            ->get(['id', 'sku_code', 'name']);
+            ->orderBy('part_code')
+            ->get(['id', 'part_code', 'name']);
 
         $formula = $item->formula ?? '';
         if (is_array($formula)) {
@@ -118,7 +123,7 @@ final class PriceBookItemController extends Controller
         if (!$item) abort(404);
 
         $data = $request->validate([
-            'sku_id' => 'required|integer',
+            'part_id' => 'required|integer',
             'pricing_model' => 'required|string',
             'unit_price' => 'nullable|numeric',
             'price_per_m' => 'nullable|numeric',
@@ -136,9 +141,9 @@ final class PriceBookItemController extends Controller
             return back()->withErrors(['pricing_model' => 'pricing_modelが不正です'])->withInput();
         }
 
-        $skuExists = DB::table('skus')->whereNull('deleted_at')->where('id', (int)$data['sku_id'])->exists();
+        $skuExists = DB::table('parts')->whereNull('deleted_at')->where('id', (int)$data['part_id'])->exists();
         if (!$skuExists) {
-            return back()->withErrors(['sku_id' => 'SKUが存在しません'])->withInput();
+            return back()->withErrors(['part_id' => 'Partが存在しません'])->withInput();
         }
 
         [$unitPrice, $pricePerM, $formula] = $this->normalizePricing($data);
@@ -150,7 +155,7 @@ final class PriceBookItemController extends Controller
         if ($memo === '') $memo = null;
 
         $after = [
-            'sku_id' => (int)$data['sku_id'],
+            'part_id' => (int)$data['part_id'],
             'pricing_model' => $data['pricing_model'],
             'unit_price' => $unitPrice,
             'price_per_m' => $pricePerM,
@@ -159,7 +164,8 @@ final class PriceBookItemController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'price_book_item',
             $itemId,
             (array)$item,
@@ -168,7 +174,11 @@ final class PriceBookItemController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.edit', $priceBookId)->with('status', '明細の更新申請を送信しました');
+        return redirect()->route('work.price-books.edit', $priceBookId)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '明細を更新しました',
+            '明細の更新申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $priceBookId, int $itemId)
@@ -182,7 +192,8 @@ final class PriceBookItemController extends Controller
             abort(404);
         }
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'price_book_item',
             $itemId,
             (array)$before,
@@ -190,7 +201,11 @@ final class PriceBookItemController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.price-books.edit', $priceBookId)->with('status', '明細の削除申請を送信しました');
+        return redirect()->route('work.price-books.edit', $priceBookId)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            '明細を削除しました',
+            '明細の削除申請を送信しました'
+        ));
     }
 
     /**

@@ -50,14 +50,19 @@ final class TemplateVersionController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
             'product_template_version',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.templates.edit', $templateId)->with('status', 'テンプレversionの作成申請を送信しました');
+        return redirect()->route('work.templates.edit', $templateId)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'テンプレversionを作成しました',
+            'テンプレversionの作成申請を送信しました'
+        ));
     }
 
     public function edit(int $templateId, int $versionId)
@@ -130,7 +135,8 @@ final class TemplateVersionController extends Controller
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'product_template_version',
             $versionId,
             (array)$version,
@@ -139,7 +145,11 @@ final class TemplateVersionController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.templates.edit', $templateId)->with('status', 'テンプレversionの更新申請を送信しました');
+        return redirect()->route('work.templates.edit', $templateId)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'テンプレversionを更新しました',
+            'テンプレversionの更新申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $templateId, int $versionId)
@@ -151,7 +161,8 @@ final class TemplateVersionController extends Controller
             ->first();
         if (!$version) abort(404);
 
-        app(WorkChangeRequestService::class)->queueDelete(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
             'product_template_version',
             $versionId,
             (array)$version,
@@ -159,6 +170,10 @@ final class TemplateVersionController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.templates.edit', $templateId)->with('status', 'テンプレversionの削除申請を送信しました');
+        return redirect()->route('work.templates.edit', $templateId)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'テンプレversionを削除しました',
+            'テンプレversionの削除申請を送信しました'
+        ));
     }
 }

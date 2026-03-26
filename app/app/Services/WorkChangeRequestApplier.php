@@ -43,14 +43,21 @@ final class WorkChangeRequestApplier
                 $accountType = $role === 'customer' ? 'B2C' : 'B2B';
             }
 
-            $id = (int)DB::table('accounts')->insertGetId([
+            $insert = [
                 'account_type' => $accountType,
                 'internal_name' => $after['internal_name'] ?? null,
                 'memo' => $after['memo'] ?? null,
                 'assignee_name' => $after['assignee_name'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+            if (Schema::hasColumn('accounts', 'customer_factor_default')) {
+                $insert['customer_factor_default'] = $this->normalizeCustomerFactorDefault(
+                    $after['customer_factor_default'] ?? null
+                );
+            }
+
+            $id = (int)DB::table('accounts')->insertGetId($insert);
 
             $linkedUserId = 0;
             $userName = trim((string)($after['user_name'] ?? ''));
@@ -104,9 +111,9 @@ final class WorkChangeRequestApplier
             return $id;
         }
 
-        if ($entityType === 'sku') {
-            $id = (int)DB::table('skus')->insertGetId([
-                'sku_code' => $after['sku_code'] ?? '',
+        if (in_array($entityType, ['part', 'sku'], true)) {
+            $insert = [
+                'part_code' => $after['part_code'] ?? ($after['sku_code'] ?? ''),
                 'name' => $after['name'] ?? '',
                 'category' => $after['category'] ?? 'PROC',
                 'active' => (bool)($after['active'] ?? true),
@@ -114,8 +121,13 @@ final class WorkChangeRequestApplier
                 'memo' => $after['memo'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
-            $this->auditLogger->log($actorId, 'SKU_CREATED', 'sku', $id, null, $after);
+            ];
+            if (Schema::hasColumn('parts', 'name_en')) {
+                $insert['name_en'] = $after['name_en'] ?? null;
+            }
+
+            $id = (int)DB::table('parts')->insertGetId($insert);
+            $this->auditLogger->log($actorId, 'PART_CREATED', 'part', $id, null, $after);
             return $id;
         }
 
@@ -143,7 +155,7 @@ final class WorkChangeRequestApplier
 
             $insert = [
                 'price_book_id' => (int)($after['price_book_id'] ?? 0),
-                'sku_id' => (int)($after['sku_id'] ?? 0),
+                'part_id' => (int)($after['part_id'] ?? ($after['sku_id'] ?? 0)),
                 'pricing_model' => $pricingModel,
                 'unit_price' => $after['unit_price'] ?? null,
                 'formula' => !empty($after['formula']) ? json_encode($after['formula'], JSON_UNESCAPED_UNICODE) : null,
@@ -191,6 +203,65 @@ final class WorkChangeRequestApplier
             return $id;
         }
 
+        if ($entityType === 'labor_process') {
+            $id = (int)DB::table('labor_processes')->insertGetId([
+                'process_code' => strtoupper(trim((string)($after['process_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_CREATED', 'labor_process', $id, null, $after);
+            return $id;
+        }
+
+        if ($entityType === 'labor_process_element') {
+            $id = (int)DB::table('labor_process_elements')->insertGetId([
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'element_code' => strtoupper(trim((string)($after['element_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'work_minutes' => (float)($after['work_minutes'] ?? 0),
+                'activity_coeff' => (float)($after['activity_coeff'] ?? 0),
+                'batch_size' => max(1, (int)($after['batch_size'] ?? 1)),
+                'depreciation_amount' => (float)($after['depreciation_amount'] ?? 0),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_ELEMENT_CREATED', 'labor_process_element', $id, null, $after);
+            return $id;
+        }
+
+        if ($entityType === 'labor_auto_rule') {
+            $id = (int)DB::table('labor_auto_rules')->insertGetId([
+                'rule_code' => strtoupper(trim((string)($after['rule_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'priority' => (int)($after['priority'] ?? 100),
+                'include_tags_json' => json_encode($this->normalizeJsonArrayField($after['include_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode($this->normalizeJsonArrayField($after['exclude_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_part_categories_json'] ?? ($after['required_sku_categories_json'] ?? [])), JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_part_codes_json'] ?? ($after['required_sku_codes_json'] ?? [])), JSON_UNESCAPED_UNICODE),
+                'always_apply' => (bool)($after['always_apply'] ?? false),
+                'active' => (bool)($after['active'] ?? true),
+                'memo' => $after['memo'] ?? null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_AUTO_RULE_CREATED', 'labor_auto_rule', $id, null, $after);
+            return $id;
+        }
+
         if ($entityType === 'account_sales_route_permission') {
             $id = $this->applyAccountScopedPermission($after, $actorId);
             $this->auditLogger->log($actorId, 'ACCOUNT_SALES_ROUTE_PERMISSION_CREATED', 'account_sales_route_permission', $id, null, $after);
@@ -205,18 +276,43 @@ final class WorkChangeRequestApplier
         $after = is_array($after) ? $after : [];
 
         if ($entityType === 'account') {
+            $update = [
+                'account_type' => $after['account_type'] ?? null,
+                'internal_name' => $after['internal_name'] ?? null,
+                'memo' => $after['memo'] ?? null,
+                'assignee_name' => $after['assignee_name'] ?? null,
+                'updated_at' => now(),
+            ];
+            if (
+                Schema::hasColumn('accounts', 'customer_factor_default')
+                && array_key_exists('customer_factor_default', $after)
+            ) {
+                $update['customer_factor_default'] = $this->normalizeCustomerFactorDefault(
+                    $after['customer_factor_default']
+                );
+            }
+
             DB::table('accounts')
                 ->whereNull('deleted_at')
                 ->where('id', $entityId)
-                ->update([
-                    'account_type' => $after['account_type'] ?? null,
-                    'internal_name' => $after['internal_name'] ?? null,
-                    'memo' => $after['memo'] ?? null,
-                    'assignee_name' => $after['assignee_name'] ?? null,
-                    'updated_at' => now(),
-                ]);
+                ->update($update);
             $this->auditLogger->log($actorId, 'ACCOUNT_UPDATED', 'account', $entityId, $before, $after);
             return $entityId;
+        }
+
+        if ($entityType === 'labor_cost_setting') {
+            $settingId = (int)($after['id'] ?? $entityId ?: 1);
+            DB::table('labor_cost_settings')->updateOrInsert(
+                ['id' => $settingId],
+                [
+                    'hourly_rate' => (float)($after['hourly_rate'] ?? 9000),
+                    'memo' => $after['memo'] ?? null,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
+            $this->auditLogger->log($actorId, 'LABOR_COST_SETTING_UPDATED', 'labor_cost_setting', $settingId, $before, $after);
+            return $settingId;
         }
 
         if ($entityType === 'account_user_memo') {
@@ -231,6 +327,17 @@ final class WorkChangeRequestApplier
                 ]);
             $this->auditLogger->log($actorId, 'ACCOUNT_USER_MEMO_UPDATED', 'account_user', null, $before, $after);
             return 0;
+        }
+
+        if ($entityType === 'account_change_request_requirement') {
+            $accountId = (int)($after['account_id'] ?? $entityId);
+            app(AccountChangeRequestRequirementService::class)->sync(
+                $accountId,
+                is_array($after['required_entity_types'] ?? null) ? $after['required_entity_types'] : [],
+                $actorId
+            );
+            $this->auditLogger->log($actorId, 'ACCOUNT_CHANGE_REQUEST_REQUIREMENT_UPDATED', 'account_change_request_requirement', $accountId, $before, $after);
+            return $accountId;
         }
 
         if ($entityType === 'account_sales_route_permission') {
@@ -306,17 +413,22 @@ final class WorkChangeRequestApplier
             return $accountId;
         }
 
-        if ($entityType === 'sku') {
-            DB::table('skus')->whereNull('deleted_at')->where('id', $entityId)->update([
-                'sku_code' => $after['sku_code'] ?? '',
+        if (in_array($entityType, ['part', 'sku'], true)) {
+            $update = [
+                'part_code' => $after['part_code'] ?? ($after['sku_code'] ?? ''),
                 'name' => $after['name'] ?? '',
                 'category' => $after['category'] ?? 'PROC',
                 'active' => (bool)($after['active'] ?? true),
                 'attributes' => json_encode($after['attributes'] ?? [], JSON_UNESCAPED_UNICODE),
                 'memo' => $after['memo'] ?? null,
                 'updated_at' => now(),
-            ]);
-            $this->auditLogger->log($actorId, 'SKU_UPDATED', 'sku', $entityId, $before, $after);
+            ];
+            if (Schema::hasColumn('parts', 'name_en')) {
+                $update['name_en'] = $after['name_en'] ?? null;
+            }
+
+            DB::table('parts')->whereNull('deleted_at')->where('id', $entityId)->update($update);
+            $this->auditLogger->log($actorId, 'PART_UPDATED', 'part', $entityId, $before, $after);
             return $entityId;
         }
 
@@ -342,7 +454,7 @@ final class WorkChangeRequestApplier
             }
 
             $update = [
-                'sku_id' => (int)($after['sku_id'] ?? 0),
+                'part_id' => (int)($after['part_id'] ?? ($after['sku_id'] ?? 0)),
                 'pricing_model' => $pricingModel,
                 'unit_price' => $after['unit_price'] ?? null,
                 'formula' => !empty($after['formula']) ? json_encode($after['formula'], JSON_UNESCAPED_UNICODE) : null,
@@ -386,14 +498,79 @@ final class WorkChangeRequestApplier
             return $entityId;
         }
 
+        if ($entityType === 'labor_process') {
+            DB::table('labor_processes')->whereNull('deleted_at')->where('id', $entityId)->update([
+                'process_code' => strtoupper(trim((string)($after['process_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_UPDATED', 'labor_process', $entityId, $before, $after);
+            return $entityId;
+        }
+
+        if ($entityType === 'labor_process_element') {
+            DB::table('labor_process_elements')->whereNull('deleted_at')->where('id', $entityId)->update([
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'element_code' => strtoupper(trim((string)($after['element_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'work_minutes' => (float)($after['work_minutes'] ?? 0),
+                'activity_coeff' => (float)($after['activity_coeff'] ?? 0),
+                'batch_size' => max(1, (int)($after['batch_size'] ?? 1)),
+                'depreciation_amount' => (float)($after['depreciation_amount'] ?? 0),
+                'default_yield_rate' => is_numeric($after['default_yield_rate'] ?? null)
+                    ? (float)$after['default_yield_rate']
+                    : null,
+                'active' => (bool)($after['active'] ?? true),
+                'sort_order' => (int)($after['sort_order'] ?? 0),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_PROCESS_ELEMENT_UPDATED', 'labor_process_element', $entityId, $before, $after);
+            return $entityId;
+        }
+
+        if ($entityType === 'labor_auto_rule') {
+            DB::table('labor_auto_rules')->whereNull('deleted_at')->where('id', $entityId)->update([
+                'rule_code' => strtoupper(trim((string)($after['rule_code'] ?? ''))),
+                'name' => (string)($after['name'] ?? ''),
+                'process_id' => (int)($after['process_id'] ?? 0),
+                'priority' => (int)($after['priority'] ?? 100),
+                'include_tags_json' => json_encode($this->normalizeJsonArrayField($after['include_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'exclude_tags_json' => json_encode($this->normalizeJsonArrayField($after['exclude_tags_json'] ?? []), JSON_UNESCAPED_UNICODE),
+                'required_part_categories_json' => json_encode($this->normalizeJsonArrayField($after['required_part_categories_json'] ?? ($after['required_sku_categories_json'] ?? [])), JSON_UNESCAPED_UNICODE),
+                'required_part_codes_json' => json_encode($this->normalizeJsonArrayField($after['required_part_codes_json'] ?? ($after['required_sku_codes_json'] ?? [])), JSON_UNESCAPED_UNICODE),
+                'always_apply' => (bool)($after['always_apply'] ?? false),
+                'active' => (bool)($after['active'] ?? true),
+                'memo' => $after['memo'] ?? null,
+                'updated_at' => now(),
+            ]);
+            $this->auditLogger->log($actorId, 'LABOR_AUTO_RULE_UPDATED', 'labor_auto_rule', $entityId, $before, $after);
+            return $entityId;
+        }
+
         if ($entityType === 'quote') {
             $snapshot = is_array($after['snapshot'] ?? null) ? $after['snapshot'] : [];
             $memo = array_key_exists('memo', $after) ? $after['memo'] : null;
+            $specSheetNumber = null;
+            if (array_key_exists('spec_sheet_number', $after)) {
+                $specSheetNumber = trim((string)$after['spec_sheet_number']);
+                $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
+            }
             $update = [
                 'updated_at' => now(),
             ];
             if (!empty($snapshot)) {
                 $update['snapshot'] = json_encode($snapshot, JSON_UNESCAPED_UNICODE);
+                if ($specSheetNumber === null && array_key_exists('spec_sheet_number', $snapshot)) {
+                    $specSheetNumber = trim((string)$snapshot['spec_sheet_number']);
+                    $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
+                }
                 $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
                 $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
                 $pricingOutput = is_array($snapshot['pricing_output'] ?? null) ? $snapshot['pricing_output'] : [];
@@ -468,6 +645,9 @@ final class WorkChangeRequestApplier
             if ($memo !== null) {
                 $update['memo'] = $memo;
             }
+            if ($this->hasQuoteColumn('spec_sheet_number')) {
+                $update['spec_sheet_number'] = $specSheetNumber;
+            }
             DB::table('quotes')->whereNull('deleted_at')->where('id', $entityId)->update($update);
             $this->auditLogger->log($actorId, 'QUOTE_UPDATED', 'quote', $entityId, $before, $after);
             return $entityId;
@@ -516,13 +696,17 @@ final class WorkChangeRequestApplier
         }
 
         $map = [
-            'sku' => 'skus',
+            'part' => 'parts',
+            'sku' => 'parts',
             'price_book' => 'price_books',
             'price_book_item' => 'price_book_items',
             'product_template' => 'product_templates',
             'product_template_version' => 'product_template_versions',
             'quote' => 'quotes',
             'account' => 'accounts',
+            'labor_process' => 'labor_processes',
+            'labor_process_element' => 'labor_process_elements',
+            'labor_auto_rule' => 'labor_auto_rules',
         ];
 
         $table = $map[$entityType] ?? null;
@@ -581,6 +765,33 @@ final class WorkChangeRequestApplier
 
         $perM = $this->resolvePricePerM($row);
         return $perM !== null ? ($perM / 1000) : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function normalizeJsonArrayField(mixed $value): array
+    {
+        $rows = [];
+        if (is_array($value)) {
+            $rows = $value;
+        } else {
+            $decoded = json_decode((string)$value, true);
+            if (is_array($decoded)) {
+                $rows = $decoded;
+            }
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $v = trim((string)$row);
+            if ($v === '') {
+                continue;
+            }
+            $result[$v] = true;
+        }
+
+        return array_keys($result);
     }
 
     private function applyAccountScopedPermission(array $after, int $actorId): int
@@ -788,6 +999,15 @@ final class WorkChangeRequestApplier
             return 'source:' . $source . ';';
         }
         return 'source:' . $source . ';' . $memoValue;
+    }
+
+    private function normalizeCustomerFactorDefault(mixed $value): float
+    {
+        if (!is_numeric($value)) {
+            return 1.0;
+        }
+
+        return max(0.0, (float)$value);
     }
 
     private function hasQuoteColumn(string $column): bool

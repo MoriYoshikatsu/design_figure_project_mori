@@ -4,8 +4,13 @@ namespace App\Services;
 
 final class BomBuilder
 {
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
+    /** @var array<int, string> */
+    private const TEC_PROCESS_TYPES = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
+
     /**
-     * @return array<int, array{sku_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}>
+     * @return array<int, array{part_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}>
      */
     public function build(array $config, array $derived, array $dsl): array
     {
@@ -61,7 +66,7 @@ final class BomBuilder
                     $sourcePath = $sourceTpl !== '' ? str_replace('{index}', (string)$idx, $sourceTpl) : null;
 
                     $items[] = $this->normalizeItem([
-                        'sku_code' => (string)$skuCode,
+                        'part_code' => (string)$skuCode,
                         'quantity' => $this->evalExpr($def['qtyExpr'] ?? 1, $config, $derived, $row, (int)$idx),
                         'options' => $options,
                         'source_path' => $sourcePath,
@@ -88,7 +93,7 @@ final class BomBuilder
         }
 
         return $this->normalizeItem([
-            'sku_code' => (string)$skuCode,
+            'part_code' => (string)$skuCode,
             'quantity' => $this->evalExpr($def['qtyExpr'] ?? 1, $config, $derived, $item, $index),
             'options' => $options,
             'source_path' => $sourcePath,
@@ -101,27 +106,42 @@ final class BomBuilder
         $items = [];
         $sort = 0;
 
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
         $totalFiberLengthM = $this->sumLengths($config['fibers'] ?? []);
-
-        $items[] = $this->normalizeItem([
-            'sku_code' => 'PROC_MFD_CONVERSION',
-            'quantity' => $mfdCount,
-            'options' => [
-                'mfdCount' => $mfdCount,
-                'totalFiberLengthM' => $totalFiberLengthM,
-            ],
-            'source_path' => null,
-            'sort_order' => $sort,
-        ], $config, $derived);
-        $sort++;
+        if ($processType === self::PROCESS_TYPE_MFD) {
+            $items[] = $this->normalizeItem([
+                'part_code' => $this->resolveProcessSkuCode($processType),
+                'quantity' => 1,
+                'options' => [
+                    'mfdCount' => 1,
+                    'totalFiberLengthM' => $totalFiberLengthM,
+                ],
+                'source_path' => '$.processType',
+                'sort_order' => $sort,
+            ], $config, $derived);
+            $sort++;
+        } else {
+            foreach ($this->resolveTecProcessSelections($config, $processType) as $selection) {
+                $items[] = $this->normalizeItem([
+                    'part_code' => $this->resolveProcessSkuCode($selection['processType']),
+                    'quantity' => 1,
+                    'options' => [
+                        'tecSide' => $selection['side'],
+                        'processType' => $selection['processType'],
+                    ],
+                    'source_path' => $selection['source_path'],
+                    'sort_order' => $sort,
+                ], $config, $derived);
+                $sort++;
+            }
+        }
 
         $sleeves = $config['sleeves'] ?? [];
         foreach ($sleeves as $i => $s) {
             $skuCode = $s['skuCode'] ?? null;
             if ($this->isEmpty($skuCode)) continue;
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$skuCode,
+                'part_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [],
                 'source_path' => "\$.sleeves[$i]",
@@ -135,7 +155,7 @@ final class BomBuilder
             $skuCode = $f['skuCode'] ?? null;
             if ($this->isEmpty($skuCode)) continue;
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$skuCode,
+                'part_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [
                     'lengthM' => $this->extractLengthM($f, 'lengthM', 'lengthMm'),
@@ -153,7 +173,7 @@ final class BomBuilder
             if ($this->isEmpty($skuCode)) continue;
             $tubeLen = $this->resolveTubeLengthM($t, $config);
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$skuCode,
+                'part_code' => (string)$skuCode,
                 'quantity' => 1,
                 'options' => [
                     'startFiberIndex' => $t['startFiberIndex'] ?? null,
@@ -173,7 +193,7 @@ final class BomBuilder
         $conns = $config['connectors'] ?? [];
         if (!empty($conns['leftSkuCode'])) {
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$conns['leftSkuCode'],
+                'part_code' => (string)$conns['leftSkuCode'],
                 'quantity' => 1,
                 'options' => [],
                 'source_path' => "\$.connectors.leftSkuCode",
@@ -183,7 +203,7 @@ final class BomBuilder
         }
         if (!empty($conns['rightSkuCode'])) {
             $items[] = $this->normalizeItem([
-                'sku_code' => (string)$conns['rightSkuCode'],
+                'part_code' => (string)$conns['rightSkuCode'],
                 'quantity' => 1,
                 'options' => [],
                 'source_path' => "\$.connectors.rightSkuCode",
@@ -193,6 +213,27 @@ final class BomBuilder
         }
 
         return $items;
+    }
+
+    private function normalizeProcessType(mixed $raw): string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, array_merge([self::PROCESS_TYPE_MFD, self::PROCESS_TYPE_TEC], self::TEC_PROCESS_TYPES), true)) {
+            return self::PROCESS_TYPE_MFD;
+        }
+
+        return $value;
+    }
+
+    private function resolveProcessSkuCode(string $processType): string
+    {
+        return match ($processType) {
+            'TEC20' => 'PROC_TEC20',
+            'TEC30' => 'PROC_TEC30',
+            'TEC20_HP' => 'PROC_TEC20_HP',
+            'TEC30_HP' => 'PROC_TEC30_HP',
+            default => 'PROC_MFD_CONVERSION',
+        };
     }
 
     private function resolveTubeLengthM(array $tube, array $config): ?float
@@ -241,12 +282,12 @@ final class BomBuilder
 
     private function normalizeItem(array $item, array $config, array $derived): array
     {
-        $sku = (string)($item['sku_code'] ?? '');
+        $sku = (string)($item['part_code'] ?? '');
         if ($sku === '') return $item;
 
         if ($sku === 'PROC_MFD_CONVERSION') {
             $options = is_array($item['options'] ?? null) ? $item['options'] : [];
-            $options['mfdCount'] = (int)($config['mfdCount'] ?? ($options['mfdCount'] ?? 1));
+            $options['mfdCount'] = 1;
             if (!array_key_exists('totalFiberLengthM', $options) || !is_numeric($options['totalFiberLengthM'])) {
                 $legacyTotal = $options['totalFiberLengthMm'] ?? null;
                 if (is_numeric($legacyTotal)) {
@@ -257,6 +298,11 @@ final class BomBuilder
             }
             unset($options['totalFiberLengthMm']);
             $options['fiberItems'] = $options['fiberItems'] ?? $this->collectFiberItems($config['fibers'] ?? []);
+            $item['options'] = $options;
+        }
+        if ($this->isTecProcessSku($sku)) {
+            $options = is_array($item['options'] ?? null) ? $item['options'] : [];
+            $options['tecSide'] = $this->normalizeTecSide($options['tecSide'] ?? ($config['tecSide'] ?? null));
             $item['options'] = $options;
         }
 
@@ -365,5 +411,75 @@ final class BomBuilder
     private function isEmpty(mixed $value): bool
     {
         return $value === null || $value === '';
+    }
+
+    private function normalizeTecSide(mixed $raw): ?string
+    {
+        $side = strtolower(trim((string)$raw));
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
+            return null;
+        }
+
+        return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<int, array{side:string,processType:string,source_path:string}>
+     */
+    private function resolveTecProcessSelections(array $config, string $processType): array
+    {
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? null);
+        $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+        $leftType = $this->normalizeConcreteTecProcessType($config['tecLeftProcessType'] ?? null);
+        $rightType = $this->normalizeConcreteTecProcessType($config['tecRightProcessType'] ?? null);
+
+        if ($tecSide === null) {
+            if ($leftType !== null && $rightType !== null) {
+                $tecSide = 'both';
+            } elseif ($rightType !== null && $leftType === null) {
+                $tecSide = 'right';
+            } elseif ($leftType !== null || $legacyTecType !== null) {
+                $tecSide = 'left';
+            }
+        }
+
+        $rows = [];
+        if ($tecSide === 'left') {
+            $type = $leftType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $type, 'source_path' => $leftType !== null ? '$.tecLeftProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'right') {
+            $type = $rightType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $type, 'source_path' => $rightType !== null ? '$.tecRightProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'both') {
+            $left = $leftType ?? $legacyTecType;
+            $right = $rightType ?? $legacyTecType;
+            if ($left !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $left, 'source_path' => '$.tecLeftProcessType'];
+            }
+            if ($right !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $right, 'source_path' => '$.tecRightProcessType'];
+            }
+        }
+
+        return $rows;
+    }
+
+    private function isTecProcessSku(string $skuCode): bool
+    {
+        return in_array($skuCode, ['PROC_TEC20', 'PROC_TEC30', 'PROC_TEC20_HP', 'PROC_TEC30_HP'], true);
     }
 }

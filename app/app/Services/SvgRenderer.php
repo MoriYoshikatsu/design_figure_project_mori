@@ -2,34 +2,49 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\DB;
-
 final class SvgRenderer
 {
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
+    /** @var array<int, string> */
+    private const TEC_PROCESS_TYPES = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
+
     /**
      * @param array $config  config（構成データ）
      * @param array $derived derived（導出値）
      * @param array $errors  errors（検証エラー）
      */
-    public function render(array $config, array $derived = [], array $errors = []): string
+    public function render(array $config, array $derived = [], array $errors = [], string $uiLanguage = 'ja'): string
     {
         $targets = $this->collectErrorTargets($errors);
+        $isEnglish = strtolower(trim($uiLanguage)) === 'en';
+        $t = static fn(string $ja, string $en): string => $isEnglish ? $en : $ja;
 
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
+        $isTecMode = $processType !== self::PROCESS_TYPE_MFD;
+        $tecSelections = $this->resolveTecProcessSelections($config, $derived, $processType);
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? ($derived['tecSide'] ?? null));
+
+        $mfdCount = $isTecMode ? 0 : 1;
+        $drawMfdCount = $isTecMode ? 0 : $mfdCount;
         $fibers   = $config['fibers'] ?? [];
         $tubes    = $config['tubes'] ?? [];
-        $conns    = $config['connectors'] ?? ['mode' => 'both', 'leftSkuCode' => null, 'rightSkuCode' => null];
+        $conns    = $config['connectors'] ?? ['mode' => ($isTecMode ? 'none' : 'both'), 'leftSkuCode' => null, 'rightSkuCode' => null];
         $sleeves  = $config['sleeves'] ?? [];
-        $skuNameByCode = $derived['skuNameByCode'] ?? [];
+        $skuNameByCode = is_array($derived['skuNameByCode'] ?? null) ? $derived['skuNameByCode'] : [];
         $skuSvgByCode = $derived['skuSvgByCode'] ?? [];
-        if (empty($skuNameByCode)) {
-            $skuNameByCode = $this->buildSkuNameMap();
+        $localizedSkuNameByCode = [];
+        if ($isEnglish || empty($skuNameByCode)) {
+            $localizedSkuNameByCode = $this->buildSkuNameMap($isEnglish ? 'en' : 'ja');
+        }
+        if (!empty($localizedSkuNameByCode)) {
+            $skuNameByCode = $localizedSkuNameByCode;
         }
         if (empty($skuSvgByCode)) {
             $skuSvgByCode = $this->buildSkuSvgMap();
         }
 
-        $fiberCount = (int)($derived['fiberCount'] ?? ($mfdCount + 1));
+        $fiberCount = (int)($derived['fiberCount'] ?? 1);
         if ($fiberCount < 1) $fiberCount = 1;
 
         // --- fiber長さ（m）を取得（未入力はnull）
@@ -93,7 +108,7 @@ final class SvgRenderer
             $segEnd[$i] = $displayEnd[$i];
 
             // MFD[k] は fiber[k] の終端（actual m）
-            if ($i < $mfdCount) {
+            if ($i < $drawMfdCount) {
                 $mfdActualPos[$i] = $actualEnd[$i];
             }
         }
@@ -111,7 +126,7 @@ final class SvgRenderer
             return $displayEnd[$fiberCount - 1] ?? 0.0;
         };
 
-        for ($k = 0; $k < $mfdCount; $k++) {
+        for ($k = 0; $k < $drawMfdCount; $k++) {
             if (!array_key_exists($k, $mfdActualPos)) continue;
             $mfdPos[$k] = $mapM((float)$mfdActualPos[$k]);
         }
@@ -122,9 +137,9 @@ final class SvgRenderer
         $margin = 80;
 
         $axisY      = 140; // fiberの中心Y
-        $fiberH     = 4;   // 表示図形は細く
+        $fiberH     = 3;   // 表示図形はさらに細く
         $fiberSvgH  = $fiberH / 2;  // 画像も細く
-        $tubeH      = $fiberH; // fiberより少し太い
+        $tubeH      = max(1.5, $fiberH * 0.7); // previewではさらに少し細めに見せる
         $tubeY      = $axisY - ($tubeH / 2); // fiberを包む
         $connW      = 30;
         $connH      = 20; // 表示図形は細く
@@ -136,21 +151,25 @@ final class SvgRenderer
         // ラベル配置（ファイバ中心を基準に上下階層）
         // 下側: (1)ファイバ寸法 (2)ファイバSKU
         // 上側: (1)チューブ寸法/開始位置 (2)チューブSKU (3)MFD変換SKU/コネクタSKU
-        $belowDimY = $axisY + 12;
+        $belowDimY = $axisY + 24;
         $belowLabelY = $belowDimY + 18;
-        $belowLabelY2 = $belowLabelY + 18;
-        $belowLabelY3 = $belowLabelY2 + 18;
+        $belowLabelY2 = $belowLabelY + 22;
+        $belowLabelY3 = $belowLabelY2 + 22;
 
-        $aboveDimY = $axisY - 12;
-        $aboveOffsetDimY = $aboveDimY - 18;
-        $tubeLabelY = $aboveDimY - 42;
-        $mfdLabelY  = $tubeLabelY - 24;
+        $aboveDimY = $axisY - 24;
+        $aboveOffsetDimY = $aboveDimY - 22;
+        $tubeLabelY = $aboveOffsetDimY - 20;
+        $mfdLabelY  = $tubeLabelY - 26;
         $labelY     = $belowLabelY2;
         $connLabelY = $belowLabelY3;
+        $markerGapFromFiber = 6.0;
+        $overallFiberToleranceM = $this->resolveOverallFiberToleranceM($fibers);
 
-        $dense = $fiberCount >= 6 || $mfdCount >= 6;
+        $dense = $fiberCount >= 6 || $drawMfdCount >= 6;
         $labelSize = $dense ? 12 : 13;
         $smallSize = $dense ? 11 : 12;
+        $specSheetNumber = trim((string)($derived['specSheetNumber'] ?? ($derived['spec_sheet_number'] ?? '')));
+        $specSheetNumberLabel = $specSheetNumber !== '' ? $specSheetNumber : '-';
 
         $usableW = $width - 2 * $margin;
         $scale   = ($totalLen > 0) ? ($usableW / $totalLen) : 1.0;
@@ -168,7 +187,8 @@ final class SvgRenderer
         $svg[] = '<style>
             .fiber { fill:#e5e7eb; stroke:#374151; stroke-width:1; }
             .fiber.unknown { stroke-dasharray:4 2; fill:#f3f4f6; }
-            .tube { fill:none; stroke:#facc15; stroke-width:2; opacity:0.95; }
+            .tube { fill:none; stroke:#facc15; stroke-width:1.25; opacity:0.95; }
+            .recoat { fill:#f97316; stroke:#c2410c; stroke-width:1.25; }
             .marker { stroke:#111827; stroke-width:2; }
             .conn { fill:#d1d5db; stroke:#374151; stroke-width:1; }
             .label { font-size:'.$labelSize.'px; fill:#111827; font-weight:700; font-family: ui-sans-serif, system-ui, -apple-system; }
@@ -180,16 +200,38 @@ final class SvgRenderer
         $svg[] = '<defs></defs>';
 
         // ヘッダ（情報）
-        $sleeveNameList = [];
-        for ($k = 0; $k < $mfdCount; $k++) {
-            $code = $sleeves[$k]['skuCode'] ?? null;
-            $name = $code ? ($skuNameByCode[$code] ?? null) : null;
-            $sleeveNameList[] = $name ? ('MFD['.$k.'] '.$name) : ('MFD['.$k.'] (not set)');
+        if ($isTecMode) {
+            $tecSummaryParts = [];
+            foreach ($tecSelections as $selection) {
+                $sideLabel = ($selection['side'] ?? '') === 'left'
+                    ? $t('左端', 'Left End')
+                    : $t('右端', 'Right End');
+                $tecSummaryParts[] = ($selection['processType'] ?? 'TEC') . ' (' . $sideLabel . ')';
+            }
+            $tecSummary = !empty($tecSummaryParts)
+                ? implode(' / ', $tecSummaryParts)
+                : $t('未指定', 'Not Set');
+            $svg[] = '<text x="'.$margin.'" y="18" class="label">'
+                . $t('工程種別', 'Process Type').': '.$esc($processType)
+                .' / '.$t('TEC構成', 'TEC Setup').': '.$esc($tecSummary)
+                .' / '.$t('ファイバーの数', 'Fiber Count').': '.$esc($fiberCount)
+                . '</text>';
+        } else {
+            $sleeveNameList = [];
+            for ($k = 0; $k < $drawMfdCount; $k++) {
+                $code = $sleeves[$k]['skuCode'] ?? null;
+                $name = $code ? ($skuNameByCode[$code] ?? null) : null;
+                $sleeveNameList[] = $name ? ('MFD['.$k.'] '.$name) : ('MFD['.$k.'] (not set)');
+            }
+            $svg[] = '<text x="'.$margin.'" y="18" class="label'.($targets['sleeve'] ? ' errText' : '').'">'
+                . $t('工程種別', 'Process Type').': '.$esc($processType)
+                .' / '.$t('MFD変換の数', 'MFD Count').': '.$esc($mfdCount)
+                .' / '.$t('ファイバーの数', 'Fiber Count').': '.$esc($fiberCount)
+                . '</text>';
         }
-        $svg[] = '<text x="'.$margin.'" y="28" class="label'.($targets['sleeve'] ? ' errText' : '').'">'
-              . 'MFD変換の数: '.$esc($mfdCount).' / ファイバーの数: '.$esc($fiberCount)
-            //   . ' / Sleeves: '.$esc(implode(' / ', $sleeveNameList))
-              . '</text>';
+        $svg[] = '<text x="'.($width - $margin).'" y="18" class="small" text-anchor="end">'
+            . $t('仕様書番号', 'Spec Sheet No.').': '.$esc($specSheetNumberLabel)
+            . '</text>';
 
         // 軸（ベースライン）
         $svg[] = '<line x1="'.$margin.'" y1="'.$axisY.'" x2="'.($width-$margin).'" y2="'.$axisY.'" stroke="#9ca3af" stroke-width="1" />';
@@ -197,8 +239,16 @@ final class SvgRenderer
         $connMode = $conns['mode'] ?? 'both';
         $showLeft = in_array($connMode, ['left', 'both'], true);
         $showRight = in_array($connMode, ['right', 'both'], true);
+        $leftSku = $conns['leftSkuCode'] ?? null;
+        $rightSku = $conns['rightSkuCode'] ?? null;
+        $hasLeftConnector = $showLeft && !empty($leftSku);
+        $hasRightConnector = $showRight && !empty($rightSku);
+        $leftSvg = $hasLeftConnector ? ($skuSvgByCode[$leftSku] ?? null) : null;
+        $rightSvg = $hasRightConnector ? ($skuSvgByCode[$rightSku] ?? null) : null;
+        $leftConnectorRenderW = $hasLeftConnector ? ($leftSvg ? $connSvgW : $connW) : 0.0;
+        $rightConnectorRenderW = $hasRightConnector ? ($rightSvg ? $connSvgW : $connW) : 0.0;
 
-        $showFiberDims = $fiberCount <= 4;
+        $showFiberDims = false;
         $showTubeDims = true;
 
         // --- fiber区間
@@ -224,17 +274,6 @@ final class SvgRenderer
                 $svg[] = '<image href="'.$esc($fiberSvg).'" x="'.$x.'" y="'.$y.'" width="'.$w.'" height="'.$fiberSvgH.'" opacity="0.9" preserveAspectRatio="none" class="fiber-img" />';
             }
 
-            if ($showFiberDims) {
-                $dimY = $belowDimY;
-                $svg[] = '<line x1="'.$x.'" y1="'.$dimY.'" x2="'.($x+$w).'" y2="'.$dimY.'" class="dim" />';
-                $svg[] = $this->arrowHead($x, $dimY, true);
-                $svg[] = $this->arrowHead($x + $w, $dimY, false);
-                $segLen = $actualSegmentLens[$i] ?? null;
-                $tolM = $this->extractLengthM($fibers[$i] ?? [], 'toleranceM', 'toleranceMm');
-                $tolTxt = (is_numeric($tolM)) ? ' ± '.$tolM.'m' : '';
-                $svg[] = '<text x="'.($x + $w / 2).'" y="'.($dimY + 12).'" class="small" text-anchor="middle">'. $esc(($segLen !== null ? $segLen : '?').'m'.$tolTxt) .'</text>';
-            }
-
             if (!empty($segmentIllustrations[$i])) {
                 $imgW = max(12.0, min(160.0, $w - 6.0));
                 $imgH = min(18.0, $fiberH - 4.0);
@@ -245,7 +284,7 @@ final class SvgRenderer
 
             // ラベル（長さ/誤差）
             $sku = $skuCode ? ($skuNameByCode[$skuCode] ?? null) : null;
-            $txt = 'F['.$i.']:　'.($sku ?? '選択してください');
+            $txt = 'F['.$i.']: '.($sku ?? $t('選択してください', 'Please select'));
             $svg[] = '<text x="'.($x + $w / 2).'" y="'.$labelY.'" class="small'.(in_array($i, $targets['fiberIdx'], true) ? ' errText' : '').'" text-anchor="middle">'
                 . $esc($txt).'</text>';
         }
@@ -345,28 +384,45 @@ final class SvgRenderer
 
             $sku = $skuCode ? ($skuNameByCode[$skuCode] ?? null) : null;
             if ($startFiberIdx !== null && $endFiberIdx !== null) {
-                $txt = 'T['.$j.']:　'.($sku ?? '選択してください').'　=>　F['.$startFiberIdx.']~F['.$endFiberIdx.']';
+                $txt = 'T['.$j.']: '.($sku ?? $t('選択してください', 'Please select')).' => F['.$startFiberIdx.']~F['.$endFiberIdx.']';
             } else {
-                $txt = 'T['.$j.']:　'.($sku ?? '選択してください').'　=>　F['.$targetIdx.']';
+                $txt = 'T['.$j.']: '.($sku ?? $t('選択してください', 'Please select')).' => F['.$targetIdx.']';
             }
             $svg[] = '<text x="'.($x + $w / 2).'" y="'.$tubeLabelY.'" class="small'.(in_array((int)$j, $targets['tubeIdx'], true) ? ' errText' : '').'" text-anchor="middle">'
                 . $esc($txt).'</text>';
         }
 
         // --- MFDマーカー
-        for ($k = 0; $k < $mfdCount; $k++) {
+        for ($k = 0; $k < $drawMfdCount; $k++) {
             $m = $mfdPos[$k] ?? null;
             if ($m === null) continue;
 
             $x = $margin + $m * $scale;
             $cls = 'marker'.($targets['mfd'] ? ' err' : '');
-            $svg[] = '<line x1="'.$x.'" y1="'.($axisY-36).'" x2="'.$x.'" y2="'.($axisY+36).'" class="'.$cls.'" id="mfd-'.$k.'" data-path="mfd.'.$k.'" stroke-dasharray="4 4" stroke="#9ca3af" opacity="0.7" />';
+            $markerLine = $this->buildUpperMarkerLine($x, $axisY, $fiberH, 36.0, $markerGapFromFiber, [
+                'class' => $cls,
+                'id' => 'mfd-'.$k,
+                'data-path' => 'mfd.'.$k,
+                'stroke' => '#9ca3af',
+                'stroke-dasharray' => '4 4',
+                'opacity' => '0.7',
+            ]);
+            if ($markerLine !== null) {
+                $svg[] = $markerLine;
+            }
             $sleeveCode = $sleeves[$k]['skuCode'] ?? null;
             $sleeveName = $sleeveCode ? ($skuNameByCode[$sleeveCode] ?? null) : null;
             $mfdLabel = $sleeveName ? ('MFD['.$k.']: '.$sleeveName) : ('MFD['.$k.']');
             $svg[] = '<text x="'.$x.'" y="'.$mfdLabelY.'" class="small'.($targets['mfd'] ? ' errText' : '').'" text-anchor="middle">'.$esc($mfdLabel).'</text>';
             $sleeveSvg = $sleeveCode ? ($skuSvgByCode[$sleeveCode] ?? null) : null;
-            if ($sleeveSvg) {
+            if ($this->isRecoatSleeveCode($sleeveCode)) {
+                $sleeveW = 42;
+                $sleeveH = 8;
+                $sx = $x - ($sleeveW / 2);
+                $sy = $axisY - ($sleeveH / 2);
+                $cls = 'recoat'.($targets['sleeve'] ? ' err' : '');
+                $svg[] = '<rect x="'.$sx.'" y="'.$sy.'" width="'.$sleeveW.'" height="'.$sleeveH.'" rx="2" class="'.$cls.'" id="sleeve-'.$k.'" data-path="sleeves.'.$k.'" />';
+            } elseif ($sleeveSvg) {
                 $sleeveW = 72;
                 $sleeveH = 72;
                 $sx = $x - ($sleeveW / 2);
@@ -378,9 +434,8 @@ final class SvgRenderer
         }
 
         // --- コネクタ（左）
-        if ($showLeft && !empty($conns['leftSkuCode'])) {
-            $leftName = $skuNameByCode[$conns['leftSkuCode']] ?? null;
-            $leftSvg = $skuSvgByCode[$conns['leftSkuCode']] ?? null;
+        if ($hasLeftConnector) {
+            $leftName = $skuNameByCode[$leftSku] ?? null;
             $x = $margin - $connW;
             $y = $axisY - ($connH / 2);
             $cls = 'conn'.($targets['connLeft'] ? ' err' : '');
@@ -399,10 +454,8 @@ final class SvgRenderer
         }
 
         // --- コネクタ（右）
-        $rightSku = $conns['rightSkuCode'] ?? null;
-        if ($showRight && !empty($rightSku)) {
+        if ($hasRightConnector) {
             $rightName = $skuNameByCode[$rightSku] ?? null;
-            $rightSvg = $skuSvgByCode[$rightSku] ?? null;
             $x = $margin + $totalLen * $scale;
             $y = $axisY - ($connH / 2);
             $cls = 'conn'.($targets['connRight'] ? ' err' : '');
@@ -419,6 +472,36 @@ final class SvgRenderer
             }
             $labelX = min($width - 4, $x + $connW);
             $svg[] = '<text x="'.$labelX.'" y="'.$connLabelY.'" class="small" text-anchor="end">'. $esc($rightName ?? '') .'</text>';
+        }
+
+        // ファイバ寸法は「コネクタ先端まで」を単一矢印で表示（チューブ矢印は既存のまま）
+        $fiberLeftX = $margin;
+        $fiberRightX = $margin + $totalLen * $scale;
+        $leftTipX = $fiberLeftX - $leftConnectorRenderW;
+        $rightTipX = $fiberRightX + $rightConnectorRenderW;
+        $overallDimY = $belowDimY;
+        $svg[] = '<line x1="'.$leftTipX.'" y1="'.$overallDimY.'" x2="'.$rightTipX.'" y2="'.$overallDimY.'" class="dim" />';
+        $svg[] = $this->arrowHead($leftTipX, $overallDimY, true);
+        $svg[] = $this->arrowHead($rightTipX, $overallDimY, false);
+        $overallToleranceTxt = (is_numeric($overallFiberToleranceM)) ? ' ± '.$overallFiberToleranceM.'m' : '';
+        $svg[] = '<text x="'.(($leftTipX + $rightTipX) / 2).'" y="'.$belowLabelY.'" class="small" text-anchor="middle">'. $esc(round($totalLen, 3).'m'.$overallToleranceTxt) .'</text>';
+
+        if ($isTecMode && !empty($tecSelections)) {
+            foreach ($tecSelections as $selection) {
+                $side = (string)($selection['side'] ?? '');
+                $tecX = $side === 'left' ? $leftTipX : $rightTipX;
+                $sideLabel = $side === 'left' ? $t('左端', 'Left End') : $t('右端', 'Right End');
+                $tecLabel = ((string)($selection['processType'] ?? 'TEC')) . ': ' . $sideLabel;
+                $tecMarkerLine = $this->buildUpperMarkerLine($tecX, $axisY, $fiberH, 30.0, $markerGapFromFiber, [
+                    'stroke' => '#2563eb',
+                    'stroke-width' => '2',
+                    'stroke-dasharray' => '3 3',
+                ]);
+                if ($tecMarkerLine !== null) {
+                    $svg[] = $tecMarkerLine;
+                }
+                $svg[] = '<text x="'.$tecX.'" y="'.$mfdLabelY.'" class="small" text-anchor="middle" fill="#1d4ed8">'.$esc($tecLabel).'</text>';
+            }
         }
 
         $svg[] = '</svg>';
@@ -438,6 +521,76 @@ final class SvgRenderer
         }
         $points = $p1.','.$y.' '.$p2.','.($y - $half).' '.$p2.','.($y + $half);
         return '<polygon points="'.$points.'" fill="#111827" />';
+    }
+
+    /**
+     * @param array<string, string> $attributes
+     * @return string|null
+     */
+    private function buildUpperMarkerLine(
+        float $x,
+        float $axisY,
+        float $fiberH,
+        float $extent,
+        float $gapFromFiber,
+        array $attributes
+    ): ?string {
+        $fiberTop = $axisY - ($fiberH / 2);
+        $topStart = $axisY - $extent;
+        $topEnd = $fiberTop - $gapFromFiber;
+        if ($topEnd <= $topStart) {
+            return null;
+        }
+
+        return $this->buildSvgLine($x, $topStart, $x, $topEnd, $attributes);
+    }
+
+    /**
+     * @param array<string, string> $attributes
+     */
+    private function buildSvgLine(float $x1, float $y1, float $x2, float $y2, array $attributes): string
+    {
+        $parts = [
+            'x1="'.$x1.'"',
+            'y1="'.$y1.'"',
+            'x2="'.$x2.'"',
+            'y2="'.$y2.'"',
+        ];
+
+        foreach ($attributes as $name => $value) {
+            $parts[] = $name.'="'.$value.'"';
+        }
+
+        return '<line '.implode(' ', $parts).' />';
+    }
+
+    private function resolveOverallFiberToleranceM(array $fibers): ?float
+    {
+        $values = [];
+        foreach ($fibers as $fiber) {
+            if (!is_array($fiber)) {
+                continue;
+            }
+
+            $toleranceM = $this->extractLengthM($fiber, 'toleranceM', 'toleranceMm');
+            if ($toleranceM === null || $toleranceM <= 0) {
+                continue;
+            }
+
+            $values[] = (float)$toleranceM;
+        }
+
+        if ($values === []) {
+            return null;
+        }
+
+        $normalized = array_map(static fn(float $value): float => round($value, 6), $values);
+        $unique = array_values(array_unique($normalized));
+        if (count($unique) === 1) {
+            return (float)$unique[0];
+        }
+
+        return max($values);
     }
 
     private function extractLengthM(array $row, string $primaryKey, string $legacyKey): ?float
@@ -489,7 +642,7 @@ final class SvgRenderer
             if (str_starts_with($path, 'connectors.left'))  $t['connLeft'] = true;
             if (str_starts_with($path, 'connectors.right')) $t['connRight'] = true;
 
-            if (str_starts_with($path, 'sleeveSkuCode')) $t['sleeve'] = true;
+            if (str_starts_with($path, 'sleeveSkuCode') || str_starts_with($path, 'sleeves')) $t['sleeve'] = true;
         }
 
         // 重複除去
@@ -498,10 +651,10 @@ final class SvgRenderer
         return $t;
     }
 
-    private function buildSkuNameMap(): array
+    private function buildSkuNameMap(string $uiLanguage = 'ja'): array
     {
         try {
-            return DB::table('skus')->pluck('name', 'sku_code')->all();
+            return app(SkuDisplayNameService::class)->buildNameMap($uiLanguage);
         } catch (\Throwable $e) {
             return [];
         }
@@ -520,5 +673,90 @@ final class SvgRenderer
             $map[$code] = '/sku-svg/' . $code . '.svg';
         }
         return $map;
+    }
+
+    private function isRecoatSleeveCode(mixed $sleeveCode): bool
+    {
+        if (!is_string($sleeveCode) || trim($sleeveCode) === '') {
+            return false;
+        }
+
+        $normalized = strtoupper(trim($sleeveCode));
+        return str_contains($normalized, 'RECOTE') || str_contains($normalized, 'RECOAT');
+    }
+
+    private function normalizeProcessType(mixed $raw): string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, array_merge([self::PROCESS_TYPE_MFD, self::PROCESS_TYPE_TEC], self::TEC_PROCESS_TYPES), true)) {
+            return self::PROCESS_TYPE_MFD;
+        }
+
+        return $value;
+    }
+
+    private function normalizeTecSide(mixed $raw): ?string
+    {
+        $side = strtolower(trim((string)$raw));
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
+            return null;
+        }
+
+        return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<int, array{side:string,processType:string}>
+     */
+    private function resolveTecProcessSelections(array $config, array $derived, string $processType): array
+    {
+        $tecSide = $this->normalizeTecSide($config['tecSide'] ?? ($derived['tecSide'] ?? null));
+        $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+        $leftType = $this->normalizeConcreteTecProcessType($config['tecLeftProcessType'] ?? ($derived['tecLeftProcessType'] ?? null));
+        $rightType = $this->normalizeConcreteTecProcessType($config['tecRightProcessType'] ?? ($derived['tecRightProcessType'] ?? null));
+
+        if ($tecSide === null) {
+            if ($leftType !== null && $rightType !== null) {
+                $tecSide = 'both';
+            } elseif ($rightType !== null && $leftType === null) {
+                $tecSide = 'right';
+            } elseif ($leftType !== null || $legacyTecType !== null) {
+                $tecSide = 'left';
+            }
+        }
+
+        $rows = [];
+        if ($tecSide === 'left') {
+            $type = $leftType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $type];
+            }
+        } elseif ($tecSide === 'right') {
+            $type = $rightType ?? $legacyTecType;
+            if ($type !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $type];
+            }
+        } elseif ($tecSide === 'both') {
+            $left = $leftType ?? $legacyTecType;
+            $right = $rightType ?? $legacyTecType;
+            if ($left !== null) {
+                $rows[] = ['side' => 'left', 'processType' => $left];
+            }
+            if ($right !== null) {
+                $rows[] = ['side' => 'right', 'processType' => $right];
+            }
+        }
+
+        return $rows;
     }
 }

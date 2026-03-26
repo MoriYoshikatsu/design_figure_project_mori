@@ -1,5 +1,5 @@
 @php
-    $indexRouteName = (string)($indexRouteName ?? 'work.skus.index');
+    $indexRouteName = (string)($indexRouteName ?? 'work.parts.index');
     $filters = is_array($filters ?? null) ? $filters : [];
     $categories = is_array($categories ?? null) ? $categories : [];
     $presenceOptions = is_array($presenceOptions ?? null) ? $presenceOptions : [];
@@ -7,11 +7,11 @@
 @endphp
 
 <div class="actions" style="margin:8px 0;">
-    <a href="{{ route('work.skus.create') }}">SKU作成</a>
+    <a href="{{ route('work.parts.create') }}">パーツ作成</a>
 </div>
 
 <form method="GET" action="{{ route($indexRouteName) }}" style="margin:12px 0;">
-    <input type="hidden" name="tab" value="skus" class="catalog-active-tab-input">
+    <input type="hidden" name="tab" value="parts" class="catalog-active-tab-input">
     @foreach($priceBookFilters as $key => $value)
         <input type="hidden" name="pb[{{ $key }}]" value="{{ $value }}">
     @endforeach
@@ -19,11 +19,11 @@
     <div class="row">
         <div class="col">
             <label>フリーワード</label>
-            <input type="text" name="sku[q]" value="{{ $filters['q'] ?? '' }}" placeholder="ID / SKU / 名称 / メモ">
+            <input type="text" name="part[q]" value="{{ $filters['q'] ?? '' }}" placeholder="ID / Part / 名称 / メモ">
         </div>
         <div class="col">
             <label>カテゴリ</label>
-            <select name="sku[category]">
+            <select name="part[category]">
                 <option value="">すべて</option>
                 @foreach($categories as $cat)
                     <option value="{{ $cat }}" @if(($filters['category'] ?? '') === $cat) selected @endif>{{ $cat }}</option>
@@ -32,57 +32,41 @@
         </div>
         <div class="col">
             <label>有効</label>
-            <select name="sku[active]">
+            <select name="part[active]">
                 <option value="">すべて</option>
                 <option value="1" @if(($filters['active'] ?? '') === '1') selected @endif>有効</option>
                 <option value="0" @if(($filters['active'] ?? '') === '0') selected @endif>無効</option>
             </select>
         </div>
-    </div>
-
-    <div class="row" style="margin-top:8px;">
-        <div class="col">
-            <label>メモ</label>
-            <select name="sku[has_memo]">
-                <option value="">すべて</option>
-                @foreach($presenceOptions as $key => $label)
-                    <option value="{{ $key }}" @if(($filters['has_memo'] ?? '') === $key) selected @endif>{{ $label }}</option>
-                @endforeach
-            </select>
+        <div class="col range-field">
+            <label>作成日（始点 / 終点）</label>
+            <div class="range-inputs">
+                <input type="date" name="part[created_from]" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                <span class="range-sep">〜</span>
+                <input type="date" name="part[created_to]" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+            </div>
         </div>
-        <div class="col">
-            <label>作成日（開始）</label>
-            <input type="date" name="sku[created_from]" value="{{ $filters['created_from'] ?? '' }}">
+        <div class="col range-field">
+            <label>更新日（始点 / 終点）</label>
+            <div class="range-inputs">
+                <input type="date" name="part[updated_from]" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                <span class="range-sep">〜</span>
+                <input type="date" name="part[updated_to]" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+            </div>
         </div>
-        <div class="col">
-            <label>作成日（終了）</label>
-            <input type="date" name="sku[created_to]" value="{{ $filters['created_to'] ?? '' }}">
+        <div class="actions" style="margin-top:8px;">
+            <button type="submit">絞り込み</button>
+            <a href="{{ route($indexRouteName, ['tab' => 'parts', 'pb' => $priceBookFilters]) }}">クリア</a>
+            <div class="muted" style="margin:8px 0;">{{ count($skus) }}件</div>
         </div>
-        <div class="col">
-            <label>更新日（開始）</label>
-            <input type="date" name="sku[updated_from]" value="{{ $filters['updated_from'] ?? '' }}">
-        </div>
-        <div class="col">
-            <label>更新日（終了）</label>
-            <input type="date" name="sku[updated_to]" value="{{ $filters['updated_to'] ?? '' }}">
-        </div>
-    </div>
-
-    <div class="actions" style="margin-top:8px;">
-        <button type="submit">絞り込み</button>
-        <a href="{{ route($indexRouteName, ['tab' => 'skus', 'pb' => $priceBookFilters]) }}">クリア</a>
     </div>
 </form>
-
-<div class="muted" style="margin:8px 0;">
-    表示件数: {{ count($skus) }}件（最大200件）
-</div>
 
 <table>
     <thead>
         <tr>
             <th>ID</th>
-            <th>SKU</th>
+            <th>Part</th>
             <th>名称</th>
             <th>カテゴリ</th>
             <th>有効</th>
@@ -114,24 +98,24 @@
                 } elseif (is_numeric((string)$s->id)) {
                     $links[] = [
                         'label' => '編集',
-                        'url' => route('work.skus.edit', (int)$s->id),
+                        'url' => route('work.parts.edit', (int)$s->id),
                     ];
                     $delete = [
-                        'url' => route('work.skus.edit-request.delete', (int)$s->id),
+                        'url' => route('work.parts.edit-request.delete', (int)$s->id),
                         'label' => '削除申請',
-                        'confirm' => 'このSKUの削除申請を送信しますか？',
+                        'confirm' => 'このPartの削除申請を送信しますか？',
                     ];
                 }
 
                 $payload = [
-                    'kind' => 'sku',
-                    'title' => 'SKU詳細',
+                    'kind' => 'part',
+                    'title' => 'Part Details',
                     'subtitle' => (string)$s->id,
                     'status_text' => $statusText,
                     'status_tone' => $statusTone,
                     'details' => [
                         ['label' => 'ID', 'value' => (string)$s->id],
-                        ['label' => 'SKU', 'value' => (string)($s->sku_code ?? '')],
+                        ['label' => 'Part code', 'value' => (string)($s->part_code ?? '')],
                         ['label' => '名称', 'value' => (string)($s->name ?? '')],
                         ['label' => 'カテゴリ', 'value' => (string)($s->category ?? '')],
                         ['label' => '有効', 'value' => !empty($s->active) ? '有効' : '無効'],
@@ -144,7 +128,7 @@
             @endphp
             <tr>
                 <td>{{ $s->id }}</td>
-                <td>{{ $s->sku_code }}</td>
+                <td>{{ $s->part_code }}</td>
                 <td>{{ $s->name }}</td>
                 <td>{{ $s->category }}</td>
                 <td>{{ $s->active ? '有効' : '無効' }}</td>

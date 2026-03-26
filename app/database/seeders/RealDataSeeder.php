@@ -34,7 +34,7 @@ final class RealDataSeeder extends Seeder
             // 2) skus
             // =========
             $skuRows = $this->seedSkus();         // だいたい10〜15件
-            $skuIdByCode = DB::table('skus')->pluck('id', 'sku_code')->all();
+            $skuIdByCode = DB::table('parts')->pluck('id', 'part_code')->all();
 
             // =========
             // 3) price_books / price_book_items
@@ -183,13 +183,18 @@ final class RealDataSeeder extends Seeder
         // だいたい 2件×5カテゴリ + α
         $rows = [
             // PROC（工程）
-            $this->skuRow('PROC_MFD', 'MFD変換', 'PROC', ['kind' => 'mfd']),
+            $this->skuRow('PROC_MFD', 'MFD', 'PROC', ['kind' => 'mfd', 'process_tags' => ['mfd']]),
+            $this->skuRow('PROC_MFD_CONVERSION', 'MFD(構成)', 'PROC', ['kind' => 'mfd', 'process_tags' => ['mfd']]),
             $this->skuRow('PROC_FBG',  'FBGセンサ', 'PROC', ['kind' => 'fbg']),
-            $this->skuRow('PROC_TEC', 'TEC加工', 'PROC', ['kind' => 'tec']),
+            $this->skuRow('PROC_TEC', 'TEC', 'PROC', ['kind' => 'tec', 'process_tags' => ['tec20', 'tec30']]),
+            $this->skuRow('PROC_TEC20', 'TEC20', 'PROC', ['kind' => 'tec20', 'process_tags' => ['tec20']]),
+            $this->skuRow('PROC_TEC30', 'TEC30', 'PROC', ['kind' => 'tec30', 'process_tags' => ['tec30']]),
+            $this->skuRow('PROC_TEC20_HP', 'TEC20高精度', 'PROC', ['kind' => 'tec20_hp', 'process_tags' => ['tec20', 'high_precision']]),
+            $this->skuRow('PROC_TEC30_HP', 'TEC30高精度', 'PROC', ['kind' => 'tec30_hp', 'process_tags' => ['tec30', 'high_precision']]),
 
             // SLEEVE（補強）
             $this->skuRow('SLEEVE_RECOTE', 'リコート', 'SLEEVE', ['material' => 'polymer']),
-            $this->skuRow('SLEEVE_SPRICESLEEVE', '補強スリーブ', 'SLEEVE', ['material' => 'metal']),
+            $this->skuRow('SLEEVE_SPRICESLEEVE', '補強', 'SLEEVE', ['material' => 'metal']),
             $this->skuRow('SLEEVE_SUS_PIPE', 'SUSパイプ', 'SLEEVE', ['material' => 'sus']),
 
             // FIBER（ファイバ）
@@ -198,26 +203,27 @@ final class RealDataSeeder extends Seeder
             $this->skuRow('FIBER_PMF', 'PMF', 'FIBER', ['mfd' => '10/125', 'minLenM' => 0.05, 'maxLenM' => 10.0]),
 
             // TUBE（チューブ）
-            $this->skuRow('TUBE_0.9_LOOSE', 'Φ0.9ルースチューブ', 'TUBE', ['minLenM' => 0.03, 'maxLenM' => 10.0]),
+            $this->skuRow('TUBE_0.9_LOOSE', 'Φ0.9ルース', 'TUBE', ['minLenM' => 0.03, 'maxLenM' => 10.0]),
+            $this->skuRow('TUBE_frex_metal', '金属フレキ', 'TUBE', ['kind' => 'frex', 'material' => 'metal']),
 
             // CONNECTOR（コネクタ：端子）
-            $this->skuRow('CONN_FERRULE_PC', 'フェルール/PCコネクタ', 'CONNECTOR', ['polish' => 'PC']),
-            $this->skuRow('CONN_FERRULE_APC', 'フェルール/APCコネクタ', 'CONNECTOR', ['polish' => 'APC']),
+            $this->skuRow('CONN_FERRULE_PC', 'フェルール/PC', 'CONNECTOR', ['polish' => 'PC']),
+            $this->skuRow('CONN_FERRULE_APC', 'フェルール/APC', 'CONNECTOR', ['polish' => 'APC']),
             $this->skuRow('CONN_FERRULE_ARCOAT', 'フェルール/ARコート', 'CONNECTOR', ['polish' => 'ARcoat']),
-            $this->skuRow('CONN_FC_PC', 'FC/PCコネクタ', 'CONNECTOR', ['polish' => 'PC']),
-            $this->skuRow('CONN_FC_APC', 'FC/APCコネクタ', 'CONNECTOR', ['polish' => 'APC']),
+            $this->skuRow('CONN_FC_PC', 'FC/PC', 'CONNECTOR', ['polish' => 'PC']),
+            $this->skuRow('CONN_FC_APC', 'FC/APC', 'CONNECTOR', ['polish' => 'APC']),
             $this->skuRow('CONN_FC_ARCOAT', 'FC/ARコート', 'CONNECTOR', ['polish' => 'ARcoat']),
-            $this->skuRow('CONN_SC_PC', 'SC/PCコネクタ', 'CONNECTOR', ['polish' => 'PC']),
-            $this->skuRow('CONN_SC_APC', 'SC/APCコネクタ', 'CONNECTOR', ['polish' => 'APC']),
+            $this->skuRow('CONN_SC_PC', 'SC/PC', 'CONNECTOR', ['polish' => 'PC']),
+            $this->skuRow('CONN_SC_APC', 'SC/APC', 'CONNECTOR', ['polish' => 'APC']),
             $this->skuRow('CONN_SC_ARCOAT', 'SC/ARコート', 'CONNECTOR', ['polish' => 'ARcoat']),
-            $this->skuRow('CONN_LC_PC', 'LC/PCコネクタ', 'CONNECTOR', ['polish' => 'PC']),
-            $this->skuRow('CONN_LC_APC', 'LC/APCコネクタ', 'CONNECTOR', ['polish' => 'APC']),
+            $this->skuRow('CONN_LC_PC', 'LC/PC', 'CONNECTOR', ['polish' => 'PC']),
+            $this->skuRow('CONN_LC_APC', 'LC/APC', 'CONNECTOR', ['polish' => 'APC']),
             $this->skuRow('CONN_LC_ARCOAT', 'LC/ARコート', 'CONNECTOR', ['polish' => 'ARcoat']),
         ];
 
         foreach ($rows as $r) {
-            DB::table('skus')->updateOrInsert(
-                ['sku_code' => $r['sku_code']],
+            DB::table('parts')->updateOrInsert(
+                ['part_code' => $r['part_code']],
                 $r
             );
         }
@@ -227,8 +233,9 @@ final class RealDataSeeder extends Seeder
 
     private function skuRow(string $code, string $name, string $category, array $attrs): array
     {
+        $attrs = $this->augmentProcessTags($code, $name, $category, $attrs);
         return [
-            'sku_code' => $code,
+            'part_code' => $code,
             'name' => $name,
             'category' => $category,
             'active' => true,
@@ -236,6 +243,104 @@ final class RealDataSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $attrs
+     * @return array<string, mixed>
+     */
+    private function augmentProcessTags(string $code, string $name, string $category, array $attrs): array
+    {
+        $codeUpper = strtoupper(trim($code));
+        $nameUpper = strtoupper(trim($name));
+        $categoryUpper = strtoupper(trim($category));
+        $kind = strtolower(trim((string)($attrs['kind'] ?? '')));
+        $polish = strtoupper(trim((string)($attrs['polish'] ?? '')));
+
+        $tags = [];
+        foreach ($this->normalizeProcessTags($attrs['process_tags'] ?? []) as $tag) {
+            $tags[$tag] = true;
+        }
+
+        $tags[strtolower($codeUpper)] = true;
+        if ($categoryUpper !== '') {
+            $tags[strtolower($categoryUpper)] = true;
+        }
+        if ($categoryUpper === 'CONNECTOR' || str_starts_with($codeUpper, 'CONN_')) {
+            $tags['connector'] = true;
+        }
+        if ($categoryUpper === 'FIBER' || str_starts_with($codeUpper, 'FIBER_')) {
+            $tags['fiber'] = true;
+        }
+        if ($categoryUpper === 'TUBE' || str_starts_with($codeUpper, 'TUBE_')) {
+            $tags['tube'] = true;
+        }
+        if ($categoryUpper === 'SLEEVE' || str_starts_with($codeUpper, 'SLEEVE_')) {
+            $tags['sleeve'] = true;
+            $tags['fusion'] = true;
+        }
+        if (str_contains($codeUpper, 'MFD') || str_contains($kind, 'mfd')) {
+            $tags['mfd'] = true;
+        }
+        if (str_contains($codeUpper, 'TEC20') || str_contains($kind, 'tec20')) {
+            $tags['tec20'] = true;
+        }
+        if (str_contains($codeUpper, 'TEC30') || str_contains($kind, 'tec30')) {
+            $tags['tec30'] = true;
+        }
+        if (str_contains($codeUpper, '_HP') || str_contains($kind, 'high_precision') || str_contains($kind, '_hp')) {
+            $tags['high_precision'] = true;
+        }
+        if (str_contains($codeUpper, 'PM') || str_contains($kind, 'pm') || str_contains($nameUpper, 'PM')) {
+            $tags['pm'] = true;
+        }
+        if ($polish === 'APC' || str_contains($codeUpper, '_APC')) {
+            $tags['apc'] = true;
+        }
+        if ($polish === 'ARCOAT' || str_contains($codeUpper, 'ARCOAT')) {
+            $tags['arcoat'] = true;
+        }
+        if ($polish === 'PC' || str_contains($codeUpper, '_PC')) {
+            $tags['pc'] = true;
+        }
+        if (str_starts_with($codeUpper, 'CONN_SC_')) {
+            $tags['conn_sc'] = true;
+        } elseif (str_starts_with($codeUpper, 'CONN_FC_')) {
+            $tags['conn_fc'] = true;
+        } elseif (str_starts_with($codeUpper, 'CONN_LC_')) {
+            $tags['conn_lc'] = true;
+        } elseif (str_starts_with($codeUpper, 'CONN_FERRULE_')) {
+            $tags['conn_ferrule'] = true;
+        }
+
+        $normalized = array_keys($tags);
+        sort($normalized);
+        $attrs['process_tags'] = $normalized;
+        return $attrs;
+    }
+
+    /**
+     * @param mixed $raw
+     * @return array<int, string>
+     */
+    private function normalizeProcessTags(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $tags = [];
+        foreach ($raw as $tag) {
+            $value = strtolower(trim((string)$tag));
+            if ($value === '') {
+                continue;
+            }
+            $tags[$value] = true;
+        }
+
+        $result = array_keys($tags);
+        sort($result);
+        return $result;
     }
 
     // -------------------------
@@ -275,10 +380,10 @@ final class RealDataSeeder extends Seeder
         $skuIds = array_values($skuIdByCode);
         if (count($skuIds) === 0) return;
 
-        $skuRows = DB::table('skus')
+        $skuRows = DB::table('parts')
             ->whereIn('id', $skuIds)
             ->orderBy('id')
-            ->get(['id', 'sku_code', 'category']);
+            ->get(['id', 'part_code', 'category']);
         if ($skuRows->isEmpty()) return;
 
         // 再シード時に重複しないよう、対象価格表の明細を入れ直す
@@ -299,14 +404,14 @@ final class RealDataSeeder extends Seeder
         foreach ($priceBookIds as $pbId) {
             foreach ($skuRows as $idx => $sku) {
                 $category = strtoupper((string)$sku->category);
-                $codeHash = abs(crc32((string)$sku->sku_code));
+                $codeHash = abs(crc32((string)$sku->part_code));
                 $priceBump = (float)(($codeHash % 7) * 100); // 固定単価の軽いバリエーション
                 $perMBump = (float)(($codeHash % 5) * 30); // m単価の軽いバリエーション
 
                 if (in_array($category, ['FIBER', 'TUBE'], true)) {
                     $rows[] = [
                         'price_book_id' => (int)$pbId,
-                        'sku_id' => (int)$sku->id,
+                        'part_id' => (int)$sku->id,
                         'pricing_model' => 'PER_M',
                         'unit_price' => null,
                         'price_per_m' => ($perMBaseByCategory[$category] ?? 1000.0) + $perMBump,
@@ -320,7 +425,7 @@ final class RealDataSeeder extends Seeder
 
                 $rows[] = [
                     'price_book_id' => (int)$pbId,
-                    'sku_id' => (int)$sku->id,
+                    'part_id' => (int)$sku->id,
                     'pricing_model' => 'FIXED',
                     'unit_price' => ($fixedBaseByCategory[$category] ?? 1000.0) + $priceBump + ($idx * 10),
                     'price_per_m' => null,
@@ -367,11 +472,14 @@ final class RealDataSeeder extends Seeder
                     'dsl_version' => '0.2',
                     'dsl_json' => json_encode([
                         'template_code' => $code,
-                        'mfdCount' => ['min' => 1, 'max' => 10],
+                        'mfdCount' => ['min' => 1, 'max' => 1],
+                        'tubeCount' => ['min' => 0, 'max' => 2],
                         'note' => 'demo dsl',
                         'default_config' => [
-                            'mfdCount' => ($i % 5) + 1,
+                            'processType' => 'MFD',
+                            'mfdCount' => 1,
                             'tubeCount' => $i % 3,
+                            'tecSide' => null,
                         ],
                     ], JSON_UNESCAPED_UNICODE),
                     'active' => true,

@@ -42,6 +42,7 @@
     <div style="margin-top:12px;">
         <a href="{{ route('register') }}">新規登録はこちら</a>
     </div>
+    @include('partials.back_to_top')
     @livewireScripts
 </body>
 </html>

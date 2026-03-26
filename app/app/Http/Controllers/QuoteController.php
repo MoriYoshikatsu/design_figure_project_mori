@@ -18,8 +18,9 @@ final class QuoteController extends Controller
     private const SUMMARY_FIELD_LABELS = [
         'quote_id' => '見積ID',
         'status' => 'ステータス',
-        'account_internal_name' => 'accounts.internal_name',
-        'account_user_name' => 'users.name',
+        'order_qty' => '注文数量',
+        'account_internal_name' => 'アカウント表示名',
+        'account_user_name' => 'ユーザー登録名',
         'assignee_name' => '担当者',
         'customer_emails' => '登録メールアドレス',
         'request_count' => '承認変更申請件数',
@@ -33,6 +34,7 @@ final class QuoteController extends Controller
     private const SUMMARY_DEFAULT_FIELDS = [
         'quote_id',
         'status',
+        'order_qty',
         'account_internal_name',
         'account_user_name',
         'assignee_name',
@@ -103,6 +105,7 @@ final class QuoteController extends Controller
                     ->orWhereRaw('cast(q.account_id as text) ilike ?', ["%{$q}%"])
                     ->orWhere('q.status', 'ilike', "%{$q}%")
                     ->orWhere('q.currency', 'ilike', "%{$q}%")
+                    ->orWhere('q.spec_sheet_number', 'ilike', "%{$q}%")
                     ->orWhere('q.memo', 'ilike', "%{$q}%")
                     ->orWhereRaw('cast(q.total as text) ilike ?', ["%{$q}%"])
                     ->orWhere('a.internal_name', 'ilike', "%{$q}%")
@@ -285,6 +288,9 @@ final class QuoteController extends Controller
         $config = $snapshot['config'] ?? [];
         $derived = $snapshot['derived'] ?? [];
         $errors = $snapshot['validation_errors'] ?? [];
+        $derived['specSheetNumber'] = $this->resolveSpecSheetNumber(
+            $quote->spec_sheet_number ?? ($snapshot['spec_sheet_number'] ?? ($derived['specSheetNumber'] ?? null))
+        );
 
         $svg = $renderer->render($config, $derived, $errors);
         $totals = $snapshot['totals'] ?? [];
@@ -374,6 +380,9 @@ final class QuoteController extends Controller
         $quoteMemo = trim((string)($quote->memo ?? ''));
         $sessionMemo = trim((string)($quote->session_memo ?? ''));
         $initialMemo = $quoteMemo !== '' ? $quoteMemo : $sessionMemo;
+        $initialSpecSheetNumber = $this->resolveSpecSheetNumber(
+            $quote->spec_sheet_number ?? ($snapshot['spec_sheet_number'] ?? ($snapshot['derived']['specSheetNumber'] ?? null))
+        );
         $summaryFieldOptions = self::SUMMARY_FIELD_LABELS;
         $selectedSummaryFields = $this->resolveSummaryCardFields($snapshot);
         $initialPricingInput = $this->buildInitialPricingInput($quote, $snapshot);
@@ -383,6 +392,7 @@ final class QuoteController extends Controller
             'initialConfig' => $config,
             'templateVersionId' => $templateVersionId,
             'initialMemo' => $initialMemo,
+            'initialSpecSheetNumber' => $initialSpecSheetNumber,
             'summaryFieldOptions' => $summaryFieldOptions,
             'selectedSummaryFields' => $selectedSummaryFields,
             'initialPricingInput' => $initialPricingInput,
@@ -452,7 +462,8 @@ final class QuoteController extends Controller
             $decoded['memo'] = $quote->memo;
         }
 
-        $requestId = app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'quote',
             $id,
             [
@@ -466,11 +477,16 @@ final class QuoteController extends Controller
             (string)($data['comment'] ?? '')
         );
 
+        $requestId = $changeRequestService->requestId($submission);
+        $eventType = $changeRequestService->approvalRequired($submission)
+            ? 'EDIT_REQUEST_SUBMIT'
+            : 'EDIT_DIRECT_APPLY';
+
         $newSnapshot = is_array($decoded['snapshot'] ?? null) ? $decoded['snapshot'] : $decoded;
         if (is_array($newSnapshot) && !empty($newSnapshot)) {
             app(QuoteCalcRunRecorder::class)->recordFromSnapshot(
                 $id,
-                'EDIT_REQUEST_SUBMIT',
+                $eventType,
                 $newSnapshot,
                 (int)$request->user()->id,
                 true,
@@ -480,7 +496,13 @@ final class QuoteController extends Controller
             );
         }
 
-        return redirect()->route('work.quotes.show', $id)->with('status', '承認変更申請を送信しました');
+        $statusMessage = $changeRequestService->outcomeMessage(
+            $submission,
+            '見積を更新しました（即時反映）',
+            '承認変更申請を送信しました（承認後反映）'
+        );
+
+        return redirect()->route('work.quotes.show', $id)->with('status', $statusMessage);
     }
 
     public function updateMemo(Request $request, int $id)
@@ -494,7 +516,8 @@ final class QuoteController extends Controller
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') $memo = null;
 
-        app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'quote',
             $id,
             [
@@ -508,7 +531,13 @@ final class QuoteController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.quotes.show', $id)->with('status', '見積メモの更新申請を送信しました');
+        $statusMessage = $changeRequestService->outcomeMessage(
+            $submission,
+            '見積メモを更新しました（即時反映）',
+            '見積メモの更新申請を送信しました（承認後反映）'
+        );
+
+        return redirect()->route('work.quotes.show', $id)->with('status', $statusMessage);
     }
 
     private function decodeJson(mixed $value): ?array
@@ -517,6 +546,12 @@ final class QuoteController extends Controller
         if ($value === null) return null;
         $decoded = json_decode((string)$value, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    private function resolveSpecSheetNumber(mixed $value): ?string
+    {
+        $normalized = trim((string)$value);
+        return $normalized === '' ? null : $normalized;
     }
 
     public function downloadSnapshotPdf(int $id, SvgRenderer $renderer, SnapshotPdfService $pdfService)
@@ -569,6 +604,9 @@ final class QuoteController extends Controller
         $config = $snapshot['config'] ?? [];
         $derived = $snapshot['derived'] ?? [];
         $errors = $snapshot['validation_errors'] ?? [];
+        $derived['specSheetNumber'] = $this->resolveSpecSheetNumber(
+            $quote->spec_sheet_number ?? ($snapshot['spec_sheet_number'] ?? ($derived['specSheetNumber'] ?? null))
+        );
         $requestCount = (int)DB::table('change_requests')
             ->where('entity_type', 'quote')
             ->where('entity_id', $id)
@@ -651,6 +689,9 @@ final class QuoteController extends Controller
             'trade_scope' => $quote->trade_scope ?? ($snapshotInput['trade_scope'] ?? ($defaults['trade_scope'] ?? 'DOMESTIC')),
             'tax_rate' => $quote->tax_rate ?? ($snapshotInput['tax_rate'] ?? ($defaults['tax_rate'] ?? null)),
             'pricing_policy_id' => $quote->pricing_policy_id ?? ($snapshotInput['pricing_policy_id'] ?? ($defaults['pricing_policy_id'] ?? null)),
+            'labor_overrides' => is_array($snapshotInput['labor_overrides'] ?? null)
+                ? $snapshotInput['labor_overrides']
+                : ($defaults['labor_overrides'] ?? []),
         ]);
 
         $tradeScope = strtoupper(trim((string)($merged['trade_scope'] ?? 'DOMESTIC')));
@@ -669,6 +710,69 @@ final class QuoteController extends Controller
             'trade_scope' => $tradeScope,
             'tax_rate' => is_numeric($merged['tax_rate'] ?? null) ? (float)$merged['tax_rate'] : null,
             'pricing_policy_id' => is_numeric($merged['pricing_policy_id'] ?? null) ? (int)$merged['pricing_policy_id'] : null,
+            'labor_overrides' => $this->normalizeLaborOverrides($merged['labor_overrides'] ?? []),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeLaborOverrides(mixed $raw): array
+    {
+        $result = [
+            'processes' => [],
+            'elements' => [],
+        ];
+        if (!is_array($raw)) {
+            return $result;
+        }
+
+        $processes = is_array($raw['processes'] ?? null) ? $raw['processes'] : [];
+        foreach ($processes as $processCode => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $normalizedCode = strtoupper(trim((string)$processCode));
+            if ($normalizedCode === '') {
+                continue;
+            }
+            $result['processes'][$normalizedCode] = $this->normalizeLaborYieldInputRow($row);
+        }
+
+        $elements = is_array($raw['elements'] ?? null) ? $raw['elements'] : [];
+        foreach ($elements as $processCode => $elementRows) {
+            if (!is_array($elementRows)) {
+                continue;
+            }
+            $normalizedProcessCode = strtoupper(trim((string)$processCode));
+            if ($normalizedProcessCode === '') {
+                continue;
+            }
+            foreach ($elementRows as $elementCode => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $normalizedElementCode = strtoupper(trim((string)$elementCode));
+                if ($normalizedElementCode === '') {
+                    continue;
+                }
+                $result['elements'][$normalizedProcessCode][$normalizedElementCode] = $this->normalizeLaborYieldInputRow($row);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, float|null>
+     */
+    private function normalizeLaborYieldInputRow(array $row): array
+    {
+        return [
+            'yield_rate' => is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null,
+            'order_qty' => is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null,
+            'actual_input_qty' => is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null,
         ];
     }
 
@@ -721,7 +825,17 @@ final class QuoteController extends Controller
             }
         }
 
-        return empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        $resolved = empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        if (!in_array('order_qty', $resolved, true)) {
+            $statusIndex = array_search('status', $resolved, true);
+            if ($statusIndex === false) {
+                array_unshift($resolved, 'order_qty');
+            } else {
+                array_splice($resolved, $statusIndex + 1, 0, ['order_qty']);
+            }
+        }
+
+        return $resolved;
     }
 
     /**
@@ -731,10 +845,13 @@ final class QuoteController extends Controller
     {
         $fields = $this->resolveSummaryCardFields($snapshot);
         $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
+        $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
+        $orderQty = $quote->order_qty ?? ($pricingInput['order_qty'] ?? '');
 
         $valueMap = [
             'quote_id' => $quote->id ?? '',
             'status' => $quote->status ?? '',
+            'order_qty' => $orderQty,
             'account_internal_name' => trim((string)($quote->account_internal_name ?? '')) !== '' ? (string)$quote->account_internal_name : '-',
             'account_user_name' => trim((string)($quote->account_user_name ?? '')) !== '' ? (string)$quote->account_user_name : '-',
             'assignee_name' => $quote->assignee_name ?? '-',

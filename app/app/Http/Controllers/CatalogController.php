@@ -18,28 +18,31 @@ final class CatalogController extends Controller
             abort(403);
         }
 
-        $canAccessSkus = $workPermissionService->allowsRequest(Request::create('/work/skus', 'GET'), $userId);
+        $canAccessSkus = $workPermissionService->allowsRequest(Request::create('/work/parts', 'GET'), $userId);
         $canAccessPriceBooks = $workPermissionService->allowsRequest(Request::create('/work/price-books', 'GET'), $userId);
         if (!$canAccessSkus && !$canAccessPriceBooks) {
             abort(403);
         }
 
-        $entryRouteName = (string)($request->route()?->getName() ?? 'work.skus.index');
-        $routeDefaultTab = $entryRouteName === 'work.price-books.index' ? 'price_books' : 'skus';
+        $entryRouteName = (string)($request->route()?->getName() ?? 'work.parts.index');
+        $routeDefaultTab = $entryRouteName === 'work.price-books.index' ? 'price_books' : 'parts';
 
         $requestedTab = (string)$request->query('tab', $routeDefaultTab);
-        if (!in_array($requestedTab, ['skus', 'price_books'], true)) {
+        if ($requestedTab === 'skus') {
+            $requestedTab = 'parts';
+        }
+        if (!in_array($requestedTab, ['parts', 'price_books'], true)) {
             $requestedTab = $routeDefaultTab;
         }
 
         $activeTab = $requestedTab;
-        if ($activeTab === 'skus' && !$canAccessSkus) {
-            $activeTab = $canAccessPriceBooks ? 'price_books' : 'skus';
+        if ($activeTab === 'parts' && !$canAccessSkus) {
+            $activeTab = $canAccessPriceBooks ? 'price_books' : 'parts';
         } elseif ($activeTab === 'price_books' && !$canAccessPriceBooks) {
-            $activeTab = $canAccessSkus ? 'skus' : 'price_books';
+            $activeTab = $canAccessSkus ? 'parts' : 'price_books';
         }
 
-        $allowLegacySkuFilters = $entryRouteName === 'work.skus.index';
+        $allowLegacySkuFilters = $entryRouteName === 'work.parts.index';
         $allowLegacyPriceBookFilters = $entryRouteName === 'work.price-books.index';
 
         $skuFilters = $catalogIndexService->resolveSkuFilters($request, $allowLegacySkuFilters);

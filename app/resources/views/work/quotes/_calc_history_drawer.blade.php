@@ -10,6 +10,13 @@
     $backdropId = $drawerId . '-backdrop';
     $drawerTitle = trim((string)($drawerTitle ?? '計算履歴'));
     $canOpenPage = $quoteId > 0;
+    $currentRun = null;
+    foreach (($allRuns !== [] ? $allRuns : $importantRuns) as $candidateRun) {
+        if (!empty($candidateRun['is_current_version'])) {
+            $currentRun = $candidateRun;
+            break;
+        }
+    }
 @endphp
 
 @once
@@ -61,6 +68,9 @@
         .calc-history-row-highlight {
             background: #fffbeb;
         }
+        .calc-history-row-current {
+            background: #ecfdf5;
+        }
         .calc-history-pill {
             display: inline-block;
             padding: 2px 7px;
@@ -69,6 +79,26 @@
             font-size: 11px;
             font-weight: 700;
             background: #f8fafc;
+        }
+        .calc-history-pill-current {
+            border-color: #10b981;
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .calc-history-pill-pending {
+            border-color: #f59e0b;
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .calc-history-pill-rejected {
+            border-color: #ef4444;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .calc-history-pill-historical {
+            border-color: #cbd5e1;
+            background: #f1f5f9;
+            color: #334155;
         }
     </style>
 @endonce
@@ -87,12 +117,25 @@
         <button type="button" data-calc-history-close="{{ $drawerId }}">閉じる</button>
     </div>
     <div class="calc-history-body">
+        @if(is_array($currentRun))
+            <div style="padding:10px; border:1px solid #86efac; border-radius:8px; background:#f0fdf4;">
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <span class="calc-history-pill calc-history-pill-current">現行版</span>
+                    <strong>Run #{{ $currentRun['run_no'] ?? '-' }}</strong>
+                    <span>{{ $currentRun['event_label'] ?? ($currentRun['event_type'] ?? '-') }}</span>
+                    <span class="muted">{{ $currentRun['created_at'] ?? '-' }}</span>
+                </div>
+                <div class="muted" style="margin-top:6px;">承認待ち・却下の変更申請履歴ではなく、実際に見積へ反映済みの最新履歴を現行版として表示しています。</div>
+            </div>
+        @endif
+
         <div>
             <h3 style="margin:0 0 8px;">重要イベント要約</h3>
             <table class="calc-history-table">
                 <thead>
                     <tr>
                         <th>Run</th>
+                        <th>版状態</th>
                         <th>イベント</th>
                         <th>小計(税前)</th>
                         <th>税</th>
@@ -108,23 +151,42 @@
                                 && $highlightSourceId !== null
                                 && (string)($run['source_type'] ?? '') === $highlightSourceType
                                 && (int)($run['source_id'] ?? 0) === $highlightSourceId;
+                            $isCurrentVersion = !empty($run['is_current_version']);
+                            $versionTone = trim((string)($run['version_state_tone'] ?? 'neutral'));
+                            $versionToneClass = match ($versionTone) {
+                                'current' => 'calc-history-pill-current',
+                                'pending' => 'calc-history-pill-pending',
+                                'rejected' => 'calc-history-pill-rejected',
+                                'historical' => 'calc-history-pill-historical',
+                                default => '',
+                            };
+                            $rowClass = $isCurrentVersion
+                                ? 'calc-history-row-current'
+                                : ($isHighlight ? 'calc-history-row-highlight' : '');
                         @endphp
-                        <tr @if($isHighlight) class="calc-history-row-highlight" @endif>
+                        <tr @if($rowClass !== '') class="{{ $rowClass }}" @endif>
                             <td>
                                 {{ $run['run_no'] ?? '-' }}
                                 @if($isHighlight)
                                     <span class="calc-history-pill">対象</span>
                                 @endif
                             </td>
+                            <td>
+                                @if(!empty($run['version_state_label']))
+                                    <span class="calc-history-pill {{ $versionToneClass }}">{{ $run['version_state_label'] }}</span>
+                                @else
+                                    -
+                                @endif
+                            </td>
                             <td>{{ $run['event_label'] ?? ($run['event_type'] ?? '-') }}</td>
-                            <td>{{ $run['adjusted_total'] ?? '-' }}</td>
-                            <td>{{ $run['tax_amount'] ?? '-' }}</td>
-                            <td>{{ $run['grand_total'] ?? '-' }}</td>
+                            <td>{{ format_amount($run['adjusted_total'] ?? null) }}</td>
+                            <td>{{ format_amount($run['tax_amount'] ?? null) }}</td>
+                            <td>{{ format_amount($run['grand_total'] ?? null) }}</td>
                             <td>{{ $run['triggered_by_name'] ?? ($run['triggered_by_email'] ?? '-') }}</td>
                             <td>{{ $run['created_at'] ?? '-' }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7">履歴はありません。</td></tr>
+                        <tr><td colspan="8">履歴はありません。</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -138,6 +200,7 @@
                         <thead>
                             <tr>
                                 <th>Run</th>
+                                <th>版状態</th>
                                 <th>イベント</th>
                                 <th>operation</th>
                                 <th>小計Raw</th>
@@ -156,21 +219,40 @@
                                         && $highlightSourceId !== null
                                         && (string)($run['source_type'] ?? '') === $highlightSourceType
                                         && (int)($run['source_id'] ?? 0) === $highlightSourceId;
+                                    $isCurrentVersion = !empty($run['is_current_version']);
+                                    $versionTone = trim((string)($run['version_state_tone'] ?? 'neutral'));
+                                    $versionToneClass = match ($versionTone) {
+                                        'current' => 'calc-history-pill-current',
+                                        'pending' => 'calc-history-pill-pending',
+                                        'rejected' => 'calc-history-pill-rejected',
+                                        'historical' => 'calc-history-pill-historical',
+                                        default => '',
+                                    };
+                                    $rowClass = $isCurrentVersion
+                                        ? 'calc-history-row-current'
+                                        : ($isHighlight ? 'calc-history-row-highlight' : '');
                                 @endphp
-                                <tr @if($isHighlight) class="calc-history-row-highlight" @endif>
+                                <tr @if($rowClass !== '') class="{{ $rowClass }}" @endif>
                                     <td>{{ $run['run_no'] ?? '-' }}</td>
+                                    <td>
+                                        @if(!empty($run['version_state_label']))
+                                            <span class="calc-history-pill {{ $versionToneClass }}">{{ $run['version_state_label'] }}</span>
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
                                     <td>{{ $run['event_label'] ?? ($run['event_type'] ?? '-') }}</td>
                                     <td>{{ ($run['context']['operation'] ?? '-') }}</td>
-                                    <td>{{ $run['subtotal_raw'] ?? '-' }}</td>
-                                    <td>{{ $run['unit_price_rounded'] ?? '-' }}</td>
-                                    <td>{{ $run['recomputed_total'] ?? '-' }}</td>
-                                    <td>{{ $run['adjusted_total'] ?? '-' }}</td>
+                                    <td>{{ format_amount($run['subtotal_raw'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['unit_price_rounded'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['recomputed_total'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['adjusted_total'] ?? null) }}</td>
                                     <td>{{ $run['tax_rate'] ?? '-' }}</td>
-                                    <td>{{ $run['tax_amount'] ?? '-' }}</td>
-                                    <td>{{ $run['grand_total'] ?? '-' }}</td>
+                                    <td>{{ format_amount($run['tax_amount'] ?? null) }}</td>
+                                    <td>{{ format_amount($run['grand_total'] ?? null) }}</td>
                                 </tr>
                             @empty
-                                <tr><td colspan="10">履歴はありません。</td></tr>
+                                <tr><td colspan="11">履歴はありません。</td></tr>
                             @endforelse
                         </tbody>
                     </table>

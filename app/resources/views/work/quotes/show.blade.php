@@ -82,4 +82,15 @@
         'derivedJson' => $derivedJson ?? json_encode($derived, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
         'errorsJson' => $errorsJson ?? json_encode($errors, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
     ])
+
+    @include('work.quotes._pricing_breakdown', [
+        'sectionTitle' => '見積計算内訳（スナップショット）',
+        'pricingInput' => is_array($snapshotView['pricing_input'] ?? null) ? $snapshotView['pricing_input'] : [],
+        'pricingSteps' => is_array($snapshotView['pricing_steps'] ?? null) ? $snapshotView['pricing_steps'] : [],
+        'pricingOutput' => is_array($snapshotView['pricing_output'] ?? null) ? $snapshotView['pricing_output'] : [],
+        'context' => [
+            'quote_id' => (int)($quote->id ?? 0),
+            'source' => 'quote_snapshot',
+        ],
+    ])
 @endsection

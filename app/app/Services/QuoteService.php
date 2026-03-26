@@ -58,6 +58,8 @@ final class QuoteService
             $config = $this->decodeJson($session->config) ?? [];
             $derived = $this->decodeJson($session->derived) ?? [];
             $validationErrors = $this->decodeJson($session->validation_errors) ?? [];
+            $specSheetNumber = trim((string)($session->spec_sheet_number ?? ($derived['specSheetNumber'] ?? '')));
+            $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
 
             $dsl = $this->loadTemplateDsl((int)$session->template_version_id) ?? [];
 
@@ -65,6 +67,7 @@ final class QuoteService
             $dslEngine = app(\App\Services\DslEngine::class);
             $eval = $dslEngine->evaluate($config, $dsl);
             $derived = array_merge($derived, $eval['derived'] ?? []);
+            $derived['specSheetNumber'] = $specSheetNumber;
             $validationErrors = $eval['errors'] ?? $validationErrors;
 
             /** @var \App\Services\BomBuilder $bomBuilder */
@@ -103,9 +106,11 @@ final class QuoteService
                 'snapshot' => json_encode([
                     'template_version_id' => (int)$session->template_version_id,
                     'price_book_id' => $pricingResult['price_book_id'] ?? null,
+                    'spec_sheet_number' => $specSheetNumber,
                     'summary_card_fields' => [
                         'quote_id',
                         'status',
+                        'order_qty',
                         'account_internal_name',
                         'account_user_name',
                         'assignee_name',
@@ -150,6 +155,9 @@ final class QuoteService
                 if ($this->hasQuoteColumn($column)) {
                     $insertPayload[$column] = $value;
                 }
+            }
+            if ($this->hasQuoteColumn('spec_sheet_number')) {
+                $insertPayload['spec_sheet_number'] = $specSheetNumber;
             }
 
             $quoteId = (int)DB::table('quotes')->insertGetId($insertPayload);
@@ -239,22 +247,22 @@ final class QuoteService
         }
 
         $skuCodes = array_values(array_unique(array_filter(array_map(
-            fn ($r) => is_array($r) ? ($r['sku_code'] ?? null) : null,
+            fn ($r) => is_array($r) ? ($r['part_code'] ?? ($r['sku_code'] ?? null)) : null,
             $bom
         ))));
 
         $skuIdByCode = [];
         if (!empty($skuCodes)) {
-            $skuIdByCode = DB::table('skus')
-                ->whereIn('sku_code', $skuCodes)
-                ->pluck('id', 'sku_code')
+            $skuIdByCode = DB::table('parts')
+                ->whereIn('part_code', $skuCodes)
+                ->pluck('id', 'part_code')
                 ->all();
         }
 
         $rows = [];
         foreach ($bom as $row) {
             if (!is_array($row)) continue;
-            $skuCode = (string)($row['sku_code'] ?? '');
+            $skuCode = (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
             if ($skuCode === '') continue;
             $skuId = $skuIdByCode[$skuCode] ?? null;
             if (!$skuId) continue;
@@ -268,7 +276,7 @@ final class QuoteService
 
             $rows[] = [
                 'quote_id' => $quoteId,
-                'sku_id' => $skuId,
+                'part_id' => $skuId,
                 'quantity' => $qty,
                 'unit_price' => $unitPrice,
                 'line_total' => $lineTotal,

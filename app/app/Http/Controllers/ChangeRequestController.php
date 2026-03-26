@@ -530,7 +530,7 @@ final class ChangeRequestController extends Controller
 
     private function buildSkuNameMap(): array
     {
-        return DB::table('skus')->pluck('name', 'sku_code')->all();
+        return DB::table('parts')->pluck('name', 'part_code')->all();
     }
 
     private function buildSkuSvgMap(): array
@@ -577,6 +577,7 @@ final class ChangeRequestController extends Controller
                 'q.id',
                 'q.status',
                 'q.account_id',
+                'q.order_qty',
                 'a.internal_name as account_internal_name',
                 'a.assignee_name'
             )
@@ -624,6 +625,7 @@ final class ChangeRequestController extends Controller
         return [
             'quote_id' => (int)($quote->id ?? 0),
             'status' => (string)($quote->status ?? ''),
+            'order_qty' => $quote->order_qty ?? '',
             'account_internal_name' => $internalName !== '' ? $internalName : '-',
             'account_user_name' => $userName !== '' ? $userName : '-',
             'assignee_name' => $assignee !== '' ? $assignee : '-',
@@ -733,7 +735,7 @@ final class ChangeRequestController extends Controller
             $beforeValue = $beforeExists ? $beforeFlat[$key] : null;
             $afterValue = $afterExists ? $afterFlat[$key] : null;
             $rows[] = [
-                'path' => $key !== '' ? $key : '(root)',
+                'path' => $this->presentChangePath($key !== '' ? $key : '(root)'),
                 'before' => $beforeValue,
                 'after' => $afterValue,
                 'changed' => $beforeExists !== $afterExists || $beforeValue !== $afterValue,
@@ -763,6 +765,22 @@ final class ChangeRequestController extends Controller
         }
     }
 
+    private function presentChangePath(string $path): string
+    {
+        return match ($path) {
+            'account_type' => '種別',
+            'internal_name' => 'アカウント表示名',
+            'assignee_name' => '担当者',
+            'memo' => 'メモ',
+            'role' => '権限区分',
+            'user_name' => '登録ユーザー名',
+            'user_email' => '登録メールアドレス',
+            'user_password_hash' => '登録パスワード（ハッシュ）',
+            'customer_factor_default' => '顧客別仕切係数（既定値）',
+            default => $path,
+        };
+    }
+
     private function operationLabel(string $operation): string
     {
         return match (strtoupper($operation)) {
@@ -787,9 +805,10 @@ final class ChangeRequestController extends Controller
         return match (strtolower($entityType)) {
             'account' => 'アカウント',
             'account_user_memo' => 'アカウントメモ',
+            'account_change_request_requirement' => '変更申請必須設定',
             'account_sales_route_permission' => 'アカウント権限ルート',
             'account_sales_route_permission_sync' => 'アカウント権限チェック同期',
-            'sku' => 'SKU',
+            'part', 'sku' => 'Part',
             'price_book' => '価格表',
             'price_book_item' => '価格表明細',
             'product_template' => 'テンプレート',
@@ -830,11 +849,12 @@ final class ChangeRequestController extends Controller
             $items[] = ['label' => '価格表', 'value' => $value];
         }
 
-        if (isset($payload['sku_id']) && is_numeric((string)$payload['sku_id'])) {
-            $skuId = (int)$payload['sku_id'];
-            $sku = DB::table('skus')->where('id', $skuId)->first(['id', 'sku_code', 'name']);
-            $value = $sku ? ('#' . $sku->id . ' ' . $sku->sku_code . ' ' . $sku->name) : ('#' . $skuId);
-            $items[] = ['label' => 'SKU', 'value' => $value];
+        $partId = $payload['part_id'] ?? ($payload['sku_id'] ?? null);
+        if (is_numeric((string)$partId)) {
+            $resolvedPartId = (int)$partId;
+            $part = DB::table('parts')->where('id', $resolvedPartId)->first(['id', 'part_code', 'name']);
+            $value = $part ? ('#' . $part->id . ' ' . $part->part_code . ' ' . $part->name) : ('#' . $resolvedPartId);
+            $items[] = ['label' => 'Part', 'value' => $value];
         }
 
         if (isset($payload['template_id']) && is_numeric((string)$payload['template_id'])) {

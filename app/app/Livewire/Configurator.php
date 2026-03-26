@@ -6,6 +6,8 @@ use Livewire\Component;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use App\Models\ConfiguratorSession;
+use App\Services\AccountChangeRequestRequirementService;
+use App\Services\SkuDisplayNameService;
 use App\Services\WorkChangeRequestService;
 use Illuminate\Support\Facades\Cookie;
 use Throwable;
@@ -16,8 +18,9 @@ final class Configurator extends Component
     private const SUMMARY_FIELD_LABELS = [
         'quote_id' => '見積ID',
         'status' => 'ステータス',
-        'account_internal_name' => 'accounts.internal_name',
-        'account_user_name' => 'users.name',
+        'order_qty' => '注文数量',
+        'account_internal_name' => 'アカウント表示名',
+        'account_user_name' => 'ユーザー登録名',
         'assignee_name' => '担当者',
         'customer_emails' => '登録メールアドレス',
         'request_count' => '承認変更申請件数',
@@ -31,6 +34,7 @@ final class Configurator extends Component
     private const SUMMARY_DEFAULT_FIELDS = [
         'quote_id',
         'status',
+        'order_qty',
         'account_internal_name',
         'account_user_name',
         'assignee_name',
@@ -42,6 +46,33 @@ final class Configurator extends Component
         'tax',
         'total',
     ];
+    private const PROCESS_TYPE_MFD = 'MFD';
+    private const PROCESS_TYPE_TEC = 'TEC';
+    private const PROCESS_TYPE_TEC20 = 'TEC20';
+    private const PROCESS_TYPE_TEC30 = 'TEC30';
+    private const PROCESS_TYPE_TEC20_HP = 'TEC20_HP';
+    private const PROCESS_TYPE_TEC30_HP = 'TEC30_HP';
+    /** @var array<int, string> */
+    private const CONCRETE_TEC_PROCESS_TYPES = [
+        self::PROCESS_TYPE_TEC20,
+        self::PROCESS_TYPE_TEC30,
+        self::PROCESS_TYPE_TEC20_HP,
+        self::PROCESS_TYPE_TEC30_HP,
+    ];
+    /** @var array<int, string> */
+    private const PROCESS_TYPES = [
+        self::PROCESS_TYPE_MFD,
+        self::PROCESS_TYPE_TEC,
+        self::PROCESS_TYPE_TEC20,
+        self::PROCESS_TYPE_TEC30,
+        self::PROCESS_TYPE_TEC20_HP,
+        self::PROCESS_TYPE_TEC30_HP,
+    ];
+    private const FIXED_MFD_COUNT = 1;
+    private const FIXED_TEC_FIBER_COUNT = 1;
+    private const MAX_TUBE_COUNT = 2;
+    private const FIBER_TOLERANCE_M = 0.1; // 公差±10cm
+    private const TUBE_TOLERANCE_M = 0.01; // 公差±1cm
 
     public array $config = [];
     public array $derived = [];
@@ -57,15 +88,21 @@ final class Configurator extends Component
     public array $templateDsl = [];
     public ?int $quoteEditId = null;
     public ?int $quoteAccountId = null;
+    public ?int $effectiveQuoteAccountId = null;
+    public ?int $quoteEditDecisionAccountId = null;
+    public ?bool $quoteEditApprovalRequired = null;
     public ?array $initialConfig = null;
     public ?int $initialTemplateVersionId = null;
     public ?string $initialMemo = null;
+    public ?string $initialSpecSheetNumber = null;
     public ?array $initialSummaryFields = null;
     public ?array $initialSummaryFieldOptions = null;
     public ?array $initialPricingInput = null;
     public array $summaryFields = [];
     public array $summaryFieldOptions = [];
     public ?string $memo = null;
+    public ?string $specSheetNumber = null;
+    public ?string $editComment = null;
     public mixed $orderQty = 1;
     public mixed $fixedCost = null;
     public mixed $managementFactor = null;
@@ -76,6 +113,8 @@ final class Configurator extends Component
     public string $tradeScope = 'DOMESTIC';
     public mixed $taxRate = null;
     public mixed $pricingPolicyId = null;
+    public array $laborOverrides = [];
+    public array $laborOverrideRows = [];
     public bool $isSaving = false;      // 保存中フラグ
     public ?string $saveError = null;   // 保存失敗メッセージ（なければnull）
     public bool $dirty = false;       // 未保存フラグ
@@ -89,6 +128,7 @@ final class Configurator extends Component
         ?array $initialConfig = null,
         ?int $initialTemplateVersionId = null,
         ?string $initialMemo = null,
+        ?string $initialSpecSheetNumber = null,
         ?array $initialSummaryFields = null,
         ?array $summaryFieldOptions = null,
         ?array $initialPricingInput = null
@@ -109,6 +149,9 @@ final class Configurator extends Component
         if ($initialMemo !== null) {
             $this->initialMemo = $initialMemo;
         }
+        if ($initialSpecSheetNumber !== null) {
+            $this->initialSpecSheetNumber = $initialSpecSheetNumber;
+        }
         if (is_array($initialSummaryFields)) {
             $this->initialSummaryFields = $initialSummaryFields;
         }
@@ -125,6 +168,7 @@ final class Configurator extends Component
         $this->summaryFields = $this->normalizeSummaryFields(
             is_array($this->initialSummaryFields) ? $this->initialSummaryFields : self::SUMMARY_DEFAULT_FIELDS
         );
+        $this->syncQuoteEditApprovalState();
 
         // 見積編集モードでは configurator_sessions を新規作成しない
         if ($this->quoteEditId && is_array($this->initialConfig)) {
@@ -138,11 +182,12 @@ final class Configurator extends Component
             $this->derived = [];
             $this->errors = [];
             $this->memo = $this->normalizeMemo($this->initialMemo);
+            $this->specSheetNumber = $this->normalizeSpecSheetNumber($this->initialSpecSheetNumber);
             $this->skuOptions = $this->buildSkuOptions();
             $this->skuNameMap = $this->buildSkuNameMap();
             $this->skuSvgMap = $this->buildSkuSvgMap();
             $defaultPricingInput = app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount(
-                (int)($this->quoteAccountId ?: $this->resolveAccountId())
+                (int)($this->effectiveQuoteAccountId ?: $this->quoteAccountId ?: $this->resolveAccountId())
             );
             $this->applyPricingInput(
                 is_array($this->initialPricingInput) && !empty($this->initialPricingInput)
@@ -165,6 +210,7 @@ final class Configurator extends Component
                 'account_id' => $this->resolveAccountId(),
                 'template_version_id' => $templateVersionId,
                 'status' => 'DRAFT',
+                'spec_sheet_number' => $this->normalizeSpecSheetNumber($this->initialSpecSheetNumber),
                 'config' => $this->initialConfig,
                 'derived' => [],
                 'validation_errors' => [],
@@ -209,6 +255,7 @@ final class Configurator extends Component
                     'account_id' => $this->resolveAccountId(),
                     'template_version_id' => $templateVersionId,
                     'status' => 'DRAFT',
+                    'spec_sheet_number' => $this->normalizeSpecSheetNumber($this->initialSpecSheetNumber),
                     'config' => $config,
                     'derived' => [],
                     'validation_errors' => [],
@@ -232,6 +279,9 @@ final class Configurator extends Component
         $this->derived = $session->derived ?? [];
         $this->errors = $session->validation_errors ?? [];
         $this->memo = $session->memo;
+        $this->specSheetNumber = $this->normalizeSpecSheetNumber(
+            $session->spec_sheet_number ?? ($this->derived['specSheetNumber'] ?? null)
+        );
         $this->skuOptions = $this->buildSkuOptions();
         $this->skuNameMap = $this->buildSkuNameMap();
         $this->skuSvgMap = $this->buildSkuSvgMap();
@@ -263,22 +313,25 @@ final class Configurator extends Component
 
         $ok = $this->persistToDb(['template_version_id' => $id]);
         if ($ok) {
-            $this->saveStatus = 'テンプレ反映(TOKYO): ' . now()->format('H:i:s');
+            $this->saveStatus = $this->uiText('テンプレ反映', 'Template applied') . '(TOKYO): ' . now()->format('H:i:s');
         }
     }
 
     private function defaultConfig(): array
     {
         return [
-            'mfdCount' => 2,
+            'processType' => self::PROCESS_TYPE_MFD,
+            'mfdCount' => self::FIXED_MFD_COUNT,
+            'mfdAdjustments' => [],
+            'tecSide' => null,
+            'tecLeftProcessType' => null,
+            'tecRightProcessType' => null,
             'sleeves' => [
-                ['skuCode' => 'SLEEVE_RECOTE'],
                 ['skuCode' => 'SLEEVE_RECOTE'],
             ],
             'fibers' => [
-                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => 0.005, 'toleranceAuto' => true],
-                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.3, 'toleranceM' => 0.003, 'toleranceAuto' => true],
-                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => 0.005, 'toleranceAuto' => true],
+                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => self::FIBER_TOLERANCE_M, 'toleranceAuto' => false],
+                ['skuCode' => 'FIBER_SMF28', 'lengthM' => 0.5, 'toleranceM' => self::FIBER_TOLERANCE_M, 'toleranceAuto' => false],
             ],
             'tubeCount' => 1,
             'tubes' => [
@@ -288,78 +341,44 @@ final class Configurator extends Component
                     'startFiberIndex' => 0,
                     'endFiberIndex' => 0,
                     'startOffsetM' => 0,
-                    'endOffsetM' => 0.2,
-                    'toleranceM' => null,
-                    'toleranceAuto' => true,
+                    'endOffsetM' => 0.3,
+                    'toleranceM' => self::TUBE_TOLERANCE_M,
+                    'toleranceAuto' => false,
                 ],
             ],
             'connectors' => [
                 'mode' => 'both',
                 'leftSkuCode' => 'CONN_SC_PC',
-                'rightSkuCode' => null,
+                'rightSkuCode' => 'CONN_SC_PC',
             ],
         ];
     }
 
     private function buildSkuOptions(): array
     {
-        $rows = DB::table('skus')
-            ->where('active', true)
-            ->orderBy('category')
-            ->orderBy('sku_code')
-            ->get(['sku_code', 'name', 'category']);
-
-        $byCategory = [
-            'SLEEVE' => [],
-            'FIBER' => [],
-            'TUBE' => [],
-            'CONNECTOR' => [],
-        ];
-
-        foreach ($rows as $r) {
-            $cat = strtoupper((string)($r->category ?? ''));
-            if (!array_key_exists($cat, $byCategory)) {
-                continue;
-            }
-            $byCategory[$cat][] = [
-                'code' => (string)$r->sku_code,
-                'label' => (string)$r->name,
-            ];
-        }
-
-        return [
-            'sleeve' => $byCategory['SLEEVE'],
-            'fiber' => $byCategory['FIBER'],
-            'tube' => $byCategory['TUBE'],
-            'connector' => $byCategory['CONNECTOR'],
-        ];
+        return app(SkuDisplayNameService::class)->buildOptionsByCategory(
+            $this->shouldUseEnglishUi() ? 'en' : 'ja',
+            true
+        );
     }
 
     private function buildSkuNameMap(): array
     {
-        $rows = DB::table('skus')
-            ->where('active', true)
-            ->get(['sku_code', 'name']);
-
-        $map = [];
-        foreach ($rows as $r) {
-            $code = (string)$r->sku_code;
-            if ($code === '') continue;
-            $map[$code] = (string)$r->name;
-        }
-
-        return $map;
+        return app(SkuDisplayNameService::class)->buildNameMap(
+            $this->shouldUseEnglishUi() ? 'en' : 'ja',
+            true
+        );
     }
 
     private function buildSkuSvgMap(): array
     {
-        $rows = DB::table('skus')
+        $rows = DB::table('parts')
             ->where('active', true)
-            ->get(['sku_code']);
+            ->get(['part_code']);
 
         $map = [];
         foreach ($rows as $r) {
-            $code = (string)$r->sku_code;
+            $code = (string)$r->part_code;
             if ($code === '') continue;
             $rel = 'sku-svg/' . $code . '.svg';
             $abs = public_path($rel);
@@ -546,6 +565,7 @@ final class Configurator extends Component
                 'derived' => $this->derived,
                 'validation_errors' => $this->errors,
                 'memo' => $this->normalizeMemo($this->memo),
+                'spec_sheet_number' => $this->normalizeSpecSheetNumber($this->specSheetNumber),
                 'status' => 'DRAFT',
             ];
             if (!empty($extra)) {
@@ -562,7 +582,10 @@ final class Configurator extends Component
             report($e);
 
             // 画面には簡潔に（DBエラー詳細をそのまま出さない）
-            $this->saveError = '保存に失敗しました。通信状態やDB状態を確認してください。';
+            $this->saveError = $this->uiText(
+                '保存に失敗しました。通信状態やDB状態を確認してください。',
+                'Save failed. Please check your connection and database status.'
+            );
             // 失敗したので未保存のまま
             $this->dirty = true;
             return false;
@@ -574,7 +597,7 @@ final class Configurator extends Component
 
     /**
      * Livewireがどのプロパティでも更新したら呼ばれる（汎用フック）
-     * $name: 更新されたプロパティ名（例: config.mfdCount）
+     * $name: 更新されたプロパティ名（例: config.tubeCount）
      */
     public function updated(string $name, mixed $value): void
     {
@@ -586,6 +609,25 @@ final class Configurator extends Component
             }
             return;
         }
+        if ($name === 'specSheetNumber') {
+            $this->specSheetNumber = $this->normalizeSpecSheetNumber($value);
+            $this->recompute(false);
+            if (!$this->quoteEditId) {
+                $this->autoSaveIfDue();
+            }
+            return;
+        }
+        if ($name === 'editComment') {
+            if (trim((string)$value) !== '') {
+                $this->resetErrorBag('editComment');
+            }
+            return;
+        }
+
+        if ($this->quoteEditId && ($name === 'orderQty' || str_starts_with($name, 'laborOverrides.'))) {
+            $this->recompute(false);
+            return;
+        }
 
         if (!str_starts_with($name, 'config.')) return;
 
@@ -593,7 +635,7 @@ final class Configurator extends Component
             $this->markToleranceAutoByPath($name, $value);
         }
 
-        $resizeArrays = in_array($name, ['config.mfdCount', 'config.tubeCount'], true);
+        $resizeArrays = in_array($name, ['config.processType', 'config.tubeCount'], true);
         $this->recompute($resizeArrays);
 
         // ついでに「一定間隔で自動保存」もここで（次章）
@@ -609,10 +651,10 @@ final class Configurator extends Component
 
         $ok = $this->persistToDb();
         if ($ok) {
-            $this->saveStatus = '手動保存(TOKYO): ' . now()->format('H:i:s');
+            $this->saveStatus = $this->uiText('手動保存', 'Manual save') . '(TOKYO): ' . now()->format('H:i:s');
             $this->dispatch('saved'); // 任意：トースト（toast：小通知）用
         } else {
-            $this->saveStatus = '手動保存失敗(TOKYO): ' . now()->format('H:i:s');
+            $this->saveStatus = $this->uiText('手動保存失敗', 'Manual save failed') . '(TOKYO): ' . now()->format('H:i:s');
             $this->dispatch('save-failed');
         }
     }
@@ -621,10 +663,20 @@ final class Configurator extends Component
     {
         if (!$this->sessionId) return null;
         $this->saveError = null;
+        $this->recompute(true);
+
+        if (!empty($this->errors)) {
+            $this->saveError = $this->uiText(
+                '入力エラーがあるため、仕様書発行はできません。エラーを修正してください。',
+                'The specification sheet cannot be issued while input errors remain. Please fix the errors first.'
+            );
+            $this->saveStatus = $this->uiText('仕様書発行不可', 'Issue blocked') . '(TOKYO): ' . now()->format('H:i:s');
+            return null;
+        }
 
         $ok = $this->persistToDb();
         if (!$ok) {
-            $this->saveStatus = '見積発行失敗(TOKYO): ' . now()->format('H:i:s');
+            $this->saveStatus = $this->uiText('見積発行失敗', 'Issue failed') . '(TOKYO): ' . now()->format('H:i:s');
             return null;
         }
 
@@ -639,8 +691,11 @@ final class Configurator extends Component
             );
         } catch (\Throwable $e) {
             report($e);
-            $this->saveError = '見積発行に失敗しました。ログイン状態とアカウント紐付けを確認してください。';
-            $this->saveStatus = '見積発行失敗(TOKYO): ' . now()->format('H:i:s');
+            $this->saveError = $this->uiText(
+                '見積発行に失敗しました。ログイン状態とアカウント紐付けを確認してください。',
+                'Issue failed. Please check your login state and account linkage.'
+            );
+            $this->saveStatus = $this->uiText('見積発行失敗', 'Issue failed') . '(TOKYO): ' . now()->format('H:i:s');
             return null;
         }
 
@@ -651,8 +706,20 @@ final class Configurator extends Component
     {
         if (!$this->quoteEditId) return;
         $this->saveError = null;
+        $this->syncQuoteEditApprovalState();
+        $editComment = trim((string)$this->editComment);
+        $this->resetErrorBag('editComment');
 
         $this->recompute(true);
+
+        if (!empty($this->errors)) {
+            $this->saveError = $this->uiText(
+                '入力エラーがあるため、見積変更は申請できません。エラーを修正してください。',
+                'The quote update cannot be submitted while input errors remain. Please fix the errors first.'
+            );
+            $this->saveStatus = $this->uiText('見積変更申請不可', 'Quote update blocked') . '(TOKYO): ' . now()->format('H:i:s');
+            return;
+        }
 
         $dsl = $this->templateDsl;
         /** @var \App\Services\DslEngine $engine */
@@ -672,6 +739,8 @@ final class Configurator extends Component
         /** @var \App\Services\QuoteCalculationEngine $quoteCalculationEngine */
         $quoteCalculationEngine = app(\App\Services\QuoteCalculationEngine::class);
         try {
+            $specSheetNumber = $this->normalizeSpecSheetNumber($this->specSheetNumber);
+            $derived['specSheetNumber'] = $specSheetNumber;
             $calculation = $quoteCalculationEngine->calculate(
                 $accountId,
                 $bom,
@@ -683,14 +752,18 @@ final class Configurator extends Component
             );
         } catch (\Throwable $e) {
             report($e);
-            $this->saveError = '見積変更申請に失敗しました。値引きは0以下で入力してください。';
-            $this->saveStatus = '見積変更申請失敗(TOKYO): ' . now()->format('H:i:s');
+            $this->saveError = $this->uiText(
+                '見積変更申請に失敗しました。値引きは0以下で入力してください。',
+                'Quote update failed. Manual discount must be 0 or less.'
+            );
+            $this->saveStatus = $this->uiText('見積変更申請失敗', 'Quote update failed') . '(TOKYO): ' . now()->format('H:i:s');
             return;
         }
 
         $snapshot = [
             'template_version_id' => (int)$this->templateVersionId,
             'price_book_id' => $pricingResult['price_book_id'] ?? null,
+            'spec_sheet_number' => $specSheetNumber,
             'config' => $this->config,
             'derived' => $derived,
             'validation_errors' => $errors,
@@ -705,7 +778,7 @@ final class Configurator extends Component
 
         $quoteRow = DB::table('quotes')
             ->where('id', $this->quoteEditId)
-            ->first(['snapshot', 'memo']);
+            ->first(['snapshot', 'memo', 'spec_sheet_number']);
         $baseSnapshot = is_array($quoteRow?->snapshot) ? $quoteRow?->snapshot : json_decode((string)($quoteRow?->snapshot ?? ''), true);
         if (!is_array($baseSnapshot)) $baseSnapshot = [];
         $summaryFields = $this->normalizeSummaryFields($this->summaryFields);
@@ -718,31 +791,45 @@ final class Configurator extends Component
 
         $snapshot['summary_card_fields'] = $summaryFields;
         $baseSnapshot['summary_card_fields'] = $baseSummaryFields;
+        $baseSnapshot['spec_sheet_number'] = $this->normalizeSpecSheetNumber(
+            $quoteRow?->spec_sheet_number ?? ($baseSnapshot['spec_sheet_number'] ?? ($baseSnapshot['derived']['specSheetNumber'] ?? null))
+        );
+        $baseSnapshot['derived'] = is_array($baseSnapshot['derived'] ?? null) ? $baseSnapshot['derived'] : [];
+        $baseSnapshot['derived']['specSheetNumber'] = $baseSnapshot['spec_sheet_number'];
         unset($snapshot['account_display_name_source'], $baseSnapshot['account_display_name_source']);
         $baseSnapshot['memo'] = $this->normalizeMemo((string)($quoteRow?->memo ?? ''));
         if (is_array($baseSnapshot['pricing_input'] ?? null)) {
             $baseSnapshot['pricing_input'] = $this->normalizePricingInputArray($baseSnapshot['pricing_input']);
         }
 
-        $requestId = app(WorkChangeRequestService::class)->queueUpdate(
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
             'quote',
             (int)$this->quoteEditId,
             [
                 'snapshot' => $baseSnapshot,
                 'memo' => $quoteRow?->memo,
+                'spec_sheet_number' => $quoteRow?->spec_sheet_number,
             ],
             [
                 'snapshot' => $snapshot,
+                'spec_sheet_number' => $specSheetNumber,
             ],
             (int)auth()->id(),
-            'Configuratorからの変更申請'
+            $editComment
         );
+
+        $requestId = $changeRequestService->requestId($submission);
+        $approvalRequired = $changeRequestService->approvalRequired($submission);
+        $eventType = $approvalRequired
+            ? 'EDIT_REQUEST_SUBMIT'
+            : 'EDIT_DIRECT_APPLY';
 
         /** @var \App\Services\QuoteCalcRunRecorder $runRecorder */
         $runRecorder = app(\App\Services\QuoteCalcRunRecorder::class);
         $runRecorder->recordFromCalculation(
             (int)$this->quoteEditId,
-            'EDIT_REQUEST_SUBMIT',
+            $eventType,
             $calculation,
             (int)auth()->id(),
             true,
@@ -751,7 +838,10 @@ final class Configurator extends Component
             ['channel' => 'configurator']
         );
 
-        $this->saveStatus = '見積変更申請(TOKYO): ' . now()->format('H:i:s');
+        $this->quoteEditApprovalRequired = $approvalRequired;
+        $this->saveStatus = $approvalRequired
+            ? $this->uiText('見積変更申請（承認後反映）', 'Quote change request (approval required)') . '(TOKYO): ' . now()->format('H:i:s')
+            : $this->uiText('見積更新（即時反映）', 'Quote updated (applied immediately)') . '(TOKYO): ' . now()->format('H:i:s');
     }
 
     private function autoSaveIfDue(): void
@@ -765,9 +855,9 @@ final class Configurator extends Component
 
         $ok = $this->persistToDb();
         if ($ok) {
-            $this->saveStatus = '自動保存(TOKYO): ' . now()->format('H:i:s');
+            $this->saveStatus = $this->uiText('自動保存', 'Autosaved') . '(TOKYO): ' . now()->format('H:i:s');
         } else {
-            $this->saveStatus = '自動保存失敗(TOKYO): ' . now()->format('H:i:s');
+            $this->saveStatus = $this->uiText('自動保存失敗', 'Autosave failed') . '(TOKYO): ' . now()->format('H:i:s');
         }
     }
 
@@ -775,43 +865,120 @@ final class Configurator extends Component
     {
         $this->normalizeConfigUnitsToM();
 
-        // 1) derived（導出）
-        $mfdCount = (int)($this->config['mfdCount'] ?? 1);
-        $mfdCount = max(1, min(10, $mfdCount));      // 1..10 に丸める
+        if ($resizeArrays) {
+            // mode切替/件数入力時に再計算へ即反映するため、引数互換として残す
+        }
+
+        $processType = $this->normalizeProcessType($this->config['processType'] ?? self::PROCESS_TYPE_MFD);
+        $isTecMode = $this->isTecProcessType($processType);
+
+        // MFD変換個数は仕様で常に1固定（旧データ互換のためフィールドは残す）
+        $mfdCount = self::FIXED_MFD_COUNT;
         $this->config['mfdCount'] = $mfdCount;
 
-        $fiberCount = $mfdCount + 1;
+        $fiberCount = $this->resolveRequiredFiberCount($processType, $mfdCount);
+        $this->ensureArraySize('fibers', $fiberCount, $this->defaultFiberRow());
 
-        // 2) counts変更時のみ arrays（配列）調整
-        if ($resizeArrays) {
-            // sleeves（MFD点ごと）
-            $this->ensureArraySize('sleeves', $mfdCount, ['skuCode'=>null]);
-
-            $this->ensureArraySize('fibers', $fiberCount, ['skuCode'=>null,'lengthM'=>null,'toleranceM'=>null,'toleranceAuto'=>true]);
-
-            $tubeCount = (int)($this->config['tubeCount'] ?? 0);
-            $tubeCount = max(0, min($tubeCount, $fiberCount));   // 0..fiberCount
-            $this->config['tubeCount'] = $tubeCount;
-
-            $this->ensureArraySize('tubes', $tubeCount, [
-                'skuCode'=>null,
-                'anchor'=>['type'=>'MFD','index'=>0],
-                'targetFiberIndex'=>0,
-                'startFiberIndex'=>0,
-                'endFiberIndex'=>0,
-                'startOffsetM'=>0,
-                'endOffsetM'=>null,
-                'lengthM'=>null,
-                'toleranceM'=>null,
-                'toleranceAuto'=>true,
-            ]);
-        }
-
-        // 2.4) 旧フィールド互換（sleeveSkuCode → sleeves）
-        if (empty($this->config['sleeves']) && !empty($this->config['sleeveSkuCode'])) {
+        if (!$isTecMode && empty($this->config['sleeves']) && !empty($this->config['sleeveSkuCode'])) {
             $code = (string)$this->config['sleeveSkuCode'];
-            $this->config['sleeves'] = array_fill(0, $mfdCount, ['skuCode' => $code]);
+            $this->config['sleeves'] = [['skuCode' => $code]];
         }
+
+        $tubeCount = (int)($this->config['tubeCount'] ?? 0);
+        $tubeCount = max(0, min(self::MAX_TUBE_COUNT, $tubeCount));
+        $this->config['tubeCount'] = $tubeCount;
+        $this->ensureArraySize('tubes', $tubeCount, $this->defaultTubeRow());
+
+        if ($isTecMode) {
+            $this->config['sleeves'] = [];
+        } else {
+            $this->ensureArraySize('sleeves', self::FIXED_MFD_COUNT, ['skuCode' => null]);
+        }
+        $this->config['mfdAdjustments'] = [];
+        if ($isTecMode) {
+            $legacyTecType = $this->normalizeConcreteTecProcessType($processType);
+            $tecSide = $this->normalizeTecSide($this->config['tecSide'] ?? null);
+            $leftTecType = $this->normalizeConcreteTecProcessType($this->config['tecLeftProcessType'] ?? null);
+            $rightTecType = $this->normalizeConcreteTecProcessType($this->config['tecRightProcessType'] ?? null);
+
+            if ($tecSide === null) {
+                if ($leftTecType !== null && $rightTecType !== null) {
+                    $tecSide = 'both';
+                } elseif ($rightTecType !== null && $leftTecType === null) {
+                    $tecSide = 'right';
+                } else {
+                    $tecSide = 'left';
+                }
+            }
+
+            if ($tecSide === 'left') {
+                $leftTecType = $leftTecType ?? $legacyTecType ?? self::PROCESS_TYPE_TEC20;
+                $rightTecType = null;
+            } elseif ($tecSide === 'right') {
+                $rightTecType = $rightTecType ?? $legacyTecType ?? self::PROCESS_TYPE_TEC20;
+                $leftTecType = null;
+            } else {
+                $leftTecType = $leftTecType ?? $legacyTecType ?? self::PROCESS_TYPE_TEC20;
+                $rightTecType = $rightTecType ?? $legacyTecType ?? $leftTecType ?? self::PROCESS_TYPE_TEC20;
+            }
+
+            $this->config['tecSide'] = $tecSide;
+            $this->config['tecLeftProcessType'] = $leftTecType;
+            $this->config['tecRightProcessType'] = $rightTecType;
+            $this->config['processType'] = $tecSide === 'left'
+                ? ($leftTecType ?? self::PROCESS_TYPE_TEC)
+                : ($tecSide === 'right'
+                    ? ($rightTecType ?? self::PROCESS_TYPE_TEC)
+                    : self::PROCESS_TYPE_TEC);
+        } else {
+            $this->config['tecSide'] = null;
+            $this->config['tecLeftProcessType'] = null;
+            $this->config['tecRightProcessType'] = null;
+            $this->config['processType'] = self::PROCESS_TYPE_MFD;
+        }
+
+        $tubes = is_array($this->config['tubes'] ?? null) ? $this->config['tubes'] : [];
+        $maxFiberIndex = max(0, $fiberCount - 1);
+        foreach ($tubes as $i => $tube) {
+            if (!is_array($tube)) {
+                $tube = [];
+            }
+
+            $anchor = is_array($tube['anchor'] ?? null) ? $tube['anchor'] : [];
+            $anchorIndex = is_numeric($anchor['index'] ?? null) ? (int)$anchor['index'] : 0;
+            $anchor['type'] = 'MFD';
+            $anchor['index'] = max(0, min($mfdCount - 1, $anchorIndex));
+            $tube['anchor'] = $anchor;
+
+            $targetFiberIndex = is_numeric($tube['targetFiberIndex'] ?? null) ? (int)$tube['targetFiberIndex'] : 0;
+            $targetFiberIndex = max(0, min($maxFiberIndex, $targetFiberIndex));
+            $tube['targetFiberIndex'] = $targetFiberIndex;
+
+            $startFiberIndex = is_numeric($tube['startFiberIndex'] ?? null) ? (int)$tube['startFiberIndex'] : $targetFiberIndex;
+            $endFiberIndex = is_numeric($tube['endFiberIndex'] ?? null) ? (int)$tube['endFiberIndex'] : $startFiberIndex;
+            $tube['startFiberIndex'] = max(0, min($maxFiberIndex, $startFiberIndex));
+            $tube['endFiberIndex'] = max(0, min($maxFiberIndex, $endFiberIndex));
+            $tubes[$i] = $tube;
+        }
+        $this->config['tubes'] = $tubes;
+
+        $connectors = is_array($this->config['connectors'] ?? null) ? $this->config['connectors'] : [];
+        $connectors['mode'] = $this->normalizeConnectorMode($connectors['mode'] ?? ($isTecMode ? 'none' : 'both'), true);
+        if ($connectors['mode'] === 'none') {
+            $connectors['leftSkuCode'] = null;
+            $connectors['rightSkuCode'] = null;
+        } elseif ($connectors['mode'] === 'left') {
+            $connectors['rightSkuCode'] = null;
+        } elseif ($connectors['mode'] === 'right') {
+            $connectors['leftSkuCode'] = null;
+        }
+        if (!array_key_exists('leftSkuCode', $connectors)) {
+            $connectors['leftSkuCode'] = null;
+        }
+        if (!array_key_exists('rightSkuCode', $connectors)) {
+            $connectors['rightSkuCode'] = null;
+        }
+        $this->config['connectors'] = $connectors;
 
         // 2.5) ±誤差の自動算出（未入力なら自動埋め）
         $this->applyToleranceDefaultsToFibers();
@@ -850,6 +1017,7 @@ final class Configurator extends Component
             'segmentIllustrations' => $segmentIllustrations,
             'segmentLengthCapM' => $segmentCapM,
             'totalLengthM' => array_sum($displayLens),
+            'specSheetNumber' => $this->normalizeSpecSheetNumber($this->specSheetNumber),
             'skuNameByCode' => $this->skuNameMap,
             'skuSvgByCode' => $this->skuSvgMap,
         ]);
@@ -868,10 +1036,34 @@ final class Configurator extends Component
             : $this->resolveAccountId();
         $this->derived['pricing'] = $pricing->price($pricingAccountId, $this->derived['bom'] ?? []);
 
+        if ($this->quoteEditId) {
+            $orderQty = is_numeric($this->orderQty) ? (int)$this->orderQty : 1;
+            if ($orderQty < 1) {
+                $orderQty = 1;
+            }
+            /** @var \App\Services\LaborCostEngine $laborCostEngine */
+            $laborCostEngine = app(\App\Services\LaborCostEngine::class);
+            $effectiveLaborOverrides = $this->buildEffectiveLaborOverrides();
+            $laborPreview = $laborCostEngine->calculate(
+                is_array($this->derived['bom'] ?? null) ? $this->derived['bom'] : [],
+                $orderQty,
+                $effectiveLaborOverrides
+            );
+            $this->derived['labor_preview'] = $laborPreview;
+            $this->laborOverrideRows = is_array($laborPreview['processes'] ?? null) ? $laborPreview['processes'] : [];
+        } else {
+            $this->laborOverrideRows = [];
+        }
+
         // 4) SVG生成（DIせず app() で解決するのが安定）
         /** @var SvgRenderer $renderer */
         $renderer = app(\App\Services\SvgRenderer::class);
-        $svgString = $renderer->render($this->config, $this->derived, $this->errors);
+        $svgString = $renderer->render(
+            $this->config,
+            $this->derived,
+            $this->errors,
+            $this->shouldUseEnglishUi() ? 'en' : 'ja'
+        );
 
         // SVGを data URL に変換（ブラウザに画像として渡す）
         $this->svgDataUrl = 'data:image/svg+xml;utf8,' . rawurlencode($svgString);
@@ -890,6 +1082,128 @@ final class Configurator extends Component
         //     ]);
         //     $this->lastSavedAt = $now;
         // }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultFiberRow(): array
+    {
+        return [
+            'skuCode' => null,
+            'lengthM' => null,
+            'toleranceM' => self::FIBER_TOLERANCE_M,
+            'toleranceAuto' => false,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultTubeRow(): array
+    {
+        return [
+            'skuCode' => null,
+            'anchor' => ['type' => 'MFD', 'index' => 0],
+            'targetFiberIndex' => 0,
+            'startFiberIndex' => 0,
+            'endFiberIndex' => 0,
+            'startOffsetM' => 0,
+            'endOffsetM' => null,
+            'lengthM' => null,
+            'toleranceM' => self::TUBE_TOLERANCE_M,
+            'toleranceAuto' => false,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultMfdAdjustmentRow(): array
+    {
+        return [
+            'yield_rate' => null,
+            'order_qty' => null,
+            'actual_input_qty' => null,
+        ];
+    }
+
+    private function normalizeMfdAdjustmentsRows(): void
+    {
+        $rows = $this->config['mfdAdjustments'] ?? [];
+        if (!is_array($rows)) {
+            $rows = [];
+        }
+
+        foreach ($rows as $i => $row) {
+            $row = is_array($row) ? $row : [];
+            $rows[$i] = [
+                'yield_rate' => is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null,
+                'order_qty' => is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null,
+                'actual_input_qty' => is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null,
+                'key' => !empty($row['key']) ? (string)$row['key'] : (string)Str::uuid(),
+            ];
+        }
+
+        $this->config['mfdAdjustments'] = $rows;
+    }
+
+    private function normalizeProcessType(mixed $raw): string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::PROCESS_TYPES, true)) {
+            return self::PROCESS_TYPE_MFD;
+        }
+
+        return $value;
+    }
+
+    private function isTecProcessType(string $processType): bool
+    {
+        return $processType === self::PROCESS_TYPE_TEC
+            || in_array($processType, self::CONCRETE_TEC_PROCESS_TYPES, true);
+    }
+
+    private function resolveRequiredFiberCount(string $processType, int $mfdCount): int
+    {
+        if ($this->isTecProcessType($processType)) {
+            return self::FIXED_TEC_FIBER_COUNT;
+        }
+
+        return max(1, $mfdCount + 1);
+    }
+
+    private function normalizeTecSide(mixed $rawSide): ?string
+    {
+        $side = strtolower(trim((string)$rawSide));
+        if (!in_array($side, ['left', 'right', 'both'], true)) {
+            return null;
+        }
+
+        return $side;
+    }
+
+    private function normalizeConcreteTecProcessType(mixed $raw): ?string
+    {
+        $value = strtoupper(trim((string)$raw));
+        if (!in_array($value, self::CONCRETE_TEC_PROCESS_TYPES, true)) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    private function normalizeConnectorMode(mixed $rawMode, bool $allowBoth): string
+    {
+        $mode = strtolower(trim((string)$rawMode));
+        $allowed = $allowBoth
+            ? ['none', 'left', 'right', 'both']
+            : ['none', 'left', 'right'];
+        if (!in_array($mode, $allowed, true)) {
+            return $allowBoth ? 'both' : 'none';
+        }
+
+        return $mode;
     }
 
     private function ensureArraySize(string $key, int $size, array $fill): void
@@ -955,6 +1269,18 @@ final class Configurator extends Component
         return $v === '' ? null : $v;
     }
 
+    private function normalizeSpecSheetNumber(mixed $value): ?string
+    {
+        $normalized = trim((string)$value);
+        if ($normalized === '') {
+            return null;
+        }
+
+        return function_exists('mb_substr')
+            ? mb_substr($normalized, 0, 255)
+            : substr($normalized, 0, 255);
+    }
+
     /**
      * @param array<string, mixed> $input
      */
@@ -971,6 +1297,9 @@ final class Configurator extends Component
         $this->tradeScope = (string)$normalized['trade_scope'];
         $this->taxRate = $normalized['tax_rate'];
         $this->pricingPolicyId = $normalized['pricing_policy_id'];
+        $this->laborOverrides = is_array($normalized['labor_overrides'] ?? null)
+            ? $normalized['labor_overrides']
+            : ['processes' => [], 'elements' => []];
     }
 
     /**
@@ -978,6 +1307,8 @@ final class Configurator extends Component
      */
     private function exportPricingInput(): array
     {
+        $effectiveLaborOverrides = $this->buildEffectiveLaborOverrides();
+
         // /work/quotes/{id}/edit では従業員向けに全項目編集可。
         if ($this->quoteEditId) {
             return $this->normalizePricingInputArray([
@@ -991,10 +1322,11 @@ final class Configurator extends Component
                 'trade_scope' => $this->tradeScope,
                 'tax_rate' => $this->taxRate,
                 'pricing_policy_id' => $this->pricingPolicyId,
+                'labor_overrides' => $effectiveLaborOverrides,
             ]);
         }
 
-        // /configurator など顧客向け画面では注文数量のみ入力可。
+        // /configurator など顧客向け画面では注文数量のみ入力可（作業歩留まりはconfig依存で反映）。
         $defaults = $this->resolvePricingInputDefaults();
         $orderQty = is_numeric($this->orderQty) ? (int)$this->orderQty : 1;
         if ($orderQty < 1) {
@@ -1003,6 +1335,7 @@ final class Configurator extends Component
 
         return $this->normalizePricingInputArray(array_merge($defaults, [
             'order_qty' => $orderQty,
+            'labor_overrides' => $effectiveLaborOverrides,
         ]));
     }
 
@@ -1033,6 +1366,153 @@ final class Configurator extends Component
             'trade_scope' => $tradeScope,
             'tax_rate' => is_numeric($input['tax_rate'] ?? null) ? (float)$input['tax_rate'] : null,
             'pricing_policy_id' => is_numeric($input['pricing_policy_id'] ?? null) ? (int)$input['pricing_policy_id'] : null,
+            'labor_overrides' => $this->normalizeLaborOverridesArray($input['labor_overrides'] ?? []),
+        ];
+    }
+
+    /**
+     * @param mixed $raw
+     * @return array<string, mixed>
+     */
+    private function normalizeLaborOverridesArray(mixed $raw): array
+    {
+        $result = [
+            'processes' => [],
+            'elements' => [],
+        ];
+        if (!is_array($raw)) {
+            return $result;
+        }
+
+        $processes = is_array($raw['processes'] ?? null) ? $raw['processes'] : [];
+        foreach ($processes as $processCode => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $normalizedProcessCode = strtoupper(trim((string)$processCode));
+            if ($normalizedProcessCode === '') {
+                continue;
+            }
+            $result['processes'][$normalizedProcessCode] = $this->normalizeLaborYieldInputRow($row);
+        }
+
+        $elements = is_array($raw['elements'] ?? null) ? $raw['elements'] : [];
+        foreach ($elements as $processCode => $elementRows) {
+            if (!is_array($elementRows)) {
+                continue;
+            }
+            $normalizedProcessCode = strtoupper(trim((string)$processCode));
+            if ($normalizedProcessCode === '') {
+                continue;
+            }
+            foreach ($elementRows as $elementCode => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $normalizedElementCode = strtoupper(trim((string)$elementCode));
+                if ($normalizedElementCode === '') {
+                    continue;
+                }
+                $result['elements'][$normalizedProcessCode][$normalizedElementCode] = $this->normalizeLaborYieldInputRow($row);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildEffectiveLaborOverrides(): array
+    {
+        $normalized = $this->normalizeLaborOverridesArray($this->laborOverrides);
+        $mfdOverride = $this->buildMfdAdjustmentProcessOverride();
+        if (is_array($mfdOverride)) {
+            $existing = is_array($normalized['processes']['MFD'] ?? null)
+                ? $normalized['processes']['MFD']
+                : ['yield_rate' => null, 'order_qty' => null, 'actual_input_qty' => null];
+            $normalized['processes']['MFD'] = array_merge($existing, $mfdOverride);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array<string, float|null>|null
+     */
+    private function buildMfdAdjustmentProcessOverride(): ?array
+    {
+        // /configurator ではMFD個別微調整を適用しない（見積編集時のみ有効）
+        if (!$this->quoteEditId) {
+            return null;
+        }
+
+        $processType = $this->normalizeProcessType($this->config['processType'] ?? self::PROCESS_TYPE_MFD);
+        if ($this->isTecProcessType($processType)) {
+            return null;
+        }
+
+        $rows = $this->config['mfdAdjustments'] ?? [];
+        if (!is_array($rows) || count($rows) === 0) {
+            return null;
+        }
+
+        $ratioOrderSum = 0.0;
+        $ratioActualSum = 0.0;
+        $ratioCount = 0;
+        $yieldSum = 0.0;
+        $yieldCount = 0;
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $orderQty = is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null;
+            $actualInputQty = is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null;
+            if ($orderQty !== null && $actualInputQty !== null && $orderQty > 0 && $actualInputQty > 0) {
+                $ratioOrderSum += $orderQty;
+                $ratioActualSum += $actualInputQty;
+                $ratioCount++;
+                continue;
+            }
+
+            $yieldRate = is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null;
+            if ($yieldRate !== null && $yieldRate > 0) {
+                $yieldSum += $yieldRate;
+                $yieldCount++;
+            }
+        }
+
+        if ($ratioCount > 0 && $ratioActualSum > 0) {
+            $ratio = $ratioOrderSum / $ratioActualSum;
+            return [
+                'yield_rate' => $ratio,
+                'order_qty' => $ratioOrderSum,
+                'actual_input_qty' => $ratioActualSum,
+            ];
+        }
+
+        if ($yieldCount > 0) {
+            return [
+                'yield_rate' => ($yieldSum / $yieldCount),
+                'order_qty' => null,
+                'actual_input_qty' => null,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, float|null>
+     */
+    private function normalizeLaborYieldInputRow(array $row): array
+    {
+        return [
+            'yield_rate' => is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null,
+            'order_qty' => is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null,
+            'actual_input_qty' => is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null,
         ];
     }
 
@@ -1074,20 +1554,8 @@ final class Configurator extends Component
         if (!is_array($fibers)) return;
 
         foreach ($fibers as $i => $f) {
-            $tol = $f['toleranceM'] ?? null;
-            $auto = $f['toleranceAuto'] ?? true;
-
-            // 手入力で固定されていないものだけ自動更新
-            if ($auto === true) {
-                $len = $f['lengthM'] ?? null;
-                $len = is_numeric($len) ? (float)$len : null;
-
-                $computed = $this->autoTolerance($len);
-                if ($computed !== null) {
-                    $fibers[$i]['toleranceM'] = $computed;
-                    $fibers[$i]['toleranceAuto'] = true;
-                }
-            }
+            $fibers[$i]['toleranceM'] = self::FIBER_TOLERANCE_M;
+            $fibers[$i]['toleranceAuto'] = false;
         }
 
         $this->config['fibers'] = $fibers;
@@ -1099,19 +1567,8 @@ final class Configurator extends Component
         if (!is_array($tubes)) return;
 
         foreach ($tubes as $j => $t) {
-            $tol = $t['toleranceM'] ?? null;
-            $auto = $t['toleranceAuto'] ?? true;
-
-            if ($auto === true) {
-                $len = $t['lengthM'] ?? null;
-                $len = is_numeric($len) ? (float)$len : null;
-
-                $computed = $this->autoTolerance($len);
-                if ($computed !== null) {
-                    $tubes[$j]['toleranceM'] = $computed;
-                    $tubes[$j]['toleranceAuto'] = true;
-                }
-            }
+            $tubes[$j]['toleranceM'] = self::TUBE_TOLERANCE_M;
+            $tubes[$j]['toleranceAuto'] = false;
         }
 
         $this->config['tubes'] = $tubes;
@@ -1238,12 +1695,14 @@ final class Configurator extends Component
     {
         $errors = [];
 
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
         $mfdCount = (int)($config['mfdCount'] ?? 1);
-        if ($mfdCount < 1 || $mfdCount > 10) {
-            $errors[] = ['path' => 'mfdCount', 'message' => 'mfdCountは1〜10です'];
+        if ($mfdCount !== self::FIXED_MFD_COUNT) {
+            $errors[] = ['path' => 'mfdCount', 'message' => 'mfdCountは1固定です'];
         }
+        $mfdCount = self::FIXED_MFD_COUNT;
 
-        $fiberCount = $mfdCount + 1;
+        $fiberCount = $this->resolveRequiredFiberCount($processType, $mfdCount);
         $fibers = $config['fibers'] ?? [];
         if (!is_array($fibers) || count($fibers) !== $fiberCount) {
             $errors[] = ['path' => 'fibers', 'message' => 'fibers配列の個数が不正です'];
@@ -1263,9 +1722,9 @@ final class Configurator extends Component
     {
         $errors = [];
 
-        $mfdCount = (int)($config['mfdCount'] ?? 1);
-        $mfdCount = max(1, min(10, $mfdCount));
-        $fiberCount = $mfdCount + 1;
+        $mfdCount = self::FIXED_MFD_COUNT;
+        $processType = $this->normalizeProcessType($config['processType'] ?? self::PROCESS_TYPE_MFD);
+        $fiberCount = $this->resolveRequiredFiberCount($processType, $mfdCount);
 
         // fiber長さ（未入力に備えた暫定値）
         $fallbackPerSeg = 0.1;
@@ -1364,7 +1823,17 @@ final class Configurator extends Component
             }
         }
 
-        return empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        $resolved = empty($selected) ? self::SUMMARY_DEFAULT_FIELDS : $selected;
+        if (!in_array('order_qty', $resolved, true)) {
+            $statusIndex = array_search('status', $resolved, true);
+            if ($statusIndex === false) {
+                array_unshift($resolved, 'order_qty');
+            } else {
+                array_splice($resolved, $statusIndex + 1, 0, ['order_qty']);
+            }
+        }
+
+        return $resolved;
     }
 
     public function newSession(): void
@@ -1385,6 +1854,7 @@ final class Configurator extends Component
             'account_id' => $this->resolveAccountId(),
             'template_version_id' => $templateVersionId,
             'status' => 'DRAFT',
+            'spec_sheet_number' => $this->normalizeSpecSheetNumber($this->specSheetNumber),
             'config' => $config,
             'derived' => [],
             'validation_errors' => [],
@@ -1396,6 +1866,7 @@ final class Configurator extends Component
         $this->config = $session->config;
         $this->derived = [];
         $this->errors = [];
+        $this->specSheetNumber = $this->normalizeSpecSheetNumber($session->spec_sheet_number ?? null);
         $this->applyPricingInput(
             app(\App\Services\QuoteCalculationEngine::class)->defaultInputsForAccount((int)$session->account_id)
         );
@@ -1409,6 +1880,135 @@ final class Configurator extends Component
 
     public function render()
     {
-        return view('configurator')->layout('work.layout');
+        return view('configurator')->layout('work.layout', [
+            'title' => $this->shouldUseEnglishUi() ? 'Configurator' : null,
+            'htmlLang' => $this->shouldUseEnglishUi() ? 'en' : 'ja',
+        ]);
+    }
+
+    public function displayErrorMessage(array $error): string
+    {
+        return $this->translateValidationMessage((string)($error['message'] ?? ''));
+    }
+
+    private function shouldUseEnglishUi(): bool
+    {
+        return !$this->quoteEditId;
+    }
+
+    private function syncQuoteEditApprovalState(): void
+    {
+        if (!$this->quoteEditId) {
+            $this->effectiveQuoteAccountId = null;
+            $this->quoteEditDecisionAccountId = null;
+            $this->quoteEditApprovalRequired = null;
+            return;
+        }
+
+        $quoteAccountId = (int)DB::table('quotes')
+            ->whereNull('deleted_at')
+            ->where('id', (int)$this->quoteEditId)
+            ->value('account_id');
+        if ($quoteAccountId <= 0) {
+            $quoteAccountId = (int)($this->quoteAccountId ?? 0);
+        }
+
+        $this->effectiveQuoteAccountId = $quoteAccountId > 0 ? $quoteAccountId : null;
+        if ($quoteAccountId > 0) {
+            $this->quoteAccountId = $quoteAccountId;
+        }
+
+        $requirementService = app(AccountChangeRequestRequirementService::class);
+        $decisionAccountId = $requirementService->primaryAccountIdForUser((int)auth()->id());
+        if ($decisionAccountId <= 0) {
+            $decisionAccountId = $quoteAccountId;
+        }
+
+        $this->quoteEditDecisionAccountId = $decisionAccountId > 0 ? $decisionAccountId : null;
+        if ($decisionAccountId <= 0) {
+            $this->quoteEditApprovalRequired = true;
+            return;
+        }
+
+        $stateMap = $requirementService->stateMap($decisionAccountId);
+        $this->quoteEditApprovalRequired = (bool)($stateMap['quote'] ?? true);
+    }
+
+    private function uiText(string $ja, string $en): string
+    {
+        return $this->shouldUseEnglishUi() ? $en : $ja;
+    }
+
+    private function translateValidationMessage(string $message): string
+    {
+        if (!$this->shouldUseEnglishUi() || $message === '') {
+            return $message;
+        }
+
+        $exact = [
+            'processTypeは MFD / TEC / TEC20 / TEC30 / TEC20_HP / TEC30_HP のいずれかです' => 'processType must be one of MFD / TEC / TEC20 / TEC30 / TEC20_HP / TEC30_HP.',
+            'TECモードではtecSide（left/right/both）の指定が必須です' => 'TEC mode requires tecSide (left/right/both).',
+            '左端TEC種別を選択してください' => 'Please select the left TEC type.',
+            '右端TEC種別を選択してください' => 'Please select the right TEC type.',
+            'fibers配列の個数が不正です' => 'The number of fibers is invalid.',
+            'tubeCountは0〜2です' => 'tubeCount must be between 0 and 2.',
+            'connectors.modeが不正です' => 'connectors.mode is invalid.',
+            'TECモードではsleevesを設定できません' => 'Sleeves cannot be set in TEC mode.',
+            'tubesは最大2件です' => 'You can set up to 2 tubes.',
+            'ファイバを選択してください' => 'Please select a fiber.',
+            'チューブを選択してください' => 'Please select a tube.',
+            'コネクタを選択してください' => 'Please select a connector.',
+            '左側コネクタを選択してください' => 'Please select the left connector.',
+            '右側コネクタを選択してください' => 'Please select the right connector.',
+            'ファイバ長さが数値ではありません' => 'Fiber length must be numeric.',
+            'ファイバ長さは0.2〜2.0mです' => 'Fiber length must be between 0.2m and 2.0m.',
+            'ファイバ長さは0.1m刻みで入力してください' => 'Fiber length must be entered in 0.1m increments.',
+            'anchor.index（MFD番号）が数値ではありません' => 'anchor.index (MFD number) must be numeric.',
+            'startOffsetM（±m）が数値ではありません' => 'startOffsetM must be numeric.',
+            'チューブ位置は0.01m刻みで入力してください' => 'Tube positions must be entered in 0.01m increments.',
+            'startFiberIndexが数値ではありません' => 'startFiberIndex must be numeric.',
+            'endFiberIndexが数値ではありません' => 'endFiberIndex must be numeric.',
+            'endOffsetMが数値ではありません' => 'endOffsetM must be numeric.',
+            '終了位置が開始位置より左です' => 'The end position must not be left of the start position.',
+            'チューブ長さは0.2〜2.0mです' => 'Tube length must be between 0.2m and 2.0m.',
+            'チューブ長さが数値ではありません' => 'Tube length must be numeric.',
+            'チューブ長さは0.01m刻みで入力してください' => 'Tube length must be entered in 0.01m increments.',
+            'mfdCountは1固定です' => 'mfdCount is fixed at 1.',
+            'チューブ長さは0より大きくしてください' => 'Tube length must be greater than 0.',
+        ];
+        if (array_key_exists($message, $exact)) {
+            return $exact[$message];
+        }
+
+        if (preg_match('/^(.+)は([0-9.]+)以上です$/u', $message, $matches)) {
+            return $this->translateValidationFieldName($matches[1]) . ' must be ' . $matches[2] . ' or greater.';
+        }
+        if (preg_match('/^(.+)は([0-9.]+)以下です$/u', $message, $matches)) {
+            return $this->translateValidationFieldName($matches[1]) . ' must be ' . $matches[2] . ' or less.';
+        }
+        if (preg_match('/^anchor\.indexは0〜([0-9]+)です$/u', $message, $matches)) {
+            return 'anchor.index must be between 0 and ' . $matches[1] . '.';
+        }
+        if (preg_match('/^(startFiberIndex|endFiberIndex)は0〜([0-9]+)です$/u', $message, $matches)) {
+            return $this->translateValidationFieldName($matches[1]) . ' must be between 0 and ' . $matches[2] . '.';
+        }
+        if (preg_match('/^開始位置が範囲外です（0〜(.+)）$/u', $message, $matches)) {
+            return 'The start position is out of range (0 to ' . $matches[1] . ').';
+        }
+        if (preg_match('/^終了位置が範囲外です（0〜(.+)）$/u', $message, $matches)) {
+            return 'The end position is out of range (0 to ' . $matches[1] . ').';
+        }
+
+        return $message;
+    }
+
+    private function translateValidationFieldName(string $name): string
+    {
+        return match ($name) {
+            'tubeCount' => 'Tube count',
+            'startFiberIndex' => 'Start fiber index',
+            'endFiberIndex' => 'End fiber index',
+            default => $name,
+        };
     }
 }

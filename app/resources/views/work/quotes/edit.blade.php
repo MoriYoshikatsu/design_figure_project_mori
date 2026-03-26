@@ -1,8 +1,7 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>見積編集（コンフィギュレータ）</h1>
-    <div class="muted">見積ID: {{ $quote->id }}</div>
+    <h1>見積 #{{ $quote->id }} 編集</h1>
     <div style="margin:8px 0;">
         <a href="{{ route('work.quotes.show', $quote->id) }}">詳細へ戻る</a>
     </div>
@@ -19,6 +18,7 @@
         'initialConfig' => $initialConfig,
         'initialTemplateVersionId' => (int)$templateVersionId,
         'initialMemo' => $initialMemo ?? '',
+        'initialSpecSheetNumber' => $initialSpecSheetNumber ?? '',
         'initialSummaryFields' => $selectedSummaryFields ?? [],
         'summaryFieldOptions' => $summaryFieldOptions ?? [],
         'initialPricingInput' => $initialPricingInput ?? [],

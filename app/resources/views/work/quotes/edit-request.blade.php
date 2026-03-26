@@ -1,8 +1,7 @@
 @extends('work.layout')
 
 @section('content')
-    <h1>見積 編集承認変更申請</h1>
-    <div class="muted">ID: {{ $quote->id }}</div>
+    <h1>見積 #{{ $quote->id }} 編集 変更申請</h1>
 
     <form method="POST" action="{{ route('work.quotes.edit-request.store', $quote->id) }}">
         @csrf

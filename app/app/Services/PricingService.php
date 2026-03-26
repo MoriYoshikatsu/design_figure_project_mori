@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 final class PricingService
 {
     /**
-     * @param array<int, array{sku_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}> $bom
+     * @param array<int, array{part_code:string, quantity:float|int, options:array, source_path:?string, sort_order:int}> $bom
      * @return array{
      *   price_book_id:?int,
      *   currency:?string,
@@ -30,15 +30,15 @@ final class PricingService
         $subtotal = 0.0;
 
         $skuCodes = array_values(array_unique(array_filter(array_map(
-            fn ($r) => is_array($r) ? ($r['sku_code'] ?? null) : null,
+            fn ($r) => is_array($r) ? ($r['part_code'] ?? ($r['sku_code'] ?? null)) : null,
             $bom
         ))));
 
         $skuIdByCode = [];
         if (!empty($skuCodes)) {
-            $skuIdByCode = DB::table('skus')
-                ->whereIn('sku_code', $skuCodes)
-                ->pluck('id', 'sku_code')
+            $skuIdByCode = DB::table('parts')
+                ->whereIn('part_code', $skuCodes)
+                ->pluck('id', 'part_code')
                 ->all();
         }
 
@@ -46,16 +46,16 @@ final class PricingService
         if ($priceBookId && !empty($skuIdByCode)) {
             $pbiBySkuId = DB::table('price_book_items')
                 ->where('price_book_id', $priceBookId)
-                ->whereIn('sku_id', array_values($skuIdByCode))
+                ->whereIn('part_id', array_values($skuIdByCode))
                 ->get()
-                ->keyBy('sku_id')
+                ->keyBy('part_id')
                 ->map(fn ($row) => (array)$row)
                 ->all();
         }
 
         foreach ($bom as $row) {
             if (!is_array($row)) continue;
-            $skuCode = (string)($row['sku_code'] ?? '');
+            $skuCode = (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
             if ($skuCode === '') continue;
 
             $qty = $this->asNumber($row['quantity'] ?? 1);
@@ -78,7 +78,7 @@ final class PricingService
             }
 
             $items[] = [
-                'sku_code' => $skuCode,
+                'part_code' => $skuCode,
                 'quantity' => $qty,
                 'unit_price' => $unitPrice,
                 'line_total' => $lineTotal,
@@ -116,14 +116,17 @@ final class PricingService
             default => ['STANDARD'],
         };
 
+        $validAsOf = static function ($query) use ($asOf): void {
+            $query->where(function ($q) use ($asOf) {
+                $q->whereNull('valid_from')->orWhere('valid_from', '<=', $asOf);
+            })->where(function ($q) use ($asOf) {
+                $q->whereNull('valid_to')->orWhere('valid_to', '>=', $asOf);
+            });
+        };
+
         $candidates = DB::table('price_books')
             ->whereIn('name', $priority)
-            ->where(function ($q) use ($asOf) {
-                $q->whereNull('valid_from')->orWhere('valid_from', '<=', $asOf);
-            })
-            ->where(function ($q) use ($asOf) {
-                $q->whereNull('valid_to')->orWhere('valid_to', '>=', $asOf);
-            })
+            ->where($validAsOf)
             ->orderBy('valid_from', 'desc')
             ->orderBy('version', 'desc')
             ->get(['id', 'name', 'currency'])
@@ -137,9 +140,19 @@ final class PricingService
             }
         }
 
-        $row = $candidates[0] ?? null;
-        if (!$row) return null;
-        return ['id' => (int)$row->id, 'currency' => (string)$row->currency];
+        // 既定名の価格表が無い環境（例: MFD 名のみ）でも、
+        // 有効期間内の最新価格表を使って部材価格を算出する。
+        $fallbackRow = DB::table('price_books')
+            ->where($validAsOf)
+            ->orderBy('valid_from', 'desc')
+            ->orderBy('version', 'desc')
+            ->orderBy('id', 'desc')
+            ->first(['id', 'name', 'currency']);
+        if (!$fallbackRow) {
+            return null;
+        }
+
+        return ['id' => (int)$fallbackRow->id, 'currency' => (string)$fallbackRow->currency];
     }
 
     private function calcUnitPrice(?string $model, array $pbi, array $options): ?float

@@ -24,7 +24,7 @@
         }
     </style>
 
-    <h1>承認変更申請 一覧</h1>
+    <h1>変更申請 一覧</h1>
 
     <form method="GET" action="{{ route('work.change-requests.index') }}" style="margin:12px 0;">
         <div class="row">
@@ -62,36 +62,7 @@
             <div class="col">
                 <label>対象ID</label>
                 <input type="text" name="entity_id" value="{{ $filters['entity_id'] ?? '' }}" placeholder="数値で指定">
-            </div>            
-        {{-- </div>
-        <div class="row" style="margin-top:8px;">
-            <div class="col">
-                <label>申請者ユーザーID</label>
-                <select name="requested_by">
-                    <option value="">すべて</option>
-                    @foreach($requestedByOptions as $opt)
-                        <option value="{{ $opt }}" @if(($filters['requested_by'] ?? '') == (string)$opt) selected @endif>{{ $opt }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col">
-                <label>承認者ユーザーID</label>
-                <select name="approved_by">
-                    <option value="">すべて</option>
-                    @foreach($approvedByOptions as $opt)
-                        <option value="{{ $opt }}" @if(($filters['approved_by'] ?? '') == (string)$opt) selected @endif>{{ $opt }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="col">
-                <label>申請者ロール</label>
-                <select name="requested_role">
-                    <option value="">すべて</option>
-                    @foreach($requestedRoleOptions as $opt)
-                        <option value="{{ $opt }}" @if(($filters['requested_role'] ?? '') === $opt) selected @endif>{{ $opt }}</option>
-                    @endforeach
-                </select>
-            </div> --}}
+            </div>      
             <div class="col">
                 <label>承認状態</label>
                 <select name="approval_state">
@@ -101,42 +72,14 @@
                     @endforeach
                 </select>
             </div>
-        {{-- </div>
-        <div class="row" style="margin-top:8px;">
-            <div class="col">
-                <label>コメント</label>
-                <select name="has_comment">
-                    <option value="">すべて</option>
-                    @foreach($presenceOptions as $key => $label)
-                        <option value="{{ $key }}" @if(($filters['has_comment'] ?? '') === $key) selected @endif>{{ $label }}</option>
-                    @endforeach
-                </select>
+            <div class="col range-field">
+                <label>申請日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}" aria-label="申請日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}" aria-label="申請日 終点">
+                </div>
             </div>
-            <div class="col">
-                <label>メモ</label>
-                <select name="has_memo">
-                    <option value="">すべて</option>
-                    @foreach($presenceOptions as $key => $label)
-                        <option value="{{ $key }}" @if(($filters['has_memo'] ?? '') === $key) selected @endif>{{ $label }}</option>
-                    @endforeach
-                </select>
-            </div> --}}
-            <div class="col">
-                <label>申請日（開始）</label>
-                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>申請日（終了）</label>
-                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
-            </div>
-            {{-- <div class="col">
-                <label>承認日（開始）</label>
-                <input type="date" name="approved_from" value="{{ $filters['approved_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>承認日（終了）</label>
-                <input type="date" name="approved_to" value="{{ $filters['approved_to'] ?? '' }}">
-            </div> --}}
             <div class="actions" style="margin-top:13px;">
                 <button type="submit">絞り込み</button>
                 <a href="{{ route('work.change-requests.index') }}">クリア</a>

@@ -17,24 +17,34 @@ final class SkuController extends Controller
         $filters = $catalogIndexService->resolveSkuFilters($request, true);
         $panel = $catalogIndexService->buildSkuIndexData($filters);
 
-        return view('work.skus.index', $panel);
+        return view('work.parts.index', $panel);
     }
 
     public function create()
     {
-        return view('work.skus.create', [
+        return view('work.parts.create', [
             'categories' => self::CATEGORIES,
         ]);
     }
 
     public function store(Request $request)
     {
+        $request->merge([
+            'part_code' => trim((string)$request->input('part_code')),
+            'name' => trim((string)$request->input('name')),
+            'name_en' => trim((string)$request->input('name_en', '')),
+        ]);
+
         $data = $request->validate([
-            'sku_code' => 'required|string|max:255|unique:skus,sku_code',
+            'part_code' => 'required|string|max:255|unique:parts,part_code',
             'name' => 'required|string|max:255',
+            'name_en' => 'nullable|string|max:255',
             'category' => 'required|string',
             'attributes' => 'nullable|string',
             'memo' => 'nullable|string|max:5000',
+        ], [
+            'part_code.required' => 'Part codeを入力してください',
+            'name.required' => 'Part Nameを入力してください',
         ]);
 
         if (!in_array($data['category'], self::CATEGORIES, true)) {
@@ -52,31 +62,39 @@ final class SkuController extends Controller
         }
 
         $active = $request->boolean('active', true);
+        $nameEn = trim((string)($data['name_en'] ?? ''));
+        if ($nameEn === '') $nameEn = null;
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') $memo = null;
 
         $after = [
-            'sku_code' => $data['sku_code'],
+            'part_code' => $data['part_code'],
             'name' => $data['name'],
+            'name_en' => $nameEn,
             'category' => $data['category'],
             'active' => $active,
             'attributes' => $attrs,
             'memo' => $memo,
         ];
 
-        app(WorkChangeRequestService::class)->queueCreate(
-            'sku',
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueCreate(
+            'part',
             $after,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.skus.index')->with('status', 'SKUの作成申請を送信しました');
+        return redirect()->route('work.parts.index')->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'Partを作成しました',
+            'Partの作成申請を送信しました'
+        ));
     }
 
     public function edit(int $id)
     {
-        $sku = DB::table('skus')->whereNull('deleted_at')->where('id', $id)->first();
+        $sku = DB::table('parts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$sku) abort(404);
 
         $attrs = $sku->attributes ?? '';
@@ -84,7 +102,7 @@ final class SkuController extends Controller
             $attrs = json_encode($attrs, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         }
 
-        return view('work.skus.edit', [
+        return view('work.parts.edit', [
             'sku' => $sku,
             'attributesJson' => (string)$attrs,
             'categories' => self::CATEGORIES,
@@ -93,15 +111,25 @@ final class SkuController extends Controller
 
     public function update(Request $request, int $id)
     {
-        $sku = DB::table('skus')->whereNull('deleted_at')->where('id', $id)->first();
+        $sku = DB::table('parts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$sku) abort(404);
 
+        $request->merge([
+            'part_code' => trim((string)$request->input('part_code')),
+            'name' => trim((string)$request->input('name')),
+            'name_en' => trim((string)$request->input('name_en', '')),
+        ]);
+
         $data = $request->validate([
-            'sku_code' => 'required|string|max:255|unique:skus,sku_code,' . $id,
+            'part_code' => 'required|string|max:255|unique:parts,part_code,' . $id,
             'name' => 'required|string|max:255',
+            'name_en' => 'nullable|string|max:255',
             'category' => 'required|string',
             'attributes' => 'nullable|string',
             'memo' => 'nullable|string|max:5000',
+        ], [
+            'part_code.required' => 'Part codeを入力してください',
+            'name.required' => 'Part Nameを入力してください',
         ]);
 
         if (!in_array($data['category'], self::CATEGORIES, true)) {
@@ -119,19 +147,23 @@ final class SkuController extends Controller
         }
 
         $active = $request->boolean('active', false);
+        $nameEn = trim((string)($data['name_en'] ?? ''));
+        if ($nameEn === '') $nameEn = null;
         $memo = trim((string)($data['memo'] ?? ''));
         if ($memo === '') $memo = null;
 
         $after = [
-            'sku_code' => $data['sku_code'],
+            'part_code' => $data['part_code'],
             'name' => $data['name'],
+            'name_en' => $nameEn,
             'category' => $data['category'],
             'active' => $active,
             'attributes' => $attrs,
             'memo' => $memo,
         ];
-        app(WorkChangeRequestService::class)->queueUpdate(
-            'sku',
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueUpdate(
+            'part',
             $id,
             (array)$sku,
             $after,
@@ -139,27 +171,39 @@ final class SkuController extends Controller
             (string)$request->input('comment', '')
         );
 
-        return redirect()->route('work.skus.edit', $id)->with('status', 'SKUの更新申請を送信しました');
+        return redirect()->route('work.parts.edit', $id)->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'Partを更新しました',
+            'Partの更新申請を送信しました'
+        ));
     }
 
     public function destroy(Request $request, int $id)
     {
-        $sku = DB::table('skus')->whereNull('deleted_at')->where('id', $id)->first();
+        $sku = DB::table('parts')->whereNull('deleted_at')->where('id', $id)->first();
         if (!$sku) abort(404);
 
-        app(WorkChangeRequestService::class)->queueDelete(
-            'sku',
+        $changeRequestService = app(WorkChangeRequestService::class);
+        $submission = $changeRequestService->queueDelete(
+            'part',
             $id,
             (array)$sku,
             (int)$request->user()->id,
             (string)$request->input('comment', '')
         );
 
-        $tab = (string)$request->input('tab', 'skus');
-        if (!in_array($tab, ['skus', 'price_books'], true)) {
-            $tab = 'skus';
+        $tab = (string)$request->input('tab', 'parts');
+        if ($tab === 'skus') {
+            $tab = 'parts';
+        }
+        if (!in_array($tab, ['parts', 'price_books'], true)) {
+            $tab = 'parts';
         }
 
-        return redirect()->route('work.skus.index', ['tab' => $tab])->with('status', 'SKUの削除申請を送信しました');
+        return redirect()->route('work.parts.index', ['tab' => $tab])->with('status', $changeRequestService->outcomeMessage(
+            $submission,
+            'Partを削除しました',
+            'Partの削除申請を送信しました'
+        ));
     }
 }

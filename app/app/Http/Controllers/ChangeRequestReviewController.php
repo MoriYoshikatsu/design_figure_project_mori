@@ -745,10 +745,20 @@ final class ChangeRequestReviewController extends Controller
         return redirect()->route('work.change-requests.index')->with('status', '承認しました');
     }
 
-    public function reject(int $id)
+    public function reject(Request $request, int $id)
     {
+        $validated = $request->validate(
+            [
+                'reject_comment' => 'required|string|max:5000',
+            ],
+            [
+                'reject_comment.required' => '却下コメントは必須です。',
+                'reject_comment.max' => '却下コメントは5000文字以内で入力してください。',
+            ]
+        );
+        $rejectComment = trim((string)($validated['reject_comment'] ?? ''));
         $actorId = (int)auth()->id();
-        DB::transaction(function () use ($id, $actorId) {
+        DB::transaction(function () use ($id, $actorId, $rejectComment) {
             $req = DB::table('change_requests')
                 ->where('id', $id)
                 ->lockForUpdate()
@@ -764,6 +774,7 @@ final class ChangeRequestReviewController extends Controller
                 'status' => 'REJECTED',
                 'approved_by' => $actorId,
                 'approved_at' => now(),
+                'comment' => $this->mergeRejectComment((string)($req->comment ?? ''), $rejectComment),
                 'updated_at' => now(),
             ]);
 
@@ -785,6 +796,22 @@ final class ChangeRequestReviewController extends Controller
         });
 
         return redirect()->route('work.change-requests.index')->with('status', '却下しました');
+    }
+
+    private function mergeRejectComment(string $existingComment, string $rejectComment): string
+    {
+        $existingComment = trim($existingComment);
+        $rejectComment = trim($rejectComment);
+        if ($rejectComment === '') {
+            return $existingComment;
+        }
+
+        $line = '【却下コメント】 ' . $rejectComment;
+        if ($existingComment === '') {
+            return $line;
+        }
+
+        return $existingComment . "\n\n" . $line;
     }
 
     public function updateMemo(\Illuminate\Http\Request $request, int $id)
@@ -856,6 +883,7 @@ final class ChangeRequestReviewController extends Controller
 
         $before = [
             'snapshot' => $this->decodeJson($quote->snapshot) ?? [],
+            'spec_sheet_number' => $quote->spec_sheet_number ?? null,
             'subtotal' => (float)$quote->subtotal,
             'tax_total' => (float)$quote->tax_total,
             'total' => (float)$quote->total,
@@ -865,9 +893,12 @@ final class ChangeRequestReviewController extends Controller
         $subtotal = isset($totals['subtotal']) ? (float)$totals['subtotal'] : (float)$quote->subtotal;
         $tax = isset($totals['tax']) ? (float)$totals['tax'] : (float)$quote->tax_total;
         $total = isset($totals['total']) ? (float)$totals['total'] : (float)$quote->total;
+        $specSheetNumber = trim((string)($snapshot['spec_sheet_number'] ?? ''));
+        $specSheetNumber = $specSheetNumber !== '' ? $specSheetNumber : null;
 
         DB::table('quotes')->where('id', $quoteId)->update([
             'snapshot' => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            'spec_sheet_number' => $specSheetNumber,
             'subtotal' => $subtotal,
             'tax_total' => $tax,
             'total' => $total,
@@ -878,6 +909,7 @@ final class ChangeRequestReviewController extends Controller
 
         $after = [
             'snapshot' => $snapshot,
+            'spec_sheet_number' => $specSheetNumber,
             'subtotal' => $subtotal,
             'tax_total' => $tax,
             'total' => $total,
@@ -899,7 +931,7 @@ final class ChangeRequestReviewController extends Controller
 
     private function buildSkuNameMap(): array
     {
-        return DB::table('skus')->pluck('name', 'sku_code')->all();
+        return DB::table('parts')->pluck('name', 'part_code')->all();
     }
 
     private function buildSkuSvgMap(): array
@@ -928,22 +960,22 @@ final class ChangeRequestReviewController extends Controller
         }
 
         $skuCodes = array_values(array_unique(array_filter(array_map(
-            fn ($r) => is_array($r) ? ($r['sku_code'] ?? null) : null,
+            fn ($r) => is_array($r) ? ($r['part_code'] ?? ($r['sku_code'] ?? null)) : null,
             $bom
         ))));
 
         $skuIdByCode = [];
         if (!empty($skuCodes)) {
-            $skuIdByCode = DB::table('skus')
-                ->whereIn('sku_code', $skuCodes)
-                ->pluck('id', 'sku_code')
+            $skuIdByCode = DB::table('parts')
+                ->whereIn('part_code', $skuCodes)
+                ->pluck('id', 'part_code')
                 ->all();
         }
 
         $rows = [];
         foreach ($bom as $row) {
             if (!is_array($row)) continue;
-            $skuCode = (string)($row['sku_code'] ?? '');
+            $skuCode = (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
             if ($skuCode === '') continue;
             $skuId = $skuIdByCode[$skuCode] ?? null;
             if (!$skuId) continue;
@@ -957,7 +989,7 @@ final class ChangeRequestReviewController extends Controller
 
             $rows[] = [
                 'quote_id' => $quoteId,
-                'sku_id' => $skuId,
+                'part_id' => $skuId,
                 'quantity' => $qty,
                 'unit_price' => $unitPrice,
                 'line_total' => $lineTotal,

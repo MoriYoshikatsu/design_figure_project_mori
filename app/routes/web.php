@@ -17,6 +17,7 @@ use App\Http\Controllers\SessionController;
 use App\Http\Controllers\ChangeRequestController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\LaborCostController;
 use App\Services\GuestAccountClaimService;
 use App\Services\SnapshotPdfService;
 
@@ -76,8 +77,12 @@ Route::post('/configurator/autosave', function (Request $request) {
         $memo = trim((string)$request->input('memo', ''));
         $payload['memo'] = $memo === '' ? null : $memo;
     }
+    if ($request->has('spec_sheet_number')) {
+        $specSheetNumber = trim((string)$request->input('spec_sheet_number', ''));
+        $payload['spec_sheet_number'] = $specSheetNumber === '' ? null : $specSheetNumber;
+    }
 
-    // ここではconfig/memoだけ保存（derived/errorsは次回表示時に再計算でOK）
+    // ここではconfig/memo/仕様書番号だけ保存（derived/errorsは次回表示時に再計算でOK）
     ConfiguratorSession::where('id', $sid)->update($payload);
 
     return response()->noContent(); // 空でOK
@@ -155,7 +160,7 @@ Route::get('/quotes/{id}', function ($id, SvgRenderer $renderer) {
     $derived = $snapshot['derived'] ?? [];
     $errors = $snapshot['validation_errors'] ?? [];
 
-    $svg = $renderer->render($config, $derived, $errors);
+    $svg = $renderer->render($config, $derived, $errors, 'en');
 
     $totals = $snapshot['totals'] ?? [
         'subtotal' => (float)($quote->subtotal ?? 0),
@@ -241,7 +246,7 @@ Route::get('/quotes/{id}/snapshot.pdf', function ($id, SvgRenderer $renderer, Sn
         'total' => (float)($quote->total ?? 0),
     ];
 
-    $svg = $renderer->render($config, $derived, $errors);
+    $svg = $renderer->render($config, $derived, $errors, 'en');
 
     $filename = $pdfService->buildFilename(
         'quote',
@@ -266,27 +271,32 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::post('/accounts/edit-request/create', [AccountController::class, 'store'])->name('accounts.edit-request.create');
     Route::get('/accounts/{id}/edit', [AccountController::class, 'edit'])->name('accounts.edit');
     Route::get('/accounts/{id}/permissions', [AccountController::class, 'permissions'])->name('accounts.permissions');
+    Route::post('/accounts/{id}/permissions', [AccountController::class, 'updatePermissions'])->name('accounts.permissions.update');
     Route::put('/accounts/{id}', [AccountController::class, 'update'])->name('accounts.update');
     Route::post('/accounts/{id}/edit-request/update', [AccountController::class, 'update'])->name('accounts.edit-request.update');
     Route::post('/accounts/{id}/edit-request/delete', [AccountController::class, 'destroy'])->name('accounts.edit-request.delete');
     Route::put('/accounts/{id}/members/{userId}/memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.update');
     Route::post('/accounts/{id}/members/{userId}/edit-request/update-memo', [AccountController::class, 'updateMemberMemo'])->name('accounts.members.memo.edit-request.update');
-    Route::post('/accounts/{id}/sales-route-permissions', [AccountController::class, 'storeSalesRoutePermission'])->name('accounts.sales-route-permissions.store');
-    Route::post('/accounts/{id}/sales-route-permissions/edit-request/create', [AccountController::class, 'storeSalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.create');
-    Route::put('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'updateSalesRoutePermission'])->name('accounts.sales-route-permissions.update');
-    Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/update', [AccountController::class, 'updateSalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.update');
-    Route::delete('/accounts/{id}/sales-route-permissions/{permId}', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.destroy');
-    Route::post('/accounts/{id}/sales-route-permissions/{permId}/edit-request/delete', [AccountController::class, 'destroySalesRoutePermission'])->name('accounts.sales-route-permissions.edit-request.delete');
 
-    Route::get('/skus', [CatalogController::class, 'index'])->name('skus.index');
-    Route::get('/skus/create', [SkuController::class, 'create'])->name('skus.create');
-    Route::post('/skus', [SkuController::class, 'store'])->name('skus.store');
-    Route::post('/skus/edit-request/create', [SkuController::class, 'store'])->name('skus.edit-request.create');
-    Route::get('/skus/{id}/edit', [SkuController::class, 'edit'])->name('skus.edit');
-    Route::put('/skus/{id}', [SkuController::class, 'update'])->name('skus.update');
-    Route::post('/skus/{id}/edit-request/update', [SkuController::class, 'update'])->name('skus.edit-request.update');
-    Route::delete('/skus/{id}', [SkuController::class, 'destroy'])->name('skus.destroy');
-    Route::post('/skus/{id}/edit-request/delete', [SkuController::class, 'destroy'])->name('skus.edit-request.delete');
+    Route::get('/parts', [CatalogController::class, 'index'])->name('parts.index');
+    Route::get('/parts/create', [SkuController::class, 'create'])->name('parts.create');
+    Route::post('/parts', [SkuController::class, 'store'])->name('parts.store');
+    Route::post('/parts/edit-request/create', [SkuController::class, 'store'])->name('parts.edit-request.create');
+    Route::get('/parts/{id}/edit', [SkuController::class, 'edit'])->name('parts.edit');
+    Route::put('/parts/{id}', [SkuController::class, 'update'])->name('parts.update');
+    Route::post('/parts/{id}/edit-request/update', [SkuController::class, 'update'])->name('parts.edit-request.update');
+    Route::delete('/parts/{id}', [SkuController::class, 'destroy'])->name('parts.destroy');
+    Route::post('/parts/{id}/edit-request/delete', [SkuController::class, 'destroy'])->name('parts.edit-request.delete');
+
+    Route::get('/skus', [CatalogController::class, 'index']);
+    Route::get('/skus/create', [SkuController::class, 'create']);
+    Route::post('/skus', [SkuController::class, 'store']);
+    Route::post('/skus/edit-request/create', [SkuController::class, 'store']);
+    Route::get('/skus/{id}/edit', [SkuController::class, 'edit']);
+    Route::put('/skus/{id}', [SkuController::class, 'update']);
+    Route::post('/skus/{id}/edit-request/update', [SkuController::class, 'update']);
+    Route::delete('/skus/{id}', [SkuController::class, 'destroy']);
+    Route::post('/skus/{id}/edit-request/delete', [SkuController::class, 'destroy']);
 
     Route::get('/price-books', [CatalogController::class, 'index'])->name('price-books.index');
     Route::get('/price-books/create', [PriceBookController::class, 'create'])->name('price-books.create');
@@ -306,6 +316,21 @@ Route::middleware(['auth', 'work.access'])->prefix('work')->name('work.')->group
     Route::post('/price-books/{id}/items/{item}/edit-request/update', [PriceBookItemController::class, 'update'])->name('price-books.items.edit-request.update');
     Route::delete('/price-books/{id}/items/{item}', [PriceBookItemController::class, 'destroy'])->name('price-books.items.destroy');
     Route::post('/price-books/{id}/items/{item}/edit-request/delete', [PriceBookItemController::class, 'destroy'])->name('price-books.items.edit-request.delete');
+
+    Route::get('/labor-costs', [LaborCostController::class, 'index'])->name('labor-costs.index');
+    Route::post('/labor-costs/settings/edit-request/update', [LaborCostController::class, 'updateSetting'])->name('labor-costs.settings.edit-request.update');
+
+    Route::post('/labor-costs/processes/edit-request/create', [LaborCostController::class, 'storeProcess'])->name('labor-costs.processes.edit-request.create');
+    Route::post('/labor-costs/processes/{id}/edit-request/update', [LaborCostController::class, 'updateProcess'])->name('labor-costs.processes.edit-request.update');
+    Route::post('/labor-costs/processes/{id}/edit-request/delete', [LaborCostController::class, 'destroyProcess'])->name('labor-costs.processes.edit-request.delete');
+
+    Route::post('/labor-costs/elements/edit-request/create', [LaborCostController::class, 'storeElement'])->name('labor-costs.elements.edit-request.create');
+    Route::post('/labor-costs/elements/{id}/edit-request/update', [LaborCostController::class, 'updateElement'])->name('labor-costs.elements.edit-request.update');
+    Route::post('/labor-costs/elements/{id}/edit-request/delete', [LaborCostController::class, 'destroyElement'])->name('labor-costs.elements.edit-request.delete');
+
+    Route::post('/labor-costs/rules/edit-request/create', [LaborCostController::class, 'storeRule'])->name('labor-costs.rules.edit-request.create');
+    Route::post('/labor-costs/rules/{id}/edit-request/update', [LaborCostController::class, 'updateRule'])->name('labor-costs.rules.edit-request.update');
+    Route::post('/labor-costs/rules/{id}/edit-request/delete', [LaborCostController::class, 'destroyRule'])->name('labor-costs.rules.edit-request.delete');
 
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');

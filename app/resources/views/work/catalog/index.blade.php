@@ -6,12 +6,12 @@
         $priceBookPanel = is_array($priceBookPanel ?? null) ? $priceBookPanel : [];
         $skuCount = is_countable($skuPanel['skus'] ?? null) ? count($skuPanel['skus']) : 0;
         $priceBookCount = is_countable($priceBookPanel['books'] ?? null) ? count($priceBookPanel['books']) : 0;
-        $entryRouteName = (string)($entryRouteName ?? 'work.skus.index');
+        $entryRouteName = (string)($entryRouteName ?? 'work.parts.index');
         $baseQuery = [
-            'sku' => is_array($skuFilters ?? null) ? $skuFilters : [],
+            'part' => is_array($skuFilters ?? null) ? $skuFilters : [],
             'pb' => is_array($priceBookFilters ?? null) ? $priceBookFilters : [],
         ];
-        $skuTabUrl = route($entryRouteName, array_merge($baseQuery, ['tab' => 'skus']));
+        $skuTabUrl = route($entryRouteName, array_merge($baseQuery, ['tab' => 'parts']));
         $priceBookTabUrl = route($entryRouteName, array_merge($baseQuery, ['tab' => 'price_books']));
     @endphp
 
@@ -131,7 +131,7 @@
     </style>
 
     <div data-catalog-root data-active-tab="{{ $activeTab }}">
-        <h1>パーツ・価格管理</h1>
+        <h1>パーツ価格</h1>
 
         @include('work.catalog._tab_switch', [
             'activeTab' => $activeTab,
@@ -143,9 +143,9 @@
             'priceBookTabUrl' => $priceBookTabUrl,
         ])
 
-        <section class="catalog-panel" data-catalog-panel="skus" @if($activeTab !== 'skus') hidden @endif>
+        <section class="catalog-panel" data-catalog-panel="parts" @if($activeTab !== 'parts') hidden @endif>
             @if($canAccessSkus)
-                @include('work.catalog._sku_panel', [
+                @include('work.catalog._part_panel', [
                     'indexRouteName' => $entryRouteName,
                     'skus' => $skuPanel['skus'] ?? collect(),
                     'filters' => $skuPanel['filters'] ?? [],
@@ -154,7 +154,7 @@
                     'priceBookFilters' => $priceBookFilters,
                 ])
             @else
-                <div class="muted" style="margin:10px 0;">SKU管理の閲覧権限がありません。</div>
+                <div class="muted" style="margin:10px 0;">Partの閲覧権限がありません。</div>
             @endif
         </section>
 
@@ -184,7 +184,7 @@
 
             const tabButtons = Array.from(root.querySelectorAll('[data-catalog-tab]'));
             const panels = {
-                skus: root.querySelector('[data-catalog-panel="skus"]'),
+                parts: root.querySelector('[data-catalog-panel="parts"]'),
                 price_books: root.querySelector('[data-catalog-panel="price_books"]'),
             };
 
@@ -224,7 +224,7 @@
                 });
             });
 
-            const initialTab = root.getAttribute('data-active-tab') || 'skus';
+            const initialTab = root.getAttribute('data-active-tab') || 'parts';
             setActiveTab(initialTab, false);
 
             const backdrop = document.getElementById('catalog-detail-backdrop');

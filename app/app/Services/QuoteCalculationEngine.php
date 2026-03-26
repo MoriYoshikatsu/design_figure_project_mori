@@ -57,7 +57,10 @@ final class QuoteCalculationEngine
         $roundingUnit = max(0.000001, (float)($rounding['unit'] ?? 1));
         $roundingMode = (string)($rounding['mode'] ?? 'ROUNDUP');
 
-        $step0 = $this->buildStep0($bom, $pricingItems);
+        $laborOverrides = $this->normalizeLaborOverridesInput(
+            is_array($input['labor_overrides'] ?? null) ? $input['labor_overrides'] : []
+        );
+        $step0 = $this->buildStep0($bom, $pricingItems, $orderQty, $laborOverrides);
         $partsUnitCost = $step0['parts_unit_cost'];
         $laborUnitCost = $step0['labor_unit_cost'];
         $variableUnitCost = $step0['variable_unit_cost'];
@@ -89,6 +92,7 @@ final class QuoteCalculationEngine
             'rounding_currency' => $currency,
             'rounding_unit' => $roundingUnit,
             'rounding_mode' => $roundingMode,
+            'labor_overrides' => $laborOverrides,
         ];
 
         $pricingSteps = [
@@ -184,6 +188,10 @@ final class QuoteCalculationEngine
             'rounding_currency' => $resolvedCurrency,
             'rounding_unit' => (float)($rounding['unit'] ?? 1),
             'rounding_mode' => (string)($rounding['mode'] ?? 'ROUNDUP'),
+            'labor_overrides' => [
+                'processes' => [],
+                'elements' => [],
+            ],
         ];
     }
 
@@ -192,7 +200,7 @@ final class QuoteCalculationEngine
      * @param array<int, array<string, mixed>> $pricingItems
      * @return array<string, mixed>
      */
-    private function buildStep0(array $bom, array $pricingItems): array
+    private function buildStep0(array $bom, array $pricingItems, int $orderQty, array $laborOverrides): array
     {
         $pricingBySortOrder = [];
         foreach ($pricingItems as $item) {
@@ -202,7 +210,7 @@ final class QuoteCalculationEngine
 
         $skuCodes = [];
         foreach ($bom as $row) {
-            $code = trim((string)($row['sku_code'] ?? ''));
+            $code = trim((string)($row['part_code'] ?? ($row['sku_code'] ?? '')));
             if ($code !== '') {
                 $skuCodes[$code] = true;
             }
@@ -210,64 +218,22 @@ final class QuoteCalculationEngine
 
         $skuMetaByCode = [];
         if (!empty($skuCodes)) {
-            $rows = DB::table('skus')
-                ->whereIn('sku_code', array_keys($skuCodes))
-                ->get(['id', 'sku_code', 'category']);
+            $rows = DB::table('parts')
+                ->whereIn('part_code', array_keys($skuCodes))
+                ->get(['id', 'part_code', 'category']);
             foreach ($rows as $row) {
-                $skuMetaByCode[(string)$row->sku_code] = [
+                $skuMetaByCode[(string)$row->part_code] = [
                     'id' => (int)$row->id,
                     'category' => strtoupper((string)$row->category),
                 ];
             }
         }
 
-        $procSkuIds = [];
-        foreach ($bom as $index => $row) {
-            $skuCode = trim((string)($row['sku_code'] ?? ''));
-            if ($skuCode === '') {
-                continue;
-            }
-            $meta = $skuMetaByCode[$skuCode] ?? null;
-            if (!$meta) {
-                continue;
-            }
-            if (($meta['category'] ?? '') === 'PROC') {
-                $procSkuIds[(int)$meta['id']] = true;
-            }
-        }
-
-        $laborBySkuId = [];
-        if (!empty($procSkuIds) && $this->hasTable('processing_labor_costs')) {
-            $laborRows = DB::table('processing_labor_costs')
-                ->whereNull('deleted_at')
-                ->where('active', true)
-                ->whereIn('sku_id', array_keys($procSkuIds))
-                ->orderByDesc('id')
-                ->get();
-            foreach ($laborRows as $laborRow) {
-                $skuId = (int)$laborRow->sku_id;
-                if (!isset($laborBySkuId[$skuId])) {
-                    $laborBySkuId[$skuId] = [
-                        'id' => (int)$laborRow->id,
-                        'labor_time_hours' => (float)$laborRow->labor_time_hours,
-                        'hourly_rate' => (float)$laborRow->hourly_rate,
-                        'activity_coeff' => (float)$laborRow->activity_coeff,
-                        'yield_rate' => (float)$laborRow->yield_rate,
-                        'consumables_amount' => (float)$laborRow->consumables_amount,
-                        'packaging_amount' => (float)$laborRow->packaging_amount,
-                        'fixed_process_amount' => (float)$laborRow->fixed_process_amount,
-                    ];
-                }
-            }
-        }
-
         $partsUnitCost = 0.0;
-        $laborUnitCost = 0.0;
         $partsBreakdown = [];
-        $laborBreakdown = [];
 
         foreach ($bom as $index => $row) {
-            $skuCode = trim((string)($row['sku_code'] ?? ''));
+            $skuCode = trim((string)($row['part_code'] ?? ($row['sku_code'] ?? '')));
             if ($skuCode === '') {
                 continue;
             }
@@ -286,7 +252,7 @@ final class QuoteCalculationEngine
             if ($category !== 'PROC') {
                 $partsUnitCost += $lineTotal;
                 $partsBreakdown[] = [
-                    'sku_code' => $skuCode,
+                    'part_code' => $skuCode,
                     'quantity' => $this->normalizeAmount($qty),
                     'line_total' => $this->normalizeAmount($lineTotal),
                     'category' => $category,
@@ -294,51 +260,86 @@ final class QuoteCalculationEngine
                 continue;
             }
 
-            $skuId = (int)($meta['id'] ?? 0);
-            $laborRow = $laborBySkuId[$skuId] ?? null;
-            if (!$laborRow) {
-                $laborUnitCost += $lineTotal;
-                $laborBreakdown[] = [
-                    'sku_code' => $skuCode,
-                    'quantity' => $this->normalizeAmount($qty),
-                    'missing_labor_master' => true,
-                    'fallback_line_total' => $this->normalizeAmount($lineTotal),
-                ];
-                continue;
-            }
-
-            $yieldRate = max((float)$laborRow['yield_rate'], 0.000001);
-            $laborRaw =
-                (float)$laborRow['fixed_process_amount']
-                + (float)$laborRow['consumables_amount']
-                + (float)$laborRow['packaging_amount']
-                + ((float)$laborRow['hourly_rate'] * (float)$laborRow['labor_time_hours'] * (float)$laborRow['activity_coeff']);
-
-            $laborAdjusted = $laborRaw / $yieldRate;
-            $laborRoundedUnit = $this->roundUpByUnit($laborAdjusted, 10);
-            $laborLineTotal = $laborRoundedUnit * $qty;
-            $laborUnitCost += $laborLineTotal;
-
-            $laborBreakdown[] = [
-                'sku_code' => $skuCode,
-                'quantity' => $this->normalizeAmount($qty),
-                'labor_raw' => $this->normalizeAmount($laborRaw),
-                'labor_adjusted' => $this->normalizeAmount($laborAdjusted),
-                'labor_unit_rounded' => $this->normalizeAmount($laborRoundedUnit),
-                'labor_line_total' => $this->normalizeAmount($laborLineTotal),
-                'yield_rate' => $this->normalizeAmount($yieldRate),
-                'hourly_rate' => $this->normalizeAmount((float)$laborRow['hourly_rate']),
-                'labor_time_hours' => $this->normalizeAmount((float)$laborRow['labor_time_hours']),
-                'activity_coeff' => $this->normalizeAmount((float)$laborRow['activity_coeff']),
-            ];
+            // PROCカテゴリSKUのline_totalは部材費にも作業費にも加算しない。
+            continue;
         }
+
+        /** @var LaborCostEngine $laborCostEngine */
+        $laborCostEngine = app(LaborCostEngine::class);
+        $laborResult = $laborCostEngine->calculate($bom, $orderQty, $laborOverrides);
+        $laborUnitCost = $this->asNumberOr($laborResult['labor_unit_cost'] ?? null, 0.0);
+        $laborOrderTotal = $this->asNumberOr($laborResult['labor_order_total'] ?? null, 0.0);
+        $laborBreakdown = is_array($laborResult['labor_breakdown'] ?? null) ? $laborResult['labor_breakdown'] : [];
+        $matchedLaborRules = is_array($laborResult['matched_labor_rules'] ?? null) ? $laborResult['matched_labor_rules'] : [];
 
         return [
             'parts_unit_cost' => $this->normalizeAmount($partsUnitCost),
             'labor_unit_cost' => $this->normalizeAmount($laborUnitCost),
+            'labor_order_total' => $this->normalizeAmount($laborOrderTotal),
             'variable_unit_cost' => $this->normalizeAmount($partsUnitCost + $laborUnitCost),
             'parts_breakdown' => $partsBreakdown,
             'labor_breakdown' => $laborBreakdown,
+            'matched_labor_rules' => $matchedLaborRules,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $raw
+     * @return array<string, mixed>
+     */
+    private function normalizeLaborOverridesInput(array $raw): array
+    {
+        $result = [
+            'processes' => [],
+            'elements' => [],
+        ];
+
+        $processes = is_array($raw['processes'] ?? null) ? $raw['processes'] : [];
+        foreach ($processes as $processCode => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $normalizedProcessCode = strtoupper(trim((string)$processCode));
+            if ($normalizedProcessCode === '') {
+                continue;
+            }
+            $result['processes'][$normalizedProcessCode] = $this->normalizeLaborYieldInputRow($row);
+        }
+
+        $elements = is_array($raw['elements'] ?? null) ? $raw['elements'] : [];
+        foreach ($elements as $processCode => $elementsByCode) {
+            if (!is_array($elementsByCode)) {
+                continue;
+            }
+            $normalizedProcessCode = strtoupper(trim((string)$processCode));
+            if ($normalizedProcessCode === '') {
+                continue;
+            }
+            foreach ($elementsByCode as $elementCode => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $normalizedElementCode = strtoupper(trim((string)$elementCode));
+                if ($normalizedElementCode === '') {
+                    continue;
+                }
+                $result['elements'][$normalizedProcessCode][$normalizedElementCode] = $this->normalizeLaborYieldInputRow($row);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, float|null>
+     */
+    private function normalizeLaborYieldInputRow(array $row): array
+    {
+        return [
+            'yield_rate' => is_numeric($row['yield_rate'] ?? null) ? (float)$row['yield_rate'] : null,
+            'order_qty' => is_numeric($row['order_qty'] ?? null) ? (float)$row['order_qty'] : null,
+            'actual_input_qty' => is_numeric($row['actual_input_qty'] ?? null) ? (float)$row['actual_input_qty'] : null,
         ];
     }
 

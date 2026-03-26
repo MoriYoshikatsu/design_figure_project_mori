@@ -1,17 +1,38 @@
 @php
-    $panelTitle = $panelTitle ?? 'スナップショット';
+    $uiLanguage = strtolower((string)($uiLanguage ?? 'ja'));
+    $isEnglish = $uiLanguage === 'en';
+    $t = static fn(string $ja, string $en): string => $isEnglish ? $en : $ja;
+    $translateTecSide = static function (?string $side) use ($t): string {
+        return match (strtolower(trim((string)$side))) {
+            'left' => $t('左端', 'Left End'),
+            'right' => $t('右端', 'Right End'),
+            'both' => $t('両端', 'Both Ends'),
+            default => $t('未指定', 'Not Set'),
+        };
+    };
+    $tecProcessTypes = ['TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'];
+    $normalizeTecProcessType = static function (mixed $value) use ($tecProcessTypes): ?string {
+        $normalized = strtoupper(trim((string)$value));
+        return in_array($normalized, $tecProcessTypes, true) ? $normalized : null;
+    };
+    $normalizeTecSide = static function (mixed $value): ?string {
+        $normalized = strtolower(trim((string)$value));
+        return in_array($normalized, ['left', 'right', 'both'], true) ? $normalized : null;
+    };
+
+    $panelTitle = $panelTitle ?? $t('スナップショット', 'Snapshot');
     $pdfUrl = $pdfUrl ?? null;
-    $pdfLabel = $pdfLabel ?? 'PDFダウンロード';
+    $pdfLabel = $pdfLabel ?? $t('PDFダウンロード', 'Download PDF');
     $summaryItems = is_array($summaryItems ?? null) ? $summaryItems : [];
     $includeAutoSummary = (bool)($includeAutoSummary ?? true);
     $showDetails = (bool)($showDetails ?? true);
     $detailsInToggle = (bool)($detailsInToggle ?? true);
-    $detailsSummaryLabel = (string)($detailsSummaryLabel ?? '詳細（エラー・構成価格表・JSON）');
+    $detailsSummaryLabel = (string)($detailsSummaryLabel ?? $t('詳細（エラー・構成価格表・JSON）', 'Details (Errors, Configuration & Pricing, JSON)'));
     $showErrorTable = (bool)($showErrorTable ?? true);
     $showConfigPriceTable = (bool)($showConfigPriceTable ?? true);
     $showSummary = (bool)($showSummary ?? true);
-    $summaryTitle = (string)($summaryTitle ?? '概要');
-    $errorTableLabel = (string)($errorTableLabel ?? '検証エラー');
+    $summaryTitle = (string)($summaryTitle ?? $t('概要', 'Summary'));
+    $errorTableLabel = (string)($errorTableLabel ?? $t('検証エラー', 'Validation Errors'));
     $summaryUseTableLayout = (bool)($summaryUseTableLayout ?? false);
     $showCreatorColumns = (bool)($showCreatorColumns ?? false);
     $creatorAccountDisplayName = trim((string)($creatorAccountDisplayName ?? ''));
@@ -24,16 +45,16 @@
     $showQuantityColumn = (bool)($showQuantityColumn ?? true);
     $showPriceColumns = (bool)($showPriceColumns ?? true);
     $showSkuOnlyWhenPriced = (bool)($showSkuOnlyWhenPriced ?? false);
-    $configTableLabel = (string)($configTableLabel ?? '構成価格表');
+    $configTableLabel = (string)($configTableLabel ?? $t('構成価格表', 'Configuration & Pricing Table'));
     $showJsonSection = (bool)($showJsonSection ?? true);
     $showMemoCard = (bool)($showMemoCard ?? false);
     $memoValue = (string)($memoValue ?? '');
-    $memoLabel = (string)($memoLabel ?? 'メモ');
+    $memoLabel = (string)($memoLabel ?? $t('メモ', 'Notes'));
     $memoUpdateUrl = $memoUpdateUrl ?? null;
     $memoFieldName = (string)($memoFieldName ?? 'memo');
     $memoRows = max(2, (int)($memoRows ?? 3));
     $memoFixedHeightPx = max(32, (int)($memoFixedHeightPx ?? 40));
-    $memoButtonLabel = (string)($memoButtonLabel ?? 'メモ保存');
+    $memoButtonLabel = (string)($memoButtonLabel ?? $t('メモ保存', 'Save Notes'));
     $memoHttpMethod = strtoupper((string)($memoHttpMethod ?? 'PUT'));
     $memoReadonly = (bool)($memoReadonly ?? false);
     // summaryLayoutMode:
@@ -68,8 +89,12 @@
     $errors = is_array($errors ?? null) ? $errors : [];
     $snapshot = is_array($snapshot ?? null) ? $snapshot : [];
     $skuNameByCode = is_array($derived['skuNameByCode'] ?? null) ? $derived['skuNameByCode'] : [];
-    if (empty($skuNameByCode)) {
-        $skuNameByCode = \Illuminate\Support\Facades\DB::table('skus')->pluck('name', 'sku_code')->all();
+    $localizedSkuNameByCode = [];
+    if ($isEnglish || empty($skuNameByCode)) {
+        $localizedSkuNameByCode = app(\App\Services\SkuDisplayNameService::class)->buildNameMap($uiLanguage);
+    }
+    if (!empty($localizedSkuNameByCode)) {
+        $skuNameByCode = $localizedSkuNameByCode;
     }
     $toSkuName = static function (?string $code) use ($skuNameByCode): string {
         if ($code === null || $code === '') {
@@ -77,15 +102,89 @@
         }
         return (string)($skuNameByCode[$code] ?? '');
     };
+    $bomPartCode = static function (array $row): string {
+        return (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
+    };
+    $summaryMoneyLabels = [
+        '小計' => true,
+        '税' => true,
+        '合計' => true,
+        'Subtotal' => true,
+        'Tax' => true,
+        'Total' => true,
+        'subtotal' => true,
+        'tax' => true,
+        'total' => true,
+    ];
+    $emptyMemoText = $t('（未入力）', '(Not entered)');
+    $jsonSummaryLabel = $t('JSONデータ', 'JSON Data');
+    $toSummaryValueText = static function (array $item) use ($summaryMoneyLabels): string {
+        $label = trim((string)($item['label'] ?? ''));
+        $value = $item['value'] ?? null;
+        if ($value === null || $value === '') {
+            return '-';
+        }
+        if (isset($summaryMoneyLabels[$label])) {
+            return format_amount($value);
+        }
+        return (string)$value;
+    };
+    $toMoneyText = static function (mixed $value, string $empty = ''): string {
+        return format_amount($value, $empty);
+    };
 
     $sleeves = is_array($config['sleeves'] ?? null) ? $config['sleeves'] : [];
     $fibers = is_array($config['fibers'] ?? null) ? $config['fibers'] : [];
     $tubes = is_array($config['tubes'] ?? null) ? $config['tubes'] : [];
     $connectors = is_array($config['connectors'] ?? null) ? $config['connectors'] : [];
+    $processType = strtoupper((string)($config['processType'] ?? 'MFD'));
+    if (!in_array($processType, ['MFD', 'TEC', 'TEC20', 'TEC30', 'TEC20_HP', 'TEC30_HP'], true)) {
+        $processType = 'MFD';
+    }
+    $isTecMode = $processType !== 'MFD';
+    $tecSide = $normalizeTecSide($config['tecSide'] ?? null);
+    $legacyTecType = $normalizeTecProcessType($processType);
+    $tecLeftProcessType = $normalizeTecProcessType($config['tecLeftProcessType'] ?? null);
+    $tecRightProcessType = $normalizeTecProcessType($config['tecRightProcessType'] ?? null);
+    $tecSelections = [];
+    if ($isTecMode) {
+        if ($tecSide === null) {
+            if ($tecLeftProcessType !== null && $tecRightProcessType !== null) {
+                $tecSide = 'both';
+            } elseif ($tecRightProcessType !== null && $tecLeftProcessType === null) {
+                $tecSide = 'right';
+            } elseif ($tecLeftProcessType !== null || $legacyTecType !== null) {
+                $tecSide = 'left';
+            }
+        }
+
+        if ($tecSide === 'left') {
+            $resolvedType = $tecLeftProcessType ?? $legacyTecType;
+            if ($resolvedType !== null) {
+                $tecSelections[] = ['side' => 'left', 'process_type' => $resolvedType, 'source_path' => $tecLeftProcessType !== null ? '$.tecLeftProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'right') {
+            $resolvedType = $tecRightProcessType ?? $legacyTecType;
+            if ($resolvedType !== null) {
+                $tecSelections[] = ['side' => 'right', 'process_type' => $resolvedType, 'source_path' => $tecRightProcessType !== null ? '$.tecRightProcessType' : '$.processType'];
+            }
+        } elseif ($tecSide === 'both') {
+            $resolvedLeftType = $tecLeftProcessType ?? $legacyTecType;
+            $resolvedRightType = $tecRightProcessType ?? $legacyTecType;
+            if ($resolvedLeftType !== null) {
+                $tecSelections[] = ['side' => 'left', 'process_type' => $resolvedLeftType, 'source_path' => '$.tecLeftProcessType'];
+            }
+            if ($resolvedRightType !== null) {
+                $tecSelections[] = ['side' => 'right', 'process_type' => $resolvedRightType, 'source_path' => '$.tecRightProcessType'];
+            }
+        }
+    }
 
     $totals = is_array($snapshot['totals'] ?? null) ? $snapshot['totals'] : [];
     $bom = is_array($snapshot['bom'] ?? null) ? $snapshot['bom'] : [];
     $pricing = is_array($snapshot['pricing'] ?? null) ? $snapshot['pricing'] : [];
+    $pricingInput = is_array($snapshot['pricing_input'] ?? null) ? $snapshot['pricing_input'] : [];
+    $orderQtySummary = $pricingInput['order_qty'] ?? ($snapshot['order_qty'] ?? null);
 
     $pricingBySort = [];
     foreach ($pricing as $p) {
@@ -95,22 +194,40 @@
 
     $bomByPath = [];
     $bomFirstBySku = [];
-    $mfdBom = null;
+    $processSkuCodeByType = [
+        'MFD' => 'PROC_MFD_CONVERSION',
+        'TEC20' => 'PROC_TEC20',
+        'TEC30' => 'PROC_TEC30',
+        'TEC20_HP' => 'PROC_TEC20_HP',
+        'TEC30_HP' => 'PROC_TEC30_HP',
+    ];
+    $selectedProcessSkuCode = (string)($processSkuCodeByType[$processType] ?? 'PROC_MFD_CONVERSION');
+    $processBom = null;
+    $processBomRows = [];
     foreach ($bom as $b) {
         if (!is_array($b)) continue;
         $sortKey = (int)($b['sort_order'] ?? 0);
         $path = (string)($b['source_path'] ?? '');
-        $skuCode = (string)($b['sku_code'] ?? '');
+        $skuCode = $bomPartCode($b);
         $priceRow = $pricingBySort[$sortKey] ?? [];
         $row = [
-            'sku_code' => $skuCode,
+            'part_code' => $skuCode,
             'quantity' => $b['quantity'] ?? '',
             'source_path' => $path,
+            'sort_order' => $sortKey,
             'unit_price' => $priceRow['unit_price'] ?? '',
             'line_total' => $priceRow['line_total'] ?? '',
         ];
-        if ($skuCode === 'PROC_MFD_CONVERSION' && $mfdBom === null) {
-            $mfdBom = $row;
+        if ($processBom === null && ($path === '$.processType' || $skuCode === $selectedProcessSkuCode)) {
+            $processBom = $row;
+        } elseif ($processBom === null && $processType === 'MFD' && $skuCode === 'PROC_MFD_CONVERSION') {
+            $processBom = $row;
+        }
+        if (
+            in_array($path, ['$.processType', '$.tecLeftProcessType', '$.tecRightProcessType'], true)
+            || in_array($skuCode, array_values($processSkuCodeByType), true)
+        ) {
+            $processBomRows[] = $row;
         }
         if ($path !== '') {
             $bomByPath[$path] = $row;
@@ -120,56 +237,107 @@
         }
     }
 
-    $mfdCount = (int)($config['mfdCount'] ?? 0);
-    $mfdQty = is_numeric($mfdBom['quantity'] ?? null) ? (float)$mfdBom['quantity'] : 0.0;
-    $mfdLineTotal = is_numeric($mfdBom['line_total'] ?? null) ? (float)$mfdBom['line_total'] : 0.0;
+    $mfdCount = $isTecMode ? 0 : 1;
+    $mfdQty = is_numeric($processBom['quantity'] ?? null) ? (float)$processBom['quantity'] : 0.0;
+    $mfdLineTotal = is_numeric($processBom['line_total'] ?? null) ? (float)$processBom['line_total'] : 0.0;
     $mfdLineEach = $mfdQty > 0 ? ($mfdLineTotal / $mfdQty) : 0.0;
 
     $rows = [];
-    for ($i = 0; $i < $mfdCount; $i++) {
-        $mfdSkuCode = (string)($mfdBom['sku_code'] ?? '');
-        $rows[] = [
-            'type' => 'MFD変換',
-            'index' => '['.$i.']',
-            'sku_code' => $mfdSkuCode,
-            'priced_sku_code' => $mfdSkuCode,
-            'sku_name' => $toSkuName($mfdSkuCode),
-            'priced_sku_name' => $toSkuName($mfdSkuCode),
-            'source_path' => $mfdBom['source_path'] ?? '',
-            'range' => '-',
-            'tolerance' => '-',
-            'quantity' => '1',
-            'unit_price' => $mfdBom['unit_price'] ?? '',
-            'line_total' => $mfdQty > 0 ? number_format($mfdLineEach, 2, '.', '') : '',
-        ];
+    if ($isTecMode) {
+        $usedProcessSortKeys = [];
+        foreach ($tecSelections as $selection) {
+            $processSelectedSku = (string)($processSkuCodeByType[$selection['process_type']] ?? '');
+            $matchedProcessBom = null;
+            foreach ($processBomRows as $candidate) {
+                $candidateSort = (int)($candidate['sort_order'] ?? -1);
+                if (in_array($candidateSort, $usedProcessSortKeys, true)) {
+                    continue;
+                }
+                if ((string)($candidate['source_path'] ?? '') === (string)$selection['source_path'] && $bomPartCode($candidate) === $processSelectedSku) {
+                    $matchedProcessBom = $candidate;
+                    break;
+                }
+            }
+            if ($matchedProcessBom === null) {
+                foreach ($processBomRows as $candidate) {
+                    $candidateSort = (int)($candidate['sort_order'] ?? -1);
+                    if (in_array($candidateSort, $usedProcessSortKeys, true)) {
+                        continue;
+                    }
+                    if ($bomPartCode($candidate) === $processSelectedSku) {
+                        $matchedProcessBom = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            if ($matchedProcessBom !== null) {
+                $usedProcessSortKeys[] = (int)($matchedProcessBom['sort_order'] ?? -1);
+            }
+            $processPricedSku = is_array($matchedProcessBom) ? $bomPartCode($matchedProcessBom) : '';
+            $rows[] = [
+                'type' => $t('TEC工程', 'TEC Process'),
+                'index' => '['.$translateTecSide($selection['side']).']',
+                'part_code' => $processSelectedSku,
+                'priced_part_code' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $processPricedSku : '',
+                'sku_name' => $toSkuName($processSelectedSku),
+                'priced_sku_name' => ($processSelectedSku !== '' && $processPricedSku === $processSelectedSku) ? $toSkuName($processPricedSku) : '',
+                'source_path' => $matchedProcessBom['source_path'] ?? $selection['source_path'],
+                'range' => $selection['process_type'].' / '.$translateTecSide($selection['side']),
+                'tolerance' => '-',
+                'quantity' => $matchedProcessBom['quantity'] ?? '1',
+                'unit_price' => $matchedProcessBom['unit_price'] ?? '',
+                'line_total' => $matchedProcessBom['line_total'] ?? '',
+            ];
+        }
+    } else {
+        for ($i = 0; $i < $mfdCount; $i++) {
+            $mfdSkuCode = is_array($processBom) ? $bomPartCode($processBom) : '';
+            $rows[] = [
+                'type' => $t('MFD変換', 'MFD Conversion'),
+                'index' => '['.$i.']',
+                'part_code' => $mfdSkuCode,
+                'priced_part_code' => $mfdSkuCode,
+                'sku_name' => $toSkuName($mfdSkuCode),
+                'priced_sku_name' => $toSkuName($mfdSkuCode),
+                'source_path' => $processBom['source_path'] ?? '$.processType',
+                'range' => '-',
+                'tolerance' => '-',
+                'quantity' => '1',
+                'unit_price' => $processBom['unit_price'] ?? '',
+                'line_total' => $mfdQty > 0 ? number_format($mfdLineEach, 2, '.', '') : '',
+            ];
+        }
     }
 
-    foreach ($sleeves as $i => $s) {
-        $path = '$.sleeves['.$i.']';
-        $r = $bomByPath[$path] ?? null;
-        $selectedSku = (string)($s['skuCode'] ?? '');
-        $pricedSku = (string)($r['sku_code'] ?? '');
-        $rows[] = [
-            'type' => 'スリーブ(MFD)',
-            'index' => '['.$i.']',
-            'sku_code' => $selectedSku,
-            'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
-            'sku_name' => $toSkuName($selectedSku),
-            'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
-            'source_path' => $r['source_path'] ?? $path,
-            'range' => '-',
-            'tolerance' => '-',
-            'quantity' => $r['quantity'] ?? '',
-            'unit_price' => $r['unit_price'] ?? '',
-            'line_total' => $r['line_total'] ?? '',
-        ];
+    if (!$isTecMode) {
+        foreach ($sleeves as $i => $s) {
+            $path = '$.sleeves['.$i.']';
+            $r = $bomByPath[$path] ?? null;
+            $selectedSku = (string)($s['skuCode'] ?? '');
+            $pricedSku = is_array($r) ? $bomPartCode($r) : '';
+            $rows[] = [
+                'type' => $t('スリーブ(MFD)', 'Sleeve (MFD)'),
+                'index' => '['.$i.']',
+                'part_code' => $selectedSku,
+                'priced_part_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+                'sku_name' => $toSkuName($selectedSku),
+                'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
+                'source_path' => $r['source_path'] ?? $path,
+                'range' => '-',
+                'tolerance' => '-',
+                'quantity' => $r['quantity'] ?? '',
+                'unit_price' => $r['unit_price'] ?? '',
+                'line_total' => $r['line_total'] ?? '',
+            ];
+        }
     }
 
     foreach ($fibers as $i => $f) {
         $path = '$.fibers['.$i.']';
         $r = $bomByPath[$path] ?? null;
         $selectedSku = (string)($f['skuCode'] ?? '');
-        $pricedSku = (string)($r['sku_code'] ?? '');
+        $pricedSku = is_array($r) ? $bomPartCode($r) : '';
         $fiberLength = $f['lengthM'] ?? null;
         if (!is_numeric($fiberLength) && is_numeric($f['lengthMm'] ?? null)) {
             $fiberLength = (float)$f['lengthMm'] / 1000;
@@ -179,10 +347,10 @@
             $fiberTolerance = (float)$f['toleranceMm'] / 1000;
         }
         $rows[] = [
-            'type' => 'ファイバ(F)',
+            'type' => $t('ファイバ(F)', 'Fiber (F)'),
             'index' => '['.$i.']',
-            'sku_code' => $selectedSku,
-            'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+            'part_code' => $selectedSku,
+            'priced_part_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
             'sku_name' => $toSkuName($selectedSku),
             'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
             'source_path' => $r['source_path'] ?? $path,
@@ -194,33 +362,33 @@
         ];
     }
 
-    foreach ($tubes as $i => $t) {
+    foreach ($tubes as $i => $tube) {
         $path = '$.tubes['.$i.']';
         $r = $bomByPath[$path] ?? null;
-        $selectedSku = (string)($t['skuCode'] ?? '');
-        $pricedSku = (string)($r['sku_code'] ?? '');
-        $sf = $t['startFiberIndex'] ?? $t['targetFiberIndex'] ?? '';
-        $ef = $t['endFiberIndex'] ?? $t['targetFiberIndex'] ?? '';
-        $so = $t['startOffsetM'] ?? null;
-        if (!is_numeric($so) && is_numeric($t['startOffsetMm'] ?? null)) {
-            $so = (float)$t['startOffsetMm'] / 1000;
+        $selectedSku = (string)($tube['skuCode'] ?? '');
+        $pricedSku = is_array($r) ? $bomPartCode($r) : '';
+        $sf = $tube['startFiberIndex'] ?? $tube['targetFiberIndex'] ?? '';
+        $ef = $tube['endFiberIndex'] ?? $tube['targetFiberIndex'] ?? '';
+        $so = $tube['startOffsetM'] ?? null;
+        if (!is_numeric($so) && is_numeric($tube['startOffsetMm'] ?? null)) {
+            $so = (float)$tube['startOffsetMm'] / 1000;
         }
-        $eo = $t['endOffsetM'] ?? null;
-        if (!is_numeric($eo) && is_numeric($t['endOffsetMm'] ?? null)) {
-            $eo = (float)$t['endOffsetMm'] / 1000;
+        $eo = $tube['endOffsetM'] ?? null;
+        if (!is_numeric($eo) && is_numeric($tube['endOffsetMm'] ?? null)) {
+            $eo = (float)$tube['endOffsetMm'] / 1000;
         }
         $soText = is_numeric($so) ? ($so . 'm') : '-';
         $eoText = is_numeric($eo) ? ($eo . 'm') : '-';
         $range = ($sf !== '' || $ef !== '') ? ('F'.$sf.'+'.$soText.' → F'.$ef.'+'.$eoText) : '';
-        $tubeTolerance = $t['toleranceM'] ?? null;
-        if (!is_numeric($tubeTolerance) && is_numeric($t['toleranceMm'] ?? null)) {
-            $tubeTolerance = (float)$t['toleranceMm'] / 1000;
+        $tubeTolerance = $tube['toleranceM'] ?? null;
+        if (!is_numeric($tubeTolerance) && is_numeric($tube['toleranceMm'] ?? null)) {
+            $tubeTolerance = (float)$tube['toleranceMm'] / 1000;
         }
         $rows[] = [
-            'type' => 'チューブ(T)',
+            'type' => $t('チューブ(T)', 'Tube (T)'),
             'index' => '['.$i.']',
-            'sku_code' => $selectedSku,
-            'priced_sku_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
+            'part_code' => $selectedSku,
+            'priced_part_code' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $pricedSku : '',
             'sku_name' => $toSkuName($selectedSku),
             'priced_sku_name' => ($selectedSku !== '' && $pricedSku === $selectedSku) ? $toSkuName($pricedSku) : '',
             'source_path' => $r['source_path'] ?? $path,
@@ -238,13 +406,13 @@
 
     $leftSku = (string)($connectors['leftSkuCode'] ?? '');
     $leftRow = $leftSku !== '' ? ($bomByPath['$.connectors.leftSkuCode'] ?? null) : null;
-    $leftPricedSku = (string)($leftRow['sku_code'] ?? '');
+    $leftPricedSku = is_array($leftRow) ? $bomPartCode($leftRow) : '';
     if ($showLeftConnector) {
         $rows[] = [
-            'type' => 'コネクタ',
-            'index' => '左端',
-            'sku_code' => $leftSku,
-            'priced_sku_code' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $leftPricedSku : '',
+            'type' => $t('コネクタ', 'Connector'),
+            'index' => $t('左端', 'Left End'),
+            'part_code' => $leftSku,
+            'priced_part_code' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $leftPricedSku : '',
             'sku_name' => $toSkuName($leftSku),
             'priced_sku_name' => ($leftSku !== '' && $leftPricedSku === $leftSku) ? $toSkuName($leftPricedSku) : '',
             'source_path' => $leftRow['source_path'] ?? '',
@@ -258,13 +426,13 @@
 
     $rightSku = (string)($connectors['rightSkuCode'] ?? '');
     $rightRow = $rightSku !== '' ? ($bomByPath['$.connectors.rightSkuCode'] ?? null) : null;
-    $rightPricedSku = (string)($rightRow['sku_code'] ?? '');
+    $rightPricedSku = is_array($rightRow) ? $bomPartCode($rightRow) : '';
     if ($showRightConnector) {
         $rows[] = [
-            'type' => 'コネクタ',
-            'index' => '右端',
-            'sku_code' => $rightSku,
-            'priced_sku_code' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $rightPricedSku : '',
+            'type' => $t('コネクタ', 'Connector'),
+            'index' => $t('右端', 'Right End'),
+            'part_code' => $rightSku,
+            'priced_part_code' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $rightPricedSku : '',
             'sku_name' => $toSkuName($rightSku),
             'priced_sku_name' => ($rightSku !== '' && $rightPricedSku === $rightSku) ? $toSkuName($rightPricedSku) : '',
             'source_path' => $rightRow['source_path'] ?? '',
@@ -280,8 +448,8 @@
         $rows[] = [
             'type' => '-',
             'index' => '-',
-            'sku_code' => '',
-            'priced_sku_code' => '',
+            'part_code' => '',
+            'priced_part_code' => '',
             'sku_name' => '',
             'priced_sku_name' => '',
             'source_path' => '',
@@ -293,17 +461,31 @@
         ];
     }
 
+    $tecSetupSummary = '-';
+    if ($isTecMode) {
+        $tecSetupParts = [];
+        foreach ($tecSelections as $selection) {
+            $tecSetupParts[] = ($selection['process_type'] ?? 'TEC') . ' / ' . $translateTecSide($selection['side'] ?? '');
+        }
+        if (!empty($tecSetupParts)) {
+            $tecSetupSummary = implode(' / ', $tecSetupParts);
+        }
+    }
+
     $summaryAuto = [
-        ['label' => 'ルールテンプレ', 'value' => $snapshot['template_version_id'] ?? ''],
-        ['label' => '納品物価格表', 'value' => $snapshot['price_book_id'] ?? ''],
-        ['label' => 'MFD数', 'value' => $config['mfdCount'] ?? ''],
-        ['label' => 'チューブ数', 'value' => $config['tubeCount'] ?? ''],
-        ['label' => 'エラー件数', 'value' => is_array($errors) ? count($errors) : 0],
-        ['label' => 'BOM件数', 'value' => count($bom)],
-        ['label' => '価格内訳件数', 'value' => count($pricing)],
-        ['label' => '小計', 'value' => $totals['subtotal'] ?? ''],
-        ['label' => '税', 'value' => $totals['tax'] ?? ''],
-        ['label' => '合計', 'value' => $totals['total'] ?? ''],
+        ['label' => $t('ルールテンプレ', 'Rule Template'), 'value' => $snapshot['template_version_id'] ?? ''],
+        ['label' => $t('納品物価格表', 'Price Book'), 'value' => $snapshot['price_book_id'] ?? ''],
+        ['label' => $t('注文数量', 'Order Quantity'), 'value' => $orderQtySummary],
+        ['label' => $t('工程種別', 'Process Type'), 'value' => $processType],
+        ['label' => $t('TEC構成', 'TEC Setup'), 'value' => $tecSetupSummary],
+        ['label' => $t('MFD数', 'MFD Count'), 'value' => $isTecMode ? '-' : '1'],
+        ['label' => $t('チューブ数', 'Tube Count'), 'value' => $config['tubeCount'] ?? ''],
+        ['label' => $t('エラー件数', 'Error Count'), 'value' => is_array($errors) ? count($errors) : 0],
+        ['label' => $t('BOM件数', 'BOM Count'), 'value' => count($bom)],
+        ['label' => $t('価格内訳件数', 'Pricing Line Count'), 'value' => count($pricing)],
+        ['label' => $t('小計', 'Subtotal'), 'value' => $totals['subtotal'] ?? ''],
+        ['label' => $t('税', 'Tax'), 'value' => $totals['tax'] ?? ''],
+        ['label' => $t('合計', 'Total'), 'value' => $totals['total'] ?? ''],
     ];
     $summary = $includeAutoSummary ? array_merge($summaryItems, $summaryAuto) : $summaryItems;
 
@@ -389,8 +571,7 @@
                                             @php
                                                 $item = $cell['item'] ?? [];
                                                 $label = (string)($item['label'] ?? '');
-                                                $value = $item['value'] ?? null;
-                                                $valueText = ($value === null || $value === '') ? '-' : (string)$value;
+                                                $valueText = $toSummaryValueText($item);
                                             @endphp
                                             <div style="{{ $summaryCardBaseStyle }}">
                                                 <div class="muted">{{ $label }}</div>
@@ -411,7 +592,7 @@
                                                         </div>
                                                     </form>
                                                 @else
-                                                    <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : '（未入力）' }}</div>
+                                                    <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : $emptyMemoText }}</div>
                                                 @endif
                                             </div>
                                         @endif
@@ -430,8 +611,7 @@
                         @foreach($summary as $item)
                             @php
                                 $label = (string)($item['label'] ?? '');
-                                $value = $item['value'] ?? null;
-                                $valueText = ($value === null || $value === '') ? '-' : (string)$value;
+                                $valueText = $toSummaryValueText($item);
                             @endphp
                             <div style="{{ $summaryCardStyle }}">
                                 <div class="muted">{{ $label }}</div>
@@ -455,7 +635,7 @@
                                     </div>
                                 </form>
                             @else
-                                <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : '（未入力）' }}</div>
+                                <div style="{{ $memoFieldStyle }} white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;">{{ $memoValue !== '' ? $memoValue : $emptyMemoText }}</div>
                             @endif
                         </div>
                     @endif
@@ -477,12 +657,12 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>パス</th>
-                            <th>メッセージ</th>
+                            <th>{{ $t('パス', 'Path') }}</th>
+                            <th>{{ $t('メッセージ', 'Message') }}</th>
                             @if($showCreatorColumns)
-                                <th>作成アカウント</th>
-                                <th>メールアドレス</th>
-                                <th>担当者</th>
+                                <th>{{ $t('作成アカウント', 'Created Account') }}</th>
+                                <th>{{ $t('メールアドレス', 'Email Address') }}</th>
+                                <th>{{ $t('担当者', 'Assignee') }}</th>
                             @endif
                         </tr>
                     </thead>
@@ -519,20 +699,20 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>種類</th>
-                            <th>番号</th>
-                            <th>パーツ名</th>
+                            <th>{{ $t('種類', 'Type') }}</th>
+                            <th>{{ $t('番号', 'No.') }}</th>
+                            <th>{{ $t('パーツ名', 'Part Name') }}</th>
                             @if($showSourcePathColumn)
                                 <th>source_path</th>
                             @endif
-                            <th>長さ/範囲</th>
-                            <th>許容誤差</th>
+                            <th>{{ $t('長さ/範囲', 'Length / Range') }}</th>
+                            <th>{{ $t('許容誤差', 'Tolerance') }}</th>
                             @if($showQuantityColumn)
-                                <th>個数</th>
+                                <th>{{ $t('個数', 'Qty') }}</th>
                             @endif
                             @if($showPriceColumns)
-                                <th>単価(¥)</th>
-                                <th>小計(¥)</th>
+                                <th>{{ $t('単価(¥)', 'Unit Price (JPY)') }}</th>
+                                <th>{{ $t('小計(¥)', 'Line Total (JPY)') }}</th>
                             @endif
                         </tr>
                     </thead>
@@ -557,8 +737,8 @@
                                     <td>{{ $r['quantity'] ?? '' }}</td>
                                 @endif
                                 @if($showPriceColumns)
-                                    <td>{{ $r['unit_price'] ?? '' }}</td>
-                                    <td>{{ $r['line_total'] ?? '' }}</td>
+                                    <td>{{ $toMoneyText($r['unit_price'] ?? null, '') }}</td>
+                                    <td>{{ $toMoneyText($r['line_total'] ?? null, '') }}</td>
                                 @endif
                             </tr>
                         @endforeach
@@ -568,7 +748,7 @@
 
             @if($showJsonSection)
                 <details style="margin-top:12px;">
-                    <summary>JSONデータ</summary>
+                    <summary>{{ $jsonSummaryLabel }}</summary>
                     <h5>snapshot</h5>
                     <pre>{{ $snapshotJsonText }}</pre>
                     <h5>config</h5>

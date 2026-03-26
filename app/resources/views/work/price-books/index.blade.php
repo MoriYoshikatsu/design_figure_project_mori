@@ -67,21 +67,21 @@
                 <label>有効終了日（終了）</label>
                 <input type="date" name="valid_to_to" value="{{ $filters['valid_to_to'] ?? '' }}">
             </div> --}}
-            <div class="col">
-                <label>作成日（開始）</label>
-                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
+            <div class="col range-field">
+                <label>作成日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+                </div>
             </div>
-            <div class="col">
-                <label>作成日（終了）</label>
-                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>更新日（開始）</label>
-                <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>更新日（終了）</label>
-                <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}">
+            <div class="col range-field">
+                <label>更新日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+                </div>
             </div>
             <div class="actions" style="margin-top:8px;">
                 <button type="submit">絞り込み</button>

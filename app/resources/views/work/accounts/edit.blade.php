@@ -31,6 +31,25 @@
                     </td>
                 </tr>
                 <tr>
+                    <th>顧客別仕切係数</th>
+                    <td>
+                        @if(($supportsCustomerFactorDefault ?? false) === true)
+                            <input
+                                type="number"
+                                name="customer_factor_default"
+                                value="{{ old('customer_factor_default', $customerFactorDefaultValue ?? '1') }}"
+                                min="0"
+                                step="0.000001"
+                                inputmode="decimal"
+                                placeholder="例: 0.95"
+                            >
+                            <div class="muted">そのアカウントの /configurator と見積発行時の既定値として自動適用されます。未入力は 1 です。</div>
+                        @else
+                            <div class="muted">この環境ではまだ設定できません。最新の migration 適用後に利用できます。</div>
+                        @endif
+                    </td>
+                </tr>
+                <tr>
                     <th>メモ</th>
                     <td>
                         <textarea name="memo" rows="2" style="width:100%;">{{ old('memo', $account->memo) }}</textarea>
@@ -43,5 +62,5 @@
             <a href="{{ route('work.accounts.index') }}">一覧へ戻る</a>
         </div>
     </form>
-        <a href="{{ route('work.accounts.permissions', $account->id) }}">このアカウントのルート権限設定ページへ</a>
+        <a href="{{ route('work.accounts.permissions', $account->id) }}">このアカウントの変更申請必須設定ページへ</a>
 @endsection

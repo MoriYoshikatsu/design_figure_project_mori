@@ -168,7 +168,7 @@ final class SnapshotPdfService
         if (is_array($bom)) {
             foreach ($bom as $row) {
                 if (!is_array($row)) continue;
-                $code = (string)($row['sku_code'] ?? '');
+                $code = (string)($row['part_code'] ?? ($row['sku_code'] ?? ''));
                 if ($code === '') continue;
                 if (str_starts_with($code, 'PROC')) {
                     $procSku = $code;
@@ -178,7 +178,7 @@ final class SnapshotPdfService
         }
 
         if ($procSku) {
-            $name = DB::table('skus')->where('sku_code', $procSku)->value('name');
+            $name = DB::table('parts')->where('part_code', $procSku)->value('name');
             if ($name) return (string)$name;
         }
 

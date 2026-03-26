@@ -29,11 +29,17 @@ RUN groupadd -g ${GID} appuser \
 
 WORKDIR /var/www/html
 
+COPY docker/php/entrypoint.sh /entrypoint.sh
+
+
+# Windows環境での改行コード(CRLF)トラブル回避と実行権限付与
+RUN sed -i 's/\r$//' /entrypoint.sh \
+ && chmod +x /entrypoint.sh
+
 # ---- 権限地獄を終わらせる ----
 USER appuser
 
-COPY docker/php/entrypoint.sh /entrypoint.sh
-
+# 実行
 ENTRYPOINT ["/entrypoint.sh"]
 
 CMD ["php-fpm"]

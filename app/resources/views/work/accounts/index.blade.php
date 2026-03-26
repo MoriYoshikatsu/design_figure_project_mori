@@ -9,15 +9,6 @@
                 <label>フリーワード</label>
                 <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="名前/担当者/メモ など">
             </div>
-            {{-- <div class="col">
-                <label>アカウント種別</label>
-                <select name="account_type">
-                    <option value="">すべて</option>
-                    @foreach($accountTypeOptions as $opt)
-                        <option value="{{ $opt }}" @if(($filters['account_type'] ?? '') === $opt) selected @endif>{{ $opt }}</option>
-                    @endforeach
-                </select>
-            </div> --}}
             <div class="col">
                 <label>権限区分</label>
                 <select name="role">
@@ -27,25 +18,22 @@
                     @endforeach
                 </select>
             </div>
-            <div class="col">
-                <label>作成日（開始）</label>
-                <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}">
+            <div class="col range-field">
+                <label>作成日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="created_from" value="{{ $filters['created_from'] ?? '' }}" aria-label="作成日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}" aria-label="作成日 終点">
+                </div>
             </div>
-            <div class="col">
-                <label>作成日（終了）</label>
-                <input type="date" name="created_to" value="{{ $filters['created_to'] ?? '' }}">
+            <div class="col range-field">
+                <label>更新日（始点 / 終点）</label>
+                <div class="range-inputs">
+                    <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}" aria-label="更新日 始点">
+                    <span class="range-sep">〜</span>
+                    <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}" aria-label="更新日 終点">
+                </div>
             </div>
-        {{-- </div>
-        <div class="row" style="margin-top:8px;"> --}}
-            <div class="col">
-                <label>更新日（開始）</label>
-                <input type="date" name="updated_from" value="{{ $filters['updated_from'] ?? '' }}">
-            </div>
-            <div class="col">
-                <label>更新日（終了）</label>
-                <input type="date" name="updated_to" value="{{ $filters['updated_to'] ?? '' }}">
-            </div>
-        {{-- </div> --}}
             <div class="actions" style="margin-top:13px;">
                 <button type="submit">絞り込み</button>
                 <a href="{{ route('work.accounts.index') }}">クリア</a>
@@ -88,16 +76,26 @@
                         <label>担当者名</label>
                         <input type="text" name="assignee_name" value="{{ old('assignee_name') }}" placeholder="例: 山田 太郎">
                     </div>
+                    @if(($supportsCustomerFactorDefault ?? false) === true)
+                        <div class="col">
+                            <label>顧客別仕切係数</label>
+                            <input
+                                type="number"
+                                name="customer_factor_default"
+                                value="{{ old('customer_factor_default', '1') }}"
+                                min="0"
+                                step="0.000001"
+                                inputmode="decimal"
+                                placeholder="例: 0.95"
+                            >
+                            <div class="muted">そのアカウントの見積既定値に自動適用されます。</div>
+                        </div>
+                    @endif
                     <div class="actions" style="margin-top:8px;">
                         <button type="submit">登録申請を送信</button>
                     </div>
                 </div>
-                {{-- <div class="row" style="margin-top:8px;">
-                    <div class="col">
-                        <label>メモ</label>
-                        <textarea name="memo" rows="2">{{ old('memo') }}</textarea>
-                    </div>
-                </div> --}}
+
             </form>
         </details>
     @endif
@@ -111,7 +109,7 @@
                 <th>登録メールアドレス</th>
                 <th>担当者</th>
                 <th>権限区分</th>
-                <th>許可route</th>
+                <th>変更申請必須</th>
                 <th>メモ</th>
                 <th>作成日</th>
                 <th>更新日</th>
@@ -134,13 +132,14 @@
                         <div>{{ $a->role_list ?: '未設定' }}</div>
                         {{-- <div class="muted">{{ $a->member_summary ?? '-' }}</div> --}}
                     </td>
-                    <td style="white-space:pre-line;">{{ $a->route_access_summary ?? '-' }}</td>
+                    <td style="white-space:pre-line;">{{ $a->change_request_requirement_summary ?? '作成・更新はすべて必須' }}</td>
                     <td>{{ $a->memo ?? '-' }}</td>
                     <td>{{ $a->created_at }}</td>
                     <td>{{ $a->updated_at }}</td>
                     <td>
                         <div class="actions">
                             <a href="{{ route('work.accounts.edit', $a->id) }}">編集</a>
+                            <a href="{{ route('work.accounts.permissions', $a->id) }}">申請設定</a>
                             @if(($a->can_request_delete ?? false) && is_numeric((string)$a->id))
                                 <form method="POST" action="{{ route('work.accounts.edit-request.delete', ['id' => $a->id]) }}" onsubmit="return confirm('アカウント #{{ $a->id }} の削除申請を送信しますか？');">
                                     @csrf
